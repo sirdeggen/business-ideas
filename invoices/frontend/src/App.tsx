@@ -330,7 +330,7 @@ function Create({
           </button>
         </div>
         <p className="helper">We’ll ask you to approve this in a moment.</p>
-        <ChromeHint />
+        {(busy || connecting || showInstall) && <ChromeHint />}
         {showInstall && <InstallPrompt verb="send" onRetry={() => void send()} />}
         {error && <p className="status err">{error}</p>}
       </section>
