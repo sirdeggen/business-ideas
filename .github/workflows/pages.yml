@@ -40,7 +40,7 @@ jobs:
         working-directory: receivable-desk/frontend
         env:
           VITE_BASE: /business-ideas/receivables/
-          VITE_OVERLAY_URL: http://localhost:8081
+          VITE_OVERLAY_URL: http://localhost:8082
         run: |
           npm ci
           npm run build

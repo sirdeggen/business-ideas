@@ -3,12 +3,12 @@ import { DEMO_EVENT, parseQrPayload } from '../../../protocol/ticket'
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
 import { listHeldTickets, redeemTicket } from '../lib/actions'
-import { errorMessage, shortKey } from '../lib/config'
+import { LOCAL_OVERLAY_HINT, errorMessage, shortKey } from '../lib/config'
 import { lookupTickets } from '../lib/overlay'
 
 export function Door() {
   const { wallet } = useWallet()
-  const { url } = useOverlay()
+  const { url, online } = useOverlay()
   const [scan, setScan] = useState('')
   const [busy, setBusy] = useState(false)
   const [valid, setValid] = useState<boolean | null>(null)
@@ -16,12 +16,21 @@ export function Door() {
   const [canRedeem, setCanRedeem] = useState(false)
   const [outpoint, setOutpoint] = useState<string | null>(null)
 
+  const overlayDown = online === false
+  const lookupDisabled = busy || !scan.trim() || overlayDown
+  const lookupTitle = overlayDown
+    ? LOCAL_OVERLAY_HINT
+    : !scan.trim()
+      ? 'Paste a QR payload or outpoint first'
+      : 'Lookup this ticket on the local overlay'
+
   const check = async (): Promise<void> => {
     setBusy(true)
     setValid(null)
     setCanRedeem(false)
     setOutpoint(null)
     try {
+      if (overlayDown) throw new Error(LOCAL_OVERLAY_HINT)
       const parsed = parseQrPayload(scan)
       if (!parsed) throw new Error('QR must be ticket JSON or txid.vout')
       const live = await lookupTickets(url, { outpoint: parsed.outpoint })
@@ -44,6 +53,7 @@ export function Door() {
         setCanRedeem(held.some((item) => item.outpoint === parsed.outpoint))
       }
     } catch (err) {
+      console.error('Door lookup failed', err)
       setValid(false)
       setDetail(errorMessage(err))
     } finally {
@@ -67,6 +77,7 @@ export function Door() {
         setDetail(`Spent in ${result.txid}, but overlay still listed it. Check the overlay logs.`)
       }
     } catch (err) {
+      console.error('Redeem failed', err)
       setDetail(errorMessage(err))
     } finally {
       setBusy(false)
@@ -83,7 +94,12 @@ export function Door() {
       <label htmlFor="scan">QR payload or outpoint</label>
       <textarea id="scan" rows={4} value={scan} onChange={(event) => setScan(event.target.value)} />
       <div className="row" style={{ marginTop: 12 }}>
-        <button className="btn primary" disabled={busy || !scan.trim()} onClick={() => void check()}>
+        <button
+          className="btn primary"
+          disabled={lookupDisabled}
+          title={lookupTitle}
+          onClick={() => void check()}
+        >
           {busy ? 'Checking…' : 'Lookup overlay'}
         </button>
         {canRedeem && (
@@ -92,6 +108,10 @@ export function Door() {
           </button>
         )}
       </div>
+      {overlayDown && <p className="status err">{LOCAL_OVERLAY_HINT}</p>}
+      {lookupDisabled && !overlayDown && !scan.trim() && (
+        <p className="hint">Paste a QR payload or outpoint to enable lookup.</p>
+      )}
       {valid !== null && (
         <div className={`door-result ${valid ? 'valid' : 'invalid'}`}>
           <strong>{valid ? 'Admit' : 'Reject'}</strong>

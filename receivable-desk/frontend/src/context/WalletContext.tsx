@@ -28,6 +28,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setIdentityKey(result.identityKey)
       return true
     } catch (err) {
+      console.error('Wallet connect failed', err)
       setError(errorMessage(err))
       setWallet(null)
       setIdentityKey(null)

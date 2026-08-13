@@ -7,6 +7,8 @@ This stack is BSV only: BRC-100 wallets, PushDrop ticket UTXOs, and overlay-expr
 Public UI (GitHub Pages): after merge, `https://sirdeggen.github.io/business-ideas/tickets/`
 Catalog: `https://sirdeggen.github.io/business-ideas/`
 
+Pages is the shell. There is no public overlay. Mint, lookup, and redeem need local Docker (`cd event-tickets && docker compose up --build`, overlay **:8080**). Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access other apps and services on this device,” then Retry with Desktop unlocked.
+
 ## Stack
 
 - Wallet interface: BRC-100. The app never holds keys. It calls `createAction`, `getPublicKey`, `listOutputs`, `signAction`, and `internalizeAction`.

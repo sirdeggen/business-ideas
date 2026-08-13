@@ -6,6 +6,8 @@ Switcher on GitHub Pages: https://sirdeggen.github.io/business-ideas/
 
 Invoices are the first product. The receivable desk is a collections list on this desk’s own registry — not a second company. Tickets sit after invoices.
 
+Pages is the shell; overlays are localhost Docker (tickets :8080, desk :8082). There is no public overlay. Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access other apps and services on this device,” then Retry with Desktop unlocked.
+
 ## Invoices
 
 Send a payable. Get a receipt.

@@ -3,7 +3,7 @@ import { DEMO_EVENT } from '../../../protocol/ticket'
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
 import { mintTickets } from '../lib/actions'
-import { errorMessage } from '../lib/config'
+import { LOCAL_OVERLAY_HINT, errorMessage, walletHint } from '../lib/config'
 
 export function Organizer() {
   const { wallet } = useWallet()
@@ -14,19 +14,33 @@ export function Organizer() {
   const [error, setError] = useState<string | null>(null)
 
   const mint = async (): Promise<void> => {
-    if (!wallet) return
     setBusy(true)
     setError(null)
     setStatus(null)
     try {
+      if (!wallet) {
+        throw new Error(walletHint())
+      }
+      if (online === false) {
+        throw new Error(LOCAL_OVERLAY_HINT)
+      }
       const result = await mintTickets(wallet, url, count)
       setStatus(`Minted ${result.count} tickets in ${result.txid}`)
     } catch (err) {
+      console.error('Mint failed', err)
       setError(errorMessage(err))
     } finally {
       setBusy(false)
     }
   }
+
+  const overlayDown = online === false
+  const mintDisabled = !wallet || busy || overlayDown
+  const mintTitle = !wallet
+    ? walletHint()
+    : overlayDown
+      ? LOCAL_OVERLAY_HINT
+      : 'Mint tickets into the wallet basket, then submit to the local overlay'
 
   return (
     <section className="panel">
@@ -46,10 +60,19 @@ export function Organizer() {
           value={count}
           onChange={(event) => setCount(Number(event.target.value))}
         />
-        <button className="btn primary" disabled={!wallet || busy} onClick={() => void mint()}>
+        <button
+          className="btn primary"
+          disabled={mintDisabled}
+          title={mintTitle}
+          onClick={() => void mint()}
+        >
           {busy ? 'Minting…' : 'Mint tickets'}
         </button>
       </div>
+      {overlayDown && <p className="status err">{LOCAL_OVERLAY_HINT}</p>}
+      {!wallet && (
+        <p className="hint">Connect BSV Desktop before mint. {walletHint()}</p>
+      )}
       <p className="hint">
         Overlay is {online === null ? 'checking' : online ? 'reachable' : 'offline'} at {url}.
         The wallet prompts for each createAction. Apps never hold keys.

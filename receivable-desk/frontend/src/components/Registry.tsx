@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { sampleReceivables } from '../../../protocol/samples'
 import { useOverlay } from '../context/OverlayContext'
-import { errorMessage, formatSats } from '../lib/config'
+import { LOCAL_OVERLAY_HINT, errorMessage, formatSats } from '../lib/config'
 import { lookupReceivables, type OverlayReceivable } from '../lib/overlay'
 import { partyName } from './InvoiceCard'
 
@@ -12,7 +12,7 @@ function previewUnpaid(): OverlayReceivable[] {
 }
 
 export function Registry() {
-  const { url } = useOverlay()
+  const { url, online } = useOverlay()
   const [rows, setRows] = useState<OverlayReceivable[]>([])
   const [preview, setPreview] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -29,6 +29,7 @@ export function Registry() {
         return
       }
     } catch (err) {
+      console.error('Registry lookup failed', err)
       setError(errorMessage(err))
     } finally {
       setBusy(false)
@@ -41,6 +42,8 @@ export function Registry() {
     void refresh()
   }, [url])
 
+  const overlayDown = online === false || Boolean(error)
+
   return (
     <section className="panel">
       <h2>You owe us</h2>
@@ -51,10 +54,15 @@ export function Registry() {
       <button className="btn" disabled={busy} onClick={() => void refresh()}>
         {busy ? 'Refreshing…' : 'Refresh'}
       </button>
-      {preview && (
-        <p className="hint">Sample invoices — local index is not running, so this is not a live settle.</p>
+      {overlayDown && (
+        <p className="status err">{error || LOCAL_OVERLAY_HINT}</p>
       )}
-      {error && !preview && <p className="status err">{error}</p>}
+      {preview && (
+        <p className="hint">
+          Sample invoices — overlay is local Docker, not GitHub Pages.
+          {` ${LOCAL_OVERLAY_HINT}`}
+        </p>
+      )}
       <p className="hint">{rows.length} open invoice{rows.length === 1 ? '' : 's'}.</p>
       {rows.map((row) => (
         <article key={`${row.txid}.${row.outputIndex}`} className="work-row">

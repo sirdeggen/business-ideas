@@ -13,7 +13,7 @@ import {
   settleReceivable,
   type HeldReceivable
 } from '../lib/actions'
-import { LOCAL_DESK_HINT, errorMessage, formatSats, isGitHubPages } from '../lib/config'
+import { LOCAL_DESK_HINT, LOCAL_OVERLAY_HINT, errorMessage, formatSats, isGitHubPages, walletHint } from '../lib/config'
 import { lookupReceivables, type OverlayReceivable } from '../lib/overlay'
 import { partyName } from './InvoiceCard'
 
@@ -48,10 +48,12 @@ export function Desk() {
       if (unpaid.length > 0) {
         setRows(unpaid)
         setPreview(false)
+        setError(null)
         return
       }
-    } catch {
-      // Local index is down — show this desk's sample registry so the list is visible.
+    } catch (err) {
+      console.error('Desk lookup failed', err)
+      setError(errorMessage(err))
     }
     setRows(previewRows())
     setPreview(true)
@@ -107,6 +109,7 @@ export function Desk() {
       setStatus(`Marked ${pack.invoiceId} paid.`)
       await refresh()
     } catch (err) {
+      console.error('Mark paid failed', err)
       setError(errorMessage(err))
     } finally {
       setBusy(null)
@@ -123,11 +126,14 @@ export function Desk() {
       {preview && (
         <p className="hint">
           Showing sample invoices because the local index is not running.
-          {pages ? ` ${LOCAL_DESK_HINT}` : ' Start docker compose to chase this desk’s registry.'}
+          {pages ? ` ${LOCAL_DESK_HINT}` : ` ${LOCAL_OVERLAY_HINT}`}
         </p>
       )}
       <button className="btn" onClick={() => void refresh()}>Refresh list</button>
       {status && <p className="status ok">{status}</p>}
+      {walletError && !walletError.includes('Access other apps') && (
+        <p className="hint">{walletHint()}</p>
+      )}
       {(error || walletError) && <p className="status err">{error || walletError}</p>}
 
       {AGING_LABELS.map((label) => (
