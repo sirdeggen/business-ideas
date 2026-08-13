@@ -1,0 +1,27 @@
+services:
+  feed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      DATA_DIR: /data
+    volumes:
+      - treasury-data:/data
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_FEED_URL: http://localhost:8080
+        VITE_BASE: /
+    ports:
+      - "5173:80"
+    depends_on:
+      - feed
+
+volumes:
+  treasury-data:

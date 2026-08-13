@@ -1,0 +1,237 @@
+:root {
+  color-scheme: dark;
+  --bg: #10120f;
+  --bg-raise: #181c18;
+  --ink: #f4f1e8;
+  --muted: #b3b0a4;
+  --gold: #d7c07a;
+  --gold-dim: #8f7a3d;
+  --line: #2d332c;
+  --danger: #e07a5f;
+  --ok: #7dcfb6;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(1100px 480px at 8% -12%, #24301f 0%, transparent 55%),
+    var(--bg);
+  color: var(--ink);
+}
+
+button, input, textarea, select {
+  font: inherit;
+}
+
+a { color: var(--gold); }
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+}
+
+.masthead {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-end;
+  border-bottom: 1px dashed var(--gold-dim);
+  padding-bottom: 20px;
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--gold);
+  margin: 0 0 8px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+h1 {
+  font-size: 40px;
+  line-height: 0.95;
+  margin: 0;
+  font-weight: 600;
+}
+
+.lede {
+  color: var(--muted);
+  max-width: 46ch;
+  margin: 10px 0 0;
+}
+
+.identity {
+  text-align: right;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.identity code {
+  display: block;
+  color: var(--ink);
+  margin-top: 6px;
+  word-break: break-all;
+}
+
+.btn {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.btn.primary {
+  background: var(--gold);
+  color: #1a140c;
+  border-color: var(--gold);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.banner {
+  border: 1px solid var(--gold-dim);
+  background: #171912;
+  padding: 12px 14px;
+  border-radius: 12px;
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 16px;
+}
+
+.panel {
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 22px;
+  margin-bottom: 16px;
+}
+
+.panel h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.panel p, .hint {
+  color: var(--muted);
+  margin-top: 0;
+}
+
+label {
+  display: block;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 16px 0 6px;
+}
+
+input, textarea, select {
+  width: 100%;
+  background: #101410;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.status {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.status.ok { color: var(--ok); }
+.status.err { color: var(--danger); }
+
+.feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.feed li {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+}
+
+.feed time {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.seat {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+}
+
+.seat strong { display: block; }
+
+.proposal {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  margin: 12px 0;
+}
+
+.proposal h3 {
+  margin: 0 0 6px;
+}
+
+.meta {
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+}
+
+footer {
+  margin-top: 40px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 800px) {
+  .masthead, .grid { display: block; }
+  .identity { text-align: left; margin-top: 16px; }
+}
