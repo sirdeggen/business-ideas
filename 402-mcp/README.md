@@ -1,10 +1,12 @@
 # 402-mcp
 
-Paid MCP tools in sats. Payment is the credential. No signup, no API key, no USDC.
+Paid MCP tools in BSV sats. Payment is the credential. No signup, no API key.
 
-An agent discovers tools for free, then pays **10 sats** (configurable via `PRICE_SATS`) on each `tools/call`. Settlement is [BRC-121](https://brc.dev/121) Simple 402 Payments: BRC-29 BEEF in `x-bsv-*` headers, internalized by a BRC-100 server wallet. There is no facilitator.
+An agent discovers tools for free, then pays **10 sats** (configurable via `PRICE_SATS`) on each `tools/call`. Settlement is [BRC-121](https://brc.dev/121) Simple 402 Payments: BRC-29 BEEF in `x-bsv-*` headers, internalized by a BRC-100 server wallet.
 
-Pitch: **no USDC needed, the wallet is the account.**
+Pitch: **the wallet is the account.**
+
+This is not Coinbase x402.
 
 ## Price
 
@@ -12,18 +14,6 @@ Pitch: **no USDC needed, the wallet is the account.**
 |---|---|
 | MCP `initialize`, `tools/list`, `GET /health` | free |
 | MCP `tools/call` (`fetch_hash`) | **10 sats** (`PRICE_SATS`, default 10) |
-
-## How this differs from Coinbase x402
-
-| | This service (BRC-121) | Coinbase x402 |
-|---|---|---|
-| Asset | sats on BSV | USDC (and other facilitator assets) |
-| Chains | BSV main or test | Base, Solana, others via facilitators |
-| Facilitator | none | required (Coinbase, AWS, Cloudflare, Stripe implementations) |
-| Account | BRC-100 wallet identity | typically a USDC-funded buyer |
-| Transport | `x-bsv-beef` / `x-bsv-sender` / `x-bsv-nonce` / `x-bsv-time` / `x-bsv-vout` | x402 payment payload |
-
-This is **not** BRC-120, **not** Coinbase x402, and **not** `@bsv/payment-express-middleware`.
 
 ## Paid tool
 
