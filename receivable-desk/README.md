@@ -17,6 +17,8 @@ Overlay **:8082**, UI **:5175**.
 
 Public UI (GitHub Pages, list only — no settle): `https://sirdeggen.github.io/business-ideas/receivables/`
 
+Pages is the shell. Overlay is localhost Docker on **:8082**. Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access other apps and services on this device,” then Retry with Desktop unlocked. Wallet is not required to read the list.
+
 Sibling payable-invoice app lives in [`invoices/`](../invoices/). This desk does not modify that folder. Local compose ports here are offset so tickets (8080), invoices (8081), and this registry (8082) can run together.
 
 ## Stack

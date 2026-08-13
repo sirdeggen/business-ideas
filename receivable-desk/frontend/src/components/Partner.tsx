@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { sampleReceivables } from '../../../protocol/samples'
 import { useOverlay } from '../context/OverlayContext'
-import { errorMessage, formatSats } from '../lib/config'
+import { LOCAL_OVERLAY_HINT, errorMessage, formatSats } from '../lib/config'
 import { lookupReceivables, type OverlayReceivable } from '../lib/overlay'
 import { partyName } from './InvoiceCard'
 
@@ -26,8 +26,9 @@ export function Partner() {
         setError(null)
         return
       }
-    } catch {
-      // Local index is down — show sample rows so the disabled control is visible.
+    } catch (err) {
+      console.error('Advance list lookup failed', err)
+      setError(errorMessage(err))
     }
     setRows(previewApproved())
   }
@@ -44,6 +45,7 @@ export function Partner() {
       </p>
       <button className="btn" onClick={() => void refresh()}>Refresh</button>
       {error && <p className="status err">{error}</p>}
+      {error && !error.includes('local Docker') && <p className="hint">{LOCAL_OVERLAY_HINT}</p>}
       {rows.length === 0 && (
         <div className="work-row">
           <div>No invoices in this view.</div>

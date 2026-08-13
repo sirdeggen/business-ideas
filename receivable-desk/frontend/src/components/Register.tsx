@@ -3,7 +3,7 @@ import { isIdentityKey } from '../../../protocol/receivable'
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
 import { registerReceivable } from '../lib/actions'
-import { errorMessage } from '../lib/config'
+import { LOCAL_OVERLAY_HINT, errorMessage, walletHint } from '../lib/config'
 
 export function Register() {
   const { wallet, identityKey, connecting, error: walletError, connect } = useWallet()
@@ -22,7 +22,26 @@ export function Register() {
     if (identityKey && !creditor) setCreditor(identityKey)
   }, [identityKey, creditor])
 
+  const overlayDown = online === false
+  const debtorMissing = !debtor.trim()
+  const registerDisabled = busy || connecting || overlayDown || debtorMissing
+  const registerTitle = overlayDown
+    ? LOCAL_OVERLAY_HINT
+    : debtorMissing
+      ? 'Who owes us is required before Record is enabled'
+      : connecting
+        ? 'Connecting wallet…'
+        : 'Record this invoice on the local overlay'
+
   const submit = async (): Promise<void> => {
+    if (overlayDown) {
+      setError(LOCAL_OVERLAY_HINT)
+      return
+    }
+    if (debtorMissing) {
+      setError('Who owes us is required.')
+      return
+    }
     if (!wallet) {
       const ok = await connect()
       if (!ok) return
@@ -46,6 +65,7 @@ export function Register() {
       })
       setStatus(`Recorded ${result.invoiceId}.`)
     } catch (err) {
+      console.error('Register failed', err)
       setError(errorMessage(err))
     } finally {
       setBusy(false)
@@ -57,7 +77,7 @@ export function Register() {
       <h2>Record an invoice</h2>
       <p>
         Same treasurer — the paper that proves an invoice you already issued.
-        Not a loan.
+        Not a loan. Wallet is only needed to record, not to read the list.
       </p>
       <label htmlFor="invoiceId">Invoice id</label>
       <input id="invoiceId" value={invoiceId} onChange={(event) => setInvoiceId(event.target.value)} />
@@ -65,6 +85,9 @@ export function Register() {
       <input id="creditor" value={creditor} onChange={(event) => setCreditor(event.target.value)} />
       <label htmlFor="debtor">Who owes us</label>
       <input id="debtor" value={debtor} onChange={(event) => setDebtor(event.target.value)} placeholder="Account id" />
+      {debtorMissing && (
+        <p className="hint">Record stays disabled until who owes us is filled in.</p>
+      )}
       <div className="row">
         <div className="grow">
           <label htmlFor="amount">Amount</label>
@@ -84,10 +107,19 @@ export function Register() {
       <label htmlFor="memo">Memo</label>
       <input id="memo" value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="What is owed" />
       <div className="row" style={{ marginTop: 16 }}>
-        <button className="btn primary" disabled={busy || connecting || online === false} onClick={() => void submit()}>
+        <button
+          className="btn primary"
+          disabled={registerDisabled}
+          title={registerTitle}
+          onClick={() => void submit()}
+        >
           {busy ? 'Recording…' : connecting ? 'Connecting…' : 'Record'}
         </button>
       </div>
+      {overlayDown && <p className="status err">{LOCAL_OVERLAY_HINT}</p>}
+      {walletError && !walletError.includes('Access other apps') && (
+        <p className="hint">{walletHint()}</p>
+      )}
       {status && <p className="status ok">{status}</p>}
       {(error || walletError) && <p className="status err">{error || walletError}</p>}
     </section>

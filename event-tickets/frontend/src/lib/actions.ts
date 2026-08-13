@@ -158,15 +158,27 @@ export async function mintTickets(
     })
   }
 
-  const response = await wallet.createAction({
-    description: `Mint ${count} Demo Night tickets`,
-    outputs,
-    labels: [BASKET, 'mint'],
-    options: { randomizeOutputs: false }
-  })
+  let response
+  try {
+    response = await wallet.createAction({
+      description: `Mint ${count} Demo Night tickets`,
+      outputs,
+      labels: [BASKET, 'mint'],
+      options: { randomizeOutputs: false }
+    })
+  } catch (err) {
+    const detail = err instanceof Error && err.message.trim() ? err.message : String(err ?? '')
+    throw new Error(
+      detail.trim()
+        ? `createAction failed: ${detail}`
+        : 'createAction failed with no message. Spending Request timed out, was rejected, overlay is offline, or Desktop is locked.'
+    )
+  }
 
   if (!response.txid || !response.tx) {
-    throw new Error('Wallet did not return a minted transaction')
+    throw new Error(
+      'Wallet did not return a minted transaction. Spending Request timed out, was rejected, or Desktop is locked.'
+    )
   }
 
   const submitted = await submitTicketTx(overlayUrl, response.tx as number[])
@@ -191,18 +203,28 @@ async function spendTicket(
   description: string
 ): Promise<{ txid: string, tx: number[] }> {
   const instructions = parseInstructions(held.customInstructions)
-  const response = await wallet.createAction({
-    description,
-    inputBEEF: held.beef,
-    inputs: [{
-      inputDescription: 'Demo Night ticket',
-      outpoint: held.outpoint,
-      unlockingScriptLength: 73
-    }],
-    ...(newOutputs.length > 0 ? { outputs: newOutputs } : {}),
-    labels: [BASKET],
-    options: { randomizeOutputs: false }
-  })
+  let response
+  try {
+    response = await wallet.createAction({
+      description,
+      inputBEEF: held.beef,
+      inputs: [{
+        inputDescription: 'Demo Night ticket',
+        outpoint: held.outpoint,
+        unlockingScriptLength: 73
+      }],
+      ...(newOutputs.length > 0 ? { outputs: newOutputs } : {}),
+      labels: [BASKET],
+      options: { randomizeOutputs: false }
+    })
+  } catch (err) {
+    const detail = err instanceof Error && err.message.trim() ? err.message : String(err ?? '')
+    throw new Error(
+      detail.trim()
+        ? `createAction failed: ${detail}`
+        : 'createAction failed with no message. Spending Request timed out, was rejected, overlay is offline, or Desktop is locked.'
+    )
+  }
 
   if (!response.signableTransaction) {
     throw new Error('Wallet did not return a signable spend')

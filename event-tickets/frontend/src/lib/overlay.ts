@@ -31,14 +31,20 @@ async function localOverlay(base: string): Promise<Overlay> {
 
 export async function submitTicketTx(base: string, beef: number[]): Promise<SubmitResult> {
   const url = overlayUrl(base)
-  const response = await fetch(`${url}/submit`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-topics': TOPIC
-    },
-    body: JSON.stringify(beef)
-  })
+  let response: Response
+  try {
+    response = await fetch(`${url}/submit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-topics': TOPIC
+      },
+      body: JSON.stringify(beef)
+    })
+  } catch (err) {
+    const detail = err instanceof Error && err.message.trim() ? err.message : 'Failed to fetch'
+    throw new Error(`${detail} — overlay /submit at ${url}`)
+  }
   const raw: unknown = await response.json().catch(() => undefined)
   if (!response.ok) {
     const message = (raw as { message?: string } | undefined)?.message
@@ -68,14 +74,20 @@ export async function lookupTickets(
     // Fall through to direct /lookup against the configured node.
   }
 
-  const response = await fetch(`${url}/lookup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      service: LOOKUP_SERVICE,
-      query
+  let response: Response
+  try {
+    response = await fetch(`${url}/lookup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        service: LOOKUP_SERVICE,
+        query
+      })
     })
-  })
+  } catch (err) {
+    const detail = err instanceof Error && err.message.trim() ? err.message : 'Failed to fetch'
+    throw new Error(`${detail} — overlay /lookup at ${url}`)
+  }
   if (!response.ok) {
     throw new Error(`Overlay /lookup failed (${response.status})`)
   }

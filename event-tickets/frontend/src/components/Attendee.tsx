@@ -40,7 +40,10 @@ export function Attendee() {
   }
 
   useEffect(() => {
-    void refresh().catch((err: unknown) => setError(errorMessage(err)))
+    void refresh().catch((err: unknown) => {
+      console.error('Basket refresh failed', err)
+      setError(errorMessage(err))
+    })
   }, [wallet])
 
   const send = async (held: HeldTicket): Promise<void> => {
@@ -58,6 +61,7 @@ export function Attendee() {
       setStatus(`Transferred ticket ${held.ticket.serial}. Give the package below to the recipient.`)
       await refresh()
     } catch (err) {
+      console.error('Transfer failed', err)
       setError(errorMessage(err))
     }
   }
@@ -71,6 +75,7 @@ export function Attendee() {
       setIncoming('')
       await refresh()
     } catch (err) {
+      console.error('Accept transfer failed', err)
       setError(errorMessage(err))
     }
   }

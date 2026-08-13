@@ -151,22 +151,34 @@ export async function registerReceivable(
     advanceBps: 0
   }, 'self', true)
 
-  const response = await wallet.createAction({
-    description: `Register receivable ${input.invoiceId}`,
-    outputs: [{
-      satoshis: 1,
-      lockingScript: locked.lockingScript.toHex(),
-      outputDescription: `Receivable ${input.invoiceId}`,
-      basket: BASKET,
-      customInstructions: locked.customInstructions,
-      tags: [BASKET, 'register', input.invoiceId]
-    }],
-    labels: [BASKET, 'register'],
-    options: { randomizeOutputs: false }
-  })
+  let response
+  try {
+    response = await wallet.createAction({
+      description: `Register receivable ${input.invoiceId}`,
+      outputs: [{
+        satoshis: 1,
+        lockingScript: locked.lockingScript.toHex(),
+        outputDescription: `Receivable ${input.invoiceId}`,
+        basket: BASKET,
+        customInstructions: locked.customInstructions,
+        tags: [BASKET, 'register', input.invoiceId]
+      }],
+      labels: [BASKET, 'register'],
+      options: { randomizeOutputs: false }
+    })
+  } catch (err) {
+    const detail = err instanceof Error && err.message.trim() ? err.message : String(err ?? '')
+    throw new Error(
+      detail.trim()
+        ? `createAction failed: ${detail}`
+        : 'createAction failed with no message. Spending Request timed out, was rejected, overlay is offline, or Desktop is locked.'
+    )
+  }
 
   if (!response.txid || !response.tx) {
-    throw new Error('Wallet did not return a register transaction')
+    throw new Error(
+      'Wallet did not return a register transaction. Spending Request timed out, was rejected, or Desktop is locked.'
+    )
   }
 
   const submitted = await submitReceivableTx(overlayUrl, response.tx as number[])
@@ -190,18 +202,28 @@ async function spendReceivable(
   description: string
 ): Promise<{ txid: string, tx: number[] }> {
   const instructions = parseInstructions(held.customInstructions)
-  const response = await wallet.createAction({
-    description,
-    inputBEEF: held.beef,
-    inputs: [{
-      inputDescription: `Receivable ${held.item.invoiceId}`,
-      outpoint: held.outpoint,
-      unlockingScriptLength: 73
-    }],
-    outputs: newOutputs,
-    labels: [BASKET],
-    options: { randomizeOutputs: false }
-  })
+  let response
+  try {
+    response = await wallet.createAction({
+      description,
+      inputBEEF: held.beef,
+      inputs: [{
+        inputDescription: `Receivable ${held.item.invoiceId}`,
+        outpoint: held.outpoint,
+        unlockingScriptLength: 73
+      }],
+      outputs: newOutputs,
+      labels: [BASKET],
+      options: { randomizeOutputs: false }
+    })
+  } catch (err) {
+    const detail = err instanceof Error && err.message.trim() ? err.message : String(err ?? '')
+    throw new Error(
+      detail.trim()
+        ? `createAction failed: ${detail}`
+        : 'createAction failed with no message. Spending Request timed out, was rejected, overlay is offline, or Desktop is locked.'
+    )
+  }
 
   if (!response.signableTransaction) {
     throw new Error('Wallet did not return a signable spend')
