@@ -4,7 +4,8 @@ Tickets are UTXOs. The organizer mints a tranche of Demo Night general-admission
 
 This stack is BSV only: BRC-100 wallets, PushDrop ticket UTXOs, and overlay-express. One event (`demonight`), one ticket type (`ga`).
 
-Public UI (GitHub Pages): after merge, `https://sirdeggen.github.io/business-ideas/`
+Public UI (GitHub Pages): after merge, `https://sirdeggen.github.io/business-ideas/tickets/`
+Catalog: `https://sirdeggen.github.io/business-ideas/`
 
 ## Stack
 

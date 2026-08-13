@@ -24,19 +24,24 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: event-tickets/frontend/package-lock.json
-      - name: Install and build
+      - name: Install and build tickets
         working-directory: event-tickets/frontend
         env:
-          VITE_BASE: /business-ideas/
+          VITE_BASE: /business-ideas/tickets/
           VITE_OVERLAY_URL: http://localhost:8080
         run: |
           npm ci
           npm run build
           cp dist/index.html dist/404.html
-          touch dist/.nojekyll
+      - name: Compose Pages site
+        run: |
+          mkdir -p site/tickets
+          cp pages/index.html pages/styles.css site/
+          cp -r event-tickets/frontend/dist/. site/tickets/
+          touch site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: event-tickets/frontend/dist
+          path: site
 
   deploy:
     needs: build
