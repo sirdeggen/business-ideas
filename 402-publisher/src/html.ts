@@ -161,7 +161,7 @@ export function indexPage(): string {
   <span>Readers ${humanSats()} sats</span>
   <span>Crawlers ${crawlerSats()} sats</span>
 </div>
-<p class="lede">A Ghost-class page that charges people and bots for the same articles — HTTP 402, sats, no Stripe. The index is free. The essays are not.</p>
+<p class="lede">A Ghost-class page that charges people and bots for the same articles — HTTP 402 on BSV, priced in sats. The index is free. The essays are not.</p>
 ${cards}`
 
   return pageShell('402 Press', body)

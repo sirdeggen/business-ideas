@@ -8,4 +8,4 @@ Tickets as UTXOs: mint into a BRC-100 basket, hold/show a QR, transfer by spend,
 
 ## 402-publisher
 
-A Ghost-class page that charges readers and crawlers per fetch. HTTP 402, sats, two prices. No accounts.
+A Ghost-class page that charges readers and crawlers per fetch. HTTP 402 on BSV (BRC-121), sats, two prices. No accounts.

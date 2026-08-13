@@ -1,6 +1,6 @@
 # 402 Press
 
-A Ghost-class page that charges **readers and crawlers per fetch**. One site, paid articles, two prices. HTTP 402 via [BRC-121](https://bsv.brc.dev/payments/0121) and [`@bsv/402-pay`](https://www.npmjs.com/package/@bsv/402-pay) `0.2.4`. No accounts. No Stripe.
+A Ghost-class page that charges **readers and crawlers per fetch**. One site, paid articles, two prices. HTTP 402 is [BRC-121](https://bsv.brc.dev/payments/0121) on **BSV only**, via [`@bsv/402-pay`](https://www.npmjs.com/package/@bsv/402-pay) `0.2.4` and [`@bsv/sdk`](https://www.npmjs.com/package/@bsv/sdk). Prices in sats. Wallets: BSV Desktop, BSV Browser, 402-extension. No accounts.
 
 `GET /` is free. `/articles/:slug` returns **402** until a valid payment is attached.
 
@@ -10,6 +10,8 @@ A Ghost-class page that charges **readers and crawlers per fetch**. One site, pa
 | Crawlers / agents | **500 sats** (`CRAWLER_SATS`) | Bot/tool UA (`GPTBot`, `ClaudeBot`, `Googlebot`, `Bingbot`, `curl`, `wget`, `python-requests`, `Go-http-client`, …) or `Accept: application/json` without HTML |
 
 The crawler price is an invoice, not a block. Both audiences get `x-bsv-sats` and `x-bsv-server`.
+
+Payment rail is BSV only. This repo does not implement or document any other chain or card processor.
 
 ## Run
 
