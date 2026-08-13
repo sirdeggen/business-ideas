@@ -1,0 +1,15 @@
+services:
+  publisher:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PRIVATE_KEY=${PRIVATE_KEY}
+      - CHAIN=${CHAIN:-main}
+      - STORAGE_URL=${STORAGE_URL:-https://store-us-1.bsvb.tech}
+      - HUMAN_SATS=${HUMAN_SATS:-100}
+      - CRAWLER_SATS=${CRAWLER_SATS:-500}
+      - PORT=3000
+    env_file:
+      - .env
+    restart: unless-stopped
