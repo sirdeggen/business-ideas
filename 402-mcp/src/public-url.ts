@@ -1,16 +1,5 @@
-import { createHash } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
 import { isIP } from 'node:net'
-import { FETCH_MAX_BYTES, FETCH_MAX_REDIRECTS, FETCH_TIMEOUT_MS } from './config.js'
-
-export interface FetchHashResult {
-  url: string
-  finalUrl: string
-  status: number
-  contentType: string | null
-  sha256: string
-  bytes: number
-}
 
 const BLOCKED_HOSTS = new Set(['localhost', '0.0.0.0', '::', '::1'])
 
@@ -76,65 +65,4 @@ export async function assertPublicHttpUrl(urlString: string): Promise<URL> {
     throw new Error('Private or local hosts are not allowed')
   }
   return url
-}
-
-export async function fetchHash(urlString: string): Promise<FetchHashResult> {
-  let current = await assertPublicHttpUrl(urlString)
-  let response: Response | undefined
-
-  for (let hop = 0; hop <= FETCH_MAX_REDIRECTS; hop++) {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-    try {
-      response = await fetch(current, {
-        method: 'GET',
-        redirect: 'manual',
-        signal: controller.signal,
-        headers: { accept: '*/*' }
-      })
-    } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error(`Fetch timed out after ${FETCH_TIMEOUT_MS}ms`)
-      }
-      throw error
-    } finally {
-      clearTimeout(timer)
-    }
-
-    if (response.status >= 300 && response.status < 400) {
-      const location = response.headers.get('location')
-      if (!location) break
-      current = await assertPublicHttpUrl(new URL(location, current).toString())
-      continue
-    }
-    break
-  }
-
-  if (!response) throw new Error('Fetch failed')
-
-  const reader = response.body?.getReader()
-  const chunks: Uint8Array[] = []
-  let bytes = 0
-  if (reader) {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      bytes += value.byteLength
-      if (bytes > FETCH_MAX_BYTES) {
-        await reader.cancel()
-        throw new Error(`Response exceeded ${FETCH_MAX_BYTES} bytes`)
-      }
-      chunks.push(value)
-    }
-  }
-
-  const body = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))
-  return {
-    url: urlString,
-    finalUrl: current.toString(),
-    status: response.status,
-    contentType: response.headers.get('content-type'),
-    sha256: createHash('sha256').update(body).digest('hex'),
-    bytes: body.byteLength
-  }
 }

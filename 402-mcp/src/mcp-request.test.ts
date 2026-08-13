@@ -19,8 +19,8 @@ test('mcpRequestBody always includes the 2026-07-28 _meta envelope', () => {
   assert.deepEqual(meta[CLIENT_CAPABILITIES_META_KEY], {})
   assert.equal((meta[CLIENT_INFO_META_KEY] as { name: string }).name, '402-mcp-pay')
 
-  const called = mcpRequestBody('tools/call', { name: 'fetch_hash', arguments: { url: 'https://example.com' } })
-  assert.equal(called.params.name, 'fetch_hash')
+  const called = mcpRequestBody('tools/call', { name: 'extract_article', arguments: { url: 'https://example.com' } })
+  assert.equal(called.params.name, 'extract_article')
   assert.ok(called.params._meta)
 })
 
@@ -34,7 +34,8 @@ test('tools/list with _meta returns 200 from the MCP handler without a wallet', 
   )
   assert.equal(res.status, 200)
   const text = await res.text()
-  assert.match(text, /fetch_hash/)
+  assert.match(text, /extract_article/)
+  assert.doesNotMatch(text, /fetch_hash/)
 })
 
 test('tools/list with modern header but no _meta is 400', async () => {
