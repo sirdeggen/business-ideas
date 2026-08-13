@@ -1,0 +1,68 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: invoices
+      MYSQL_USER: invoices
+      MYSQL_PASSWORD: invoices
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpass"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
+  mongodb:
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
+  overlay:
+    build:
+      context: .
+      dockerfile: overlay/Dockerfile
+    ports:
+      - "8081:8080"
+    env_file:
+      - .env.example
+    environment:
+      PORT: "8080"
+      KNEX_URL: mysql://invoices:invoices@mysql:3306/invoices
+      MONGO_URL: mongodb://root:example@mongodb:27017/?authSource=admin
+      HOSTING_URL: http://localhost:8081
+      HOSTING_FQDN: localhost
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_OVERLAY_URL: http://localhost:8081
+        VITE_BASE: /
+    ports:
+      - "5174:80"
+    depends_on:
+      - overlay
+
+volumes:
+  mysql-data:
+  mongo-data:
