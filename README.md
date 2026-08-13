@@ -6,13 +6,11 @@ Switcher on GitHub Pages: https://sirdeggen.github.io/business-ideas/
 
 Invoices are the first product. The receivable desk is a collections list on this desk’s own registry — not a second company. Tickets sit after invoices.
 
-## Invoices (server / local Docker)
+## Invoices
 
-Send a payable. Get a receipt. Local Docker, not a Pages demo — there is no working public URL yet.
+Send a payable. Get a receipt.
 
-- Repo: [invoices/](./invoices/)
-- How to run: `cd invoices && docker compose up --build` — overlay :8081, UI :5174 — [invoices/README.md](./invoices/README.md)
-- Cluster path later: `/invoices`
+- How to run: [invoices/README.md](./invoices/README.md) (`cd invoices && docker compose up --build`)
 
 ## Receivable desk (feature of invoices)
 
