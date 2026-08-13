@@ -13,7 +13,10 @@ function invoice(invoiceId = 'ab'.repeat(16)): InvoicePayload {
     amountSats: 1500,
     memo: 'Hall hire',
     dueDate: '2026-09-01',
-    createdAt: '2026-08-13T18:00:00.000Z'
+    createdAt: '2026-08-13T18:00:00.000Z',
+    orgName: 'Riverside Community Church',
+    billedTo: 'Jordan Lee',
+    amountUsd: '50.00'
   }
 }
 

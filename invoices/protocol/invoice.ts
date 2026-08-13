@@ -16,6 +16,7 @@ export const PAID_MAGIC = 'bsvinvoice-paid'
 export const BRC29_PROTOCOL_ID: [2, string] = [2, '3241645161d8']
 
 export const MAX_MEMO_CHARS = 200
+export const MAX_NAME_CHARS = 80
 export const MIN_AMOUNT_SATS = 1
 export const MAX_AMOUNT_SATS = 1_000_000_000_000
 
@@ -29,6 +30,9 @@ export interface InvoicePayload {
   memo: string
   dueDate: string
   createdAt: string
+  orgName: string
+  billedTo: string
+  amountUsd: string
 }
 
 export interface ReceiptRemittance {
@@ -99,9 +103,19 @@ export function assertMemo(memo: string): void {
   }
 }
 
+export function assertName(label: string, value: string): void {
+  const trimmed = value.trim()
+  if (!trimmed) throw new Error(`${label} is required`)
+  if (trimmed.length > MAX_NAME_CHARS) {
+    throw new Error(`${label} must be at most ${MAX_NAME_CHARS} characters`)
+  }
+}
+
 export function encodeInvoiceFields(invoice: Omit<InvoicePayload, 'magic'>): number[][] {
   assertAmountSats(invoice.amountSats)
   assertMemo(invoice.memo)
+  assertName('Organization name', invoice.orgName)
+  assertName('Billed-to name', invoice.billedTo)
   if (!isInvoiceId(invoice.invoiceId)) throw new Error('invoiceId must be 16 bytes hex')
   if (!isIdentityKey(invoice.payeeIdentity)) throw new Error('payeeIdentity must be a 66-hex compressed key')
   if (!isIsoDate(invoice.dueDate)) throw new Error('dueDate must be YYYY-MM-DD')
@@ -112,8 +126,26 @@ export function encodeInvoiceFields(invoice: Omit<InvoicePayload, 'magic'>): num
     stringToUtf8Bytes(String(invoice.amountSats)),
     stringToUtf8Bytes(invoice.memo),
     stringToUtf8Bytes(invoice.dueDate),
-    stringToUtf8Bytes(invoice.createdAt)
+    stringToUtf8Bytes(invoice.createdAt),
+    stringToUtf8Bytes(JSON.stringify({
+      orgName: invoice.orgName.trim(),
+      billedTo: invoice.billedTo.trim(),
+      amountUsd: invoice.amountUsd.trim()
+    }))
   ]
+}
+
+function parseDisplayField(raw: string): Pick<InvoicePayload, 'orgName' | 'billedTo' | 'amountUsd'> {
+  try {
+    const parsed = JSON.parse(raw) as { orgName?: unknown, billedTo?: unknown, amountUsd?: unknown }
+    return {
+      orgName: typeof parsed.orgName === 'string' ? parsed.orgName : '',
+      billedTo: typeof parsed.billedTo === 'string' ? parsed.billedTo : '',
+      amountUsd: typeof parsed.amountUsd === 'string' ? parsed.amountUsd : ''
+    }
+  } catch {
+    return { orgName: '', billedTo: '', amountUsd: '' }
+  }
 }
 
 export function parseInvoiceFields(fields: Array<number[] | Uint8Array>): InvoicePayload | null {
@@ -128,6 +160,9 @@ export function parseInvoiceFields(fields: Array<number[] | Uint8Array>): Invoic
     const memo = utf8BytesToString(asBytes(fields[4]))
     const dueDate = utf8BytesToString(asBytes(fields[5]))
     const createdAt = utf8BytesToString(asBytes(fields[6]))
+    const display = fields.length >= 8
+      ? parseDisplayField(utf8BytesToString(asBytes(fields[7])))
+      : { orgName: '', billedTo: '', amountUsd: '' }
     if (!isInvoiceId(invoiceId) || !isIdentityKey(payeeIdentity) || !isIsoDate(dueDate)) return null
     assertAmountSats(amountSats)
     assertMemo(memo)
@@ -138,7 +173,10 @@ export function parseInvoiceFields(fields: Array<number[] | Uint8Array>): Invoic
       amountSats,
       memo,
       dueDate,
-      createdAt
+      createdAt,
+      orgName: display.orgName,
+      billedTo: display.billedTo,
+      amountUsd: display.amountUsd
     }
   } catch {
     return null

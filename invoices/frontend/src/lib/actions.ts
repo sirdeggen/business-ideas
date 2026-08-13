@@ -49,7 +49,14 @@ function pushdrop(wallet: WalletClient): PushDrop {
 export async function createInvoice(
   wallet: WalletClient,
   overlayUrl: string,
-  input: { amountSats: number, memo: string, dueDate: string }
+  input: {
+    amountSats: number
+    memo: string
+    dueDate: string
+    orgName: string
+    billedTo: string
+    amountUsd: string
+  }
 ): Promise<{ txid: string, invoiceId: string, outpoint: string }> {
   assertAmountSats(input.amountSats)
   assertMemo(input.memo)
@@ -66,7 +73,10 @@ export async function createInvoice(
       amountSats: input.amountSats,
       memo: input.memo,
       dueDate: input.dueDate,
-      createdAt
+      createdAt,
+      orgName: input.orgName,
+      billedTo: input.billedTo,
+      amountUsd: input.amountUsd
     }),
     PROTOCOL_ID,
     keyID,
@@ -76,11 +86,11 @@ export async function createInvoice(
   )
 
   const response = await wallet.createAction({
-    description: `Create invoice ${invoiceId}`,
+    description: `Send invoice: ${input.memo}`,
     outputs: [{
       satoshis: 1,
       lockingScript: lockingScript.toHex(),
-      outputDescription: `Invoice ${invoiceId}`,
+      outputDescription: `Invoice for ${input.billedTo}`,
       basket: BASKET,
       customInstructions: JSON.stringify({
         protocolID: PROTOCOL_ID,
@@ -152,7 +162,7 @@ export async function payInvoice(
   )
 
   const response = await wallet.createAction({
-    description: `Pay invoice ${open.invoiceId}`,
+    description: `Pay ${open.orgName || 'invoice'}${open.memo ? ` — ${open.memo}` : ''}`,
     outputs: [
       {
         satoshis: open.amountSats,

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Invoices</title>
+    <script>
+      (function () {
+        var match = location.pathname.match(/\/invoices\/i\/([0-9a-f]{32})\/?$/i)
+        if (match) {
+          location.replace('/business-ideas/invoices/#/i/' + match[1].toLowerCase())
+          return
+        }
+        location.replace('/business-ideas/')
+      })()
+    </script>
+  </head>
+  <body></body>
+</html>

@@ -15,6 +15,9 @@ export interface OverlayInvoice {
   memo: string
   dueDate: string
   createdAt: string
+  orgName: string
+  billedTo: string
+  amountUsd: string
   status: InvoiceStatus
   txid: string
   outputIndex: number
@@ -138,6 +141,9 @@ function invoiceStub(partial: Partial<OverlayInvoice> & { outputIndex: number })
     memo: typeof partial.memo === 'string' ? partial.memo : '',
     dueDate: typeof partial.dueDate === 'string' ? partial.dueDate : '',
     createdAt: typeof partial.createdAt === 'string' ? String(partial.createdAt) : '',
+    orgName: typeof partial.orgName === 'string' ? partial.orgName : '',
+    billedTo: typeof partial.billedTo === 'string' ? partial.billedTo : '',
+    amountUsd: typeof partial.amountUsd === 'string' ? partial.amountUsd : '',
     status: partial.status === 'paid' || partial.status === 'voided' ? partial.status : 'open',
     txid: typeof partial.txid === 'string' ? partial.txid : '',
     outputIndex: partial.outputIndex,
@@ -146,7 +152,7 @@ function invoiceStub(partial: Partial<OverlayInvoice> & { outputIndex: number })
     receiptTxid: partial.receiptTxid,
     receiptOutputIndex: partial.receiptOutputIndex,
     payerIdentity: partial.payerIdentity,
-    paidAt: partial.paidAt
+    paidAt: typeof partial.paidAt === 'string' ? partial.paidAt : undefined
   }
 }
 
