@@ -48,7 +48,7 @@ app.get('/', (_req, res) => {
       '402-mcp — paid MCP tools in sats (BRC-121, not Coinbase x402).',
       `Price: ${PRICE_SATS} sats per tools/call. initialize and tools/list are free.`,
       'MCP endpoint: POST /mcp',
-      'Paid tool: fetch_hash',
+      'Paid tool: extract_article (main article text).',
       'Payment is the credential. No signup, no API key.'
     ].join('\n')
   )

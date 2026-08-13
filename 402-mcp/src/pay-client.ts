@@ -2,14 +2,28 @@ import { WalletClient } from '@bsv/sdk'
 import { create402Fetch } from '@bsv/402-pay/client'
 import { mcpRequestBody, mcpRequestHeaders } from './mcp-request.js'
 
+const PAID_TOOL = 'extract_article'
+
 const MCP_URL = process.env.MCP_URL || 'http://127.0.0.1:3000/mcp'
 const ORIGINATOR = process.env.ORIGINATOR || 'http://127.0.0.1:3000'
-const DEFAULT_URL = 'https://example.com'
+const DEFAULT_URL = 'https://en.wikipedia.org/wiki/HTTP_402'
 
 function argValue(flag: string, fallback: string): string {
   const index = process.argv.indexOf(flag)
   if (index >= 0 && process.argv[index + 1]) return process.argv[index + 1]
   return fallback
+}
+
+function printHelp(): void {
+  console.log(`Usage: npm run pay -- [--probe] [--url <article-url>] [--help]
+
+  --url <article-url>   Public article to extract (default: ${DEFAULT_URL})
+  --probe               Unpaid tools/call; expect HTTP 402 and x-bsv-sats
+  --help                Show this help
+
+Paid tool: ${PAID_TOOL} (${process.env.PRICE_SATS || '10'} sats via BRC-121).
+Needs a BRC-100 wallet on localhost:3321 unless --probe.
+`)
 }
 
 async function readMcpResponse(res: Response): Promise<unknown> {
@@ -52,14 +66,19 @@ async function mcpPost(
 }
 
 async function main(): Promise<void> {
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    printHelp()
+    return
+  }
+
   const targetUrl = argValue('--url', process.env.FETCH_URL || DEFAULT_URL)
   const probeOnly = process.argv.includes('--probe')
 
   console.log(`MCP: ${MCP_URL}`)
-  console.log(`tool: fetch_hash url=${targetUrl}`)
+  console.log(`tool: ${PAID_TOOL} url=${targetUrl}`)
 
   if (probeOnly) {
-    const unpaid = await mcpPost(fetch, 'tools/call', { name: 'fetch_hash', arguments: { url: targetUrl } }, 'fetch_hash')
+    const unpaid = await mcpPost(fetch, 'tools/call', { name: PAID_TOOL, arguments: { url: targetUrl } }, PAID_TOOL)
     console.log(`unpaid tools/call -> ${unpaid.status}`)
     console.log(`x-bsv-sats: ${unpaid.headers.get('x-bsv-sats')}`)
     console.log(`x-bsv-server: ${unpaid.headers.get('x-bsv-server')}`)
@@ -85,8 +104,8 @@ async function main(): Promise<void> {
   const paid = await mcpPost(
     fetch402,
     'tools/call',
-    { name: 'fetch_hash', arguments: { url: targetUrl } },
-    'fetch_hash'
+    { name: PAID_TOOL, arguments: { url: targetUrl } },
+    PAID_TOOL
   )
   console.log(`tools/call (paid) -> ${paid.status}`)
   console.log(JSON.stringify(paid.body, null, 2))

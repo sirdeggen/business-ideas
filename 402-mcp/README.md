@@ -1,10 +1,10 @@
 # 402-mcp
 
-Paid MCP tools in BSV sats. Payment is the credential. No signup, no API key.
+Paid MCP article extract in BSV sats. Payment is the credential. No signup, no API key.
 
 An agent discovers tools for free, then pays **10 sats** (configurable via `PRICE_SATS`) on each `tools/call`. Settlement is [BRC-121](https://brc.dev/121) Simple 402 Payments: BRC-29 BEEF in `x-bsv-*` headers, internalized by a BRC-100 server wallet.
 
-Pitch: **the wallet is the account.**
+Pitch: agents already pay ~$0.01 for this job elsewhere; here they try once with a wallet, no USDC, no API key.
 
 This is not Coinbase x402.
 
@@ -13,11 +13,11 @@ This is not Coinbase x402.
 | Call | Price |
 |---|---|
 | MCP `initialize`, `tools/list`, `GET /health` | free |
-| MCP `tools/call` (`fetch_hash`) | **10 sats** (`PRICE_SATS`, default 10) |
+| MCP `tools/call` (`extract_article`) | **10 sats** (`PRICE_SATS`, default 10) |
 
 ## Paid tool
 
-`fetch_hash` — GET a public URL and return SHA-256 of the body, plus HTTP status and content-type. Local/private hosts are rejected.
+`extract_article` — GET a public URL and return the **main article text** (Mozilla Readability). Not raw HTML. Local/private hosts are rejected.
 
 ## Run the server
 
@@ -52,14 +52,16 @@ The server wallet is `@bsv/simple/server` `ServerWallet.create({ privateKey, net
 4. `tools/list` is free. On `tools/call` the server returns HTTP 402 with `x-bsv-sats` and `x-bsv-server`. The wrapper builds a BRC-29 payment and retries with BEEF headers.
 5. The server `internalizeAction`s the payment. Replay (`isMerge`) and stale `x-bsv-time` (>30s) are rejected with a fresh 402.
 
-Example pay-client (needs a live wallet on `:3321`):
+Example pay-client (needs a live wallet on `:3321` unless `--probe`):
 
 ```sh
-# show the 402 challenge without paying
-npm run pay -- --probe --url https://example.com
+npm run pay -- --help
 
-# pay and call fetch_hash
-MCP_URL=http://127.0.0.1:3000/mcp npm run pay -- --url https://example.com
+# show the 402 challenge without paying
+npm run pay -- --probe --url https://en.wikipedia.org/wiki/HTTP_402
+
+# pay and extract the article
+MCP_URL=http://127.0.0.1:3000/mcp npm run pay -- --url https://en.wikipedia.org/wiki/HTTP_402
 ```
 
 Unpaid probe (no wallet):
@@ -69,8 +71,8 @@ curl -sD - -o /dev/null -X POST http://127.0.0.1:3000/mcp \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
   -H 'Mcp-Method: tools/call' \
-  -H 'Mcp-Name: fetch_hash' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"fetch_hash","arguments":{"url":"https://example.com"}}}'
+  -H 'Mcp-Name: extract_article' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"extract_article","arguments":{"url":"https://en.wikipedia.org/wiki/HTTP_402"}}}'
 ```
 
 Expect `402` plus `x-bsv-sats: 10` and `x-bsv-server: <identity key>`.
@@ -102,5 +104,5 @@ Do not bake a real private key into the image.
 - `src/server.ts` — Express + Streamable HTTP MCP (`@modelcontextprotocol/server` v2)
 - `src/payment.ts` — `validatePayment` / `send402` on `tools/call` only
 - `src/wallet.ts` — `ServerWallet.create`
-- `src/fetch-hash.ts` — paid tool
+- `src/extract-article.ts` — paid tool (Readability)
 - `src/pay-client.ts` — `create402Fetch` + `WalletClient('auto')`
