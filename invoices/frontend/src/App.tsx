@@ -29,6 +29,7 @@ function Shell() {
   const [receipt, setReceipt] = useState<PaymentPackage | null>(null)
   const [incoming, setIncoming] = useState('')
   const [copied, setCopied] = useState(false)
+  const [mineOnly, setMineOnly] = useState(false)
 
   const refresh = async (): Promise<void> => {
     const [openRows, paidRows] = await Promise.all([
@@ -101,6 +102,16 @@ function Shell() {
       setBusy(false)
     }
   }
+
+  const visibleOpen = useMemo(() => {
+    if (!mineOnly || !identityKey) return open
+    return open.filter((invoice) => invoice.payeeIdentity === identityKey)
+  }, [open, mineOnly, identityKey])
+
+  const visiblePaid = useMemo(() => {
+    if (!mineOnly || !identityKey) return paid
+    return paid.filter((invoice) => invoice.payeeIdentity === identityKey)
+  }, [paid, mineOnly, identityKey])
 
   const overlayLabel = useMemo(() => {
     if (online === null) return 'checking'
@@ -188,8 +199,20 @@ function Shell() {
       <section className="panel">
         <h2>Open</h2>
         <p>Public overlay lookup of unpaid invoices. Pay with BSV Desktop / BSV Browser (BRC-29).</p>
-        {open.length === 0 && <p className="hint">No open invoices.</p>}
-        {open.map((invoice) => (
+        <div className="row" style={{ marginBottom: 8 }}>
+          <button className={`btn ${!mineOnly ? 'primary' : ''}`} onClick={() => setMineOnly(false)}>
+            All
+          </button>
+          <button
+            className={`btn ${mineOnly ? 'primary' : ''}`}
+            disabled={!identityKey}
+            onClick={() => setMineOnly(true)}
+          >
+            Issued by me
+          </button>
+        </div>
+        {visibleOpen.length === 0 && <p className="hint">No open invoices.</p>}
+        {visibleOpen.map((invoice) => (
           <article className="payable" key={invoice.invoiceId}>
             <div className="payable-head">
               <span className={`stamp ${isOverdue(invoice) ? 'overdue' : 'open'}`}>
@@ -200,7 +223,13 @@ function Shell() {
             <p className="memo">{invoice.memo || 'No memo'}</p>
             <dl>
               <div><dt>Invoice</dt><dd><code>{invoice.invoiceId}</code></dd></div>
-              <div><dt>Payee</dt><dd><code>{shortKey(invoice.payeeIdentity, 10)}</code></dd></div>
+              <div>
+                <dt>Payee</dt>
+                <dd>
+                  <code>{shortKey(invoice.payeeIdentity, 10)}</code>
+                  {identityKey === invoice.payeeIdentity ? ' · you' : ''}
+                </dd>
+              </div>
               <div><dt>Due</dt><dd>{invoice.dueDate}</dd></div>
             </dl>
             <button
@@ -217,8 +246,8 @@ function Shell() {
       <section className="panel">
         <h2>Paid</h2>
         <p>Settled invoices. Each row is the receipt: invoice id plus payment txid.</p>
-        {paid.length === 0 && <p className="hint">No paid invoices yet.</p>}
-        {paid.map((invoice) => (
+        {visiblePaid.length === 0 && <p className="hint">No paid invoices yet.</p>}
+        {visiblePaid.map((invoice) => (
           <article className="payable paid" key={invoice.invoiceId}>
             <div className="payable-head">
               <span className="stamp paid">Paid</span>

@@ -17,7 +17,9 @@ import {
   encodeReceiptFields,
   isIsoDate,
   newInvoiceId,
-  parseInvoiceFields
+  findPaymentOutputIndex,
+  parseInvoiceFields,
+  parseReceiptFields
 } from '../../../protocol/invoice'
 import { originator } from './config'
 import { lookupInvoices, submitInvoiceTx, type OverlayInvoice } from './overlay'
@@ -188,11 +190,12 @@ export async function payInvoice(
     throw new Error('Overlay rejected the payment (already paid or malformed)')
   }
 
+  const paidTx = Transaction.fromBEEF(response.tx as number[])
   return {
     tx: response.tx as number[],
     txid: response.txid,
     invoiceId: open.invoiceId,
-    paymentOutputIndex: 0,
+    paymentOutputIndex: paymentOutputIndex(paidTx, open.amountSats),
     derivationPrefix,
     derivationSuffix,
     senderIdentityKey: payerIdentity,
@@ -230,6 +233,23 @@ export function parsePaymentPackage(raw: string): PaymentPackage {
 
 function p2pkhFromPublicKey(publicKeyHex: string): string {
   return new P2PKH().lock(PublicKey.fromString(publicKeyHex).toHash()).toHex()
+}
+
+function paymentOutputIndex(tx: Transaction, amountSats: number): number {
+  const satoshis = tx.outputs.map((output) => Number(output.satoshis ?? 0))
+  let receiptIndex = -1
+  for (const [index, output] of tx.outputs.entries()) {
+    try {
+      if (parseReceiptFields(PushDrop.decode(output.lockingScript).fields)) {
+        receiptIndex = index
+        break
+      }
+    } catch {
+      // BRC-29 payment and change are not receipts.
+    }
+  }
+  const found = findPaymentOutputIndex(satoshis, receiptIndex, amountSats, 0)
+  return found >= 0 ? found : 0
 }
 
 function invoiceOutputIndex(tx: Transaction): number {

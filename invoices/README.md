@@ -2,7 +2,9 @@
 
 An invoice is a first-class on-chain object on **BSV**. The payee creates a payable (identity, amount in sats, memo, due date) as a PushDrop UTXO in a BRC-100 basket. The payer settles it with a BRC-29 payment. Overlay lookup is the public audit trail: open or paid, and a second pay is rejected.
 
-This is not Request Finance on 18 chains. No virtual IBANs, no payroll, no Xero. One issuer, a few invoices, sats, a receipt.
+This is not Request Finance on 18 chains. No virtual IBANs, no payroll, no cards, no Xero. One issuer, a few invoices, sats, a receipt.
+
+This folder is exclusive. A sibling receivable desk may land in a separate PR; this tree does not add or modify that product. Basket `invoices`, topic `tm_invoices`, lookup `ls_invoices` are defined here.
 
 ## Stack
 

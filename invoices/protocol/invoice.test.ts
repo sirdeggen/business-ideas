@@ -79,6 +79,14 @@ describe('invoice protocol', () => {
     )
     expect(pay).toEqual({ action: 'pay', admitOutputIndexes: [1] })
 
+    const payWithChange = classifyInvoiceTransaction(
+      [],
+      [],
+      [{ index: 1, receipt: demoReceipt() }],
+      [1500, 1, 88_000]
+    )
+    expect(payWithChange).toEqual({ action: 'pay', admitOutputIndexes: [1] })
+
     const voided = classifyInvoiceTransaction(
       [{ index: 0, invoice: demoInvoice() }],
       [],
@@ -86,6 +94,20 @@ describe('invoice protocol', () => {
       [500]
     )
     expect(voided).toEqual({ action: 'void', admitOutputIndexes: [] })
+  })
+
+  it('admits a pay when change sits in front of the billed output', () => {
+    const receipt = {
+      ...demoReceipt(),
+      remittance: { ...demoReceipt().remittance, paymentOutputIndex: 0 }
+    }
+    const result = classifyInvoiceTransaction(
+      [],
+      [],
+      [{ index: 2, receipt }],
+      [88_000, 1500, 1]
+    )
+    expect(result).toEqual({ action: 'pay', admitOutputIndexes: [2] })
   })
 
   it('rejects a pay whose billed output is the wrong amount', () => {

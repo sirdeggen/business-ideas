@@ -218,9 +218,31 @@ export function bindReceiptToInvoice(
 }
 
 /**
+ * Prefer the receipt's claimed BRC-29 output index when it carries the billed
+ * satoshis; otherwise find any other output with that exact amount (change is
+ * usually a different value). Returns -1 when no payment output exists.
+ */
+export function findPaymentOutputIndex(
+  outputSatoshis: number[],
+  receiptIndex: number,
+  amountSats: number,
+  claimedIndex: number
+): number {
+  if (
+    claimedIndex !== receiptIndex &&
+    claimedIndex >= 0 &&
+    claimedIndex < outputSatoshis.length &&
+    outputSatoshis[claimedIndex] === amountSats
+  ) {
+    return claimedIndex
+  }
+  return outputSatoshis.findIndex((sats, index) => index !== receiptIndex && sats === amountSats)
+}
+
+/**
  * Stateless overlay admission rules:
  * - create: no prior invoices, N new unique invoice ids
- * - pay: one or more receipts, each pointing at a same-tx output whose satoshis
+ * - pay: one or more receipts, each paired with a same-tx output whose satoshis
  *   equal the billed amount (the BRC-29 payment). Invoice UTXOs are not spent.
  * - void: payee spends an invoice UTXO with no replacement and no receipt
  * Lookup (not this function) is what rejects a second pay for the same id.
@@ -244,11 +266,13 @@ export function classifyInvoiceTransaction(
 
   if (inputInvoices.length === 0 && outputInvoices.length === 0 && outputReceipts.length >= 1) {
     for (const { index, receipt } of outputReceipts) {
-      const payIndex = receipt.remittance.paymentOutputIndex
-      if (payIndex === index) {
-        return { action: 'invalid', admitOutputIndexes: [], reason: 'payment output cannot be the receipt' }
-      }
-      if (payIndex >= outputSatoshis.length || outputSatoshis[payIndex] !== receipt.amountSats) {
+      const payIndex = findPaymentOutputIndex(
+        outputSatoshis,
+        index,
+        receipt.amountSats,
+        receipt.remittance.paymentOutputIndex
+      )
+      if (payIndex < 0) {
         return {
           action: 'invalid',
           admitOutputIndexes: [],
