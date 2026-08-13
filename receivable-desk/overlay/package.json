@@ -1,0 +1,29 @@
+{
+  "name": "receivable-desk-overlay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Overlay node that admits BSV receivable-desk invoice UTXOs.",
+  "type": "commonjs",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/overlay/src/index.js",
+    "seed": "tsx src/seed.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bsv/overlay": "^2.3.0",
+    "@bsv/overlay-express": "^2.6.0",
+    "@bsv/sdk": "^2.4.0",
+    "dotenv": "^16.6.1",
+    "mongodb": "^7.5.0",
+    "mysql2": "^3.14.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.3",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "outDir": "dist",
+    "rootDir": "..",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "declaration": false,
+    "sourceMap": true,
+    "baseUrl": ".",
+    "paths": {
+      "@bsv/sdk": ["node_modules/@bsv/sdk"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "../protocol/receivable.ts",
+    "../protocol/pushdrop.ts",
+    "../protocol/samples.ts"
+  ],
+  "exclude": ["src/**/*.test.ts"]
+}
