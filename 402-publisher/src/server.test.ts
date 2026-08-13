@@ -39,7 +39,7 @@ describe('402 Press routes', () => {
     assert.match(html, /why-402-not-subscriptions/)
   })
 
-  it('returns human 402 headers for a browser', async () => {
+  it('returns human 402 headers plus an HTML paywall for a browser', async () => {
     const res = await fetch(`${base}/articles/why-402-not-subscriptions`, {
       headers: {
         'user-agent':
@@ -50,14 +50,27 @@ describe('402 Press routes', () => {
     assert.equal(res.status, 402)
     assert.equal(res.headers.get('x-bsv-sats'), '100')
     assert.match(res.headers.get('x-bsv-server') ?? '', /^(02|03)[0-9a-f]{64}$/)
+    assert.match(res.headers.get('content-type') ?? '', /text\/html/)
+    const html = await res.text()
+    assert.ok(html.length > 0)
+    assert.match(html, /Payment required/)
+    assert.match(html, /100 sats/)
+    assert.match(html, /BSV Browser/)
+    assert.match(html, /402-extension/)
+    assert.match(html, /BSV Desktop/)
   })
 
-  it('returns a distinct crawler 402 price for curl and JSON Accept', async () => {
+  it('returns a distinct crawler 402 price with a JSON body', async () => {
     const curl = await fetch(`${base}/articles/pay-per-crawl-vs-robots-txt`, {
       headers: { 'user-agent': 'curl/8.7.1' }
     })
     assert.equal(curl.status, 402)
     assert.equal(curl.headers.get('x-bsv-sats'), '500')
+    assert.match(curl.headers.get('content-type') ?? '', /application\/json/)
+    const curlBody = JSON.parse(await curl.text()) as { status: number; satoshis: number; protocol: string }
+    assert.equal(curlBody.status, 402)
+    assert.equal(curlBody.satoshis, 500)
+    assert.equal(curlBody.protocol, 'BRC-121')
 
     const json = await fetch(`${base}/articles/how-a-human-or-agent-pays`, {
       headers: {
@@ -68,6 +81,9 @@ describe('402 Press routes', () => {
     assert.equal(json.status, 402)
     assert.equal(json.headers.get('x-bsv-sats'), '500')
     assert.equal(json.headers.get('x-bsv-server'), curl.headers.get('x-bsv-server'))
+    assert.match(json.headers.get('content-type') ?? '', /application\/json/)
+    const jsonBody = JSON.parse(await json.text()) as { satoshis: number }
+    assert.equal(jsonBody.satoshis, 500)
   })
 
   it('does not charge unknown slugs', async () => {

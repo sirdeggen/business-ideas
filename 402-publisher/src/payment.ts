@@ -1,6 +1,8 @@
 import type { NextFunction, Request, Response } from 'express'
-import { send402, validatePayment } from '@bsv/402-pay/server'
-import { priceForRequest } from './pricing.js'
+import { send402, validatePayment, type PaymentResponse } from '@bsv/402-pay/server'
+import { getArticle } from './articles.js'
+import { paywallPage } from './html.js'
+import { prefersHtmlPaywall, priceForRequest } from './pricing.js'
 import { identityKeyFromEnv, makeWallet } from './wallet.js'
 
 declare global {
@@ -14,6 +16,63 @@ declare global {
       }
     }
   }
+}
+
+/**
+ * @bsv/402-pay 0.2.4 `send402` always `end()`s with an empty body. Chrome treats
+ * that as net::ERR_HTTP_RESPONSE_CODE_FAILURE and never paints a page or fires
+ * the 402-extension UI. Wrap the PaymentResponse so send402 still sets status
+ * 402 + x-bsv-sats / x-bsv-server, then attach a body.
+ */
+export function send402WithBody(
+  res: Response,
+  identityKey: string,
+  sats: number,
+  body?: { contentType: string; payload: string }
+): void {
+  const wrapped: PaymentResponse = {
+    set(headers) {
+      res.set(headers)
+      return wrapped
+    },
+    status(code) {
+      res.status(code)
+      return wrapped
+    },
+    end() {
+      if (!body) {
+        res.end()
+        return
+      }
+      res.type(body.contentType)
+      res.send(body.payload)
+    }
+  }
+  send402(wrapped, identityKey, sats)
+}
+
+function articleTitleFor(req: Request): string | undefined {
+  const slug = req.path.replace(/^\/articles\//, '')
+  return getArticle(slug)?.title
+}
+
+function challenge402(req: Request, res: Response, identityKey: string, sats: number): void {
+  if (prefersHtmlPaywall(req.headers)) {
+    send402WithBody(res, identityKey, sats, {
+      contentType: 'html',
+      payload: paywallPage(sats, articleTitleFor(req))
+    })
+    return
+  }
+  send402WithBody(res, identityKey, sats, {
+    contentType: 'json',
+    payload: JSON.stringify({
+      status: 402,
+      satoshis: sats,
+      server: identityKey,
+      protocol: 'BRC-121'
+    })
+  })
 }
 
 /**
@@ -50,7 +109,7 @@ export function createPayPerCrawlMiddleware() {
 
     const hasPayment = req.headers['x-bsv-beef']
     if (!hasPayment) {
-      send402(res, identityKey, price)
+      challenge402(req, res, identityKey, price)
       return
     }
 
@@ -58,12 +117,12 @@ export function createPayPerCrawlMiddleware() {
       const { wallet } = await makeWallet()
       const result = await validatePayment(req, wallet, price)
       if (!result) {
-        send402(res, identityKey, price)
+        challenge402(req, res, identityKey, price)
         return
       }
       if (!result.accepted) {
         console.error(`Payment rejected: ${req.path} | ${result.reason}`)
-        send402(res, identityKey, price)
+        challenge402(req, res, identityKey, price)
         return
       }
       req.payment = result
@@ -71,7 +130,7 @@ export function createPayPerCrawlMiddleware() {
       next()
     } catch (error) {
       console.error('Payment validation failed:', error)
-      send402(res, identityKey, price)
+      challenge402(req, res, identityKey, price)
     }
   }
 }

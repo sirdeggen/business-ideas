@@ -11,6 +11,8 @@ A Ghost-class page that charges **readers and crawlers per fetch**. One site, pa
 
 The crawler price is an invoice, not a block. Both audiences get `x-bsv-sats` and `x-bsv-server`.
 
+Browser 402s include a small **HTML paywall** (Chrome fails empty 402s with `net::ERR_HTTP_RESPONSE_CODE_FAILURE`). Crawler / JSON 402s include a JSON body. `@bsv/402-pay` `send402()` always ends empty — we wrap that response so the BRC-121 headers stay, then attach the body.
+
 Payment rail is BSV only. This repo does not implement or document any other chain or card processor.
 
 ## Run
@@ -62,7 +64,7 @@ curl -i \
   http://localhost:3000/articles/why-402-not-subscriptions
 ```
 
-Expect `HTTP/1.1 402`, `x-bsv-sats: 100`, and `x-bsv-server: <compressed pubkey>`.
+Expect `HTTP/1.1 402`, `x-bsv-sats: 100`, `x-bsv-server: <compressed pubkey>`, and an HTML paywall that names BSV Browser / 402-extension / BSV Desktop.
 
 ## Pay as a fetch / agent
 
@@ -72,7 +74,7 @@ Crawler challenge (curl’s UA is priced as a crawl):
 curl -i http://localhost:3000/articles/pay-per-crawl-vs-robots-txt
 ```
 
-Expect `402` and `x-bsv-sats: 500` (not 100), plus `x-bsv-server`.
+Expect `402`, `x-bsv-sats: 500` (not 100), `x-bsv-server`, and a JSON body `{ status, satoshis, server, protocol }`.
 
 JSON Accept is also the crawler price, even with a custom UA:
 

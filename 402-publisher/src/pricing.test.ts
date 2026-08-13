@@ -4,6 +4,7 @@ import {
   DEFAULT_CRAWLER_SATS,
   DEFAULT_HUMAN_SATS,
   isCrawler,
+  prefersHtmlPaywall,
   priceForRequest
 } from './pricing.js'
 
@@ -83,5 +84,36 @@ describe('priceForRequest', () => {
       100
     )
     assert.equal(priceForRequest({ 'user-agent': 'curl/8.0' }, env), 500)
+  })
+})
+
+describe('prefersHtmlPaywall', () => {
+  it('gives browsers an HTML body', () => {
+    assert.equal(
+      prefersHtmlPaywall({
+        'user-agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0.0.0',
+        accept: 'text/html,application/xhtml+xml'
+      }),
+      true
+    )
+  })
+
+  it('keeps crawlers and JSON Accept on a machine-readable body', () => {
+    assert.equal(prefersHtmlPaywall({ 'user-agent': 'curl/8.7.1' }), false)
+    assert.equal(
+      prefersHtmlPaywall({
+        'user-agent': 'research-agent/0.1',
+        accept: 'application/json'
+      }),
+      false
+    )
+    assert.equal(
+      prefersHtmlPaywall({
+        'user-agent': 'Mozilla/5.0 (compatible; Googlebot/2.1)',
+        accept: 'text/html'
+      }),
+      false
+    )
   })
 })

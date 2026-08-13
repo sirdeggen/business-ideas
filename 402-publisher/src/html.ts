@@ -180,3 +180,17 @@ export function articlePage(article: Article): string {
 export function notFoundPage(): string {
   return pageShell('Not found', `<p>That article is not on this press.</p><p><a href="/">Back to the index.</a></p>`)
 }
+
+/** HTML body for a 402 so Chrome will render the challenge instead of failing the navigation. */
+export function paywallPage(sats: number, articleTitle?: string): string {
+  const heading = articleTitle ?? 'This article'
+  const body = `
+<article>
+  <h1>Payment required</h1>
+  <p class="lead">${escapeHtml(heading)} is <strong>${sats} sats</strong> on BSV.</p>
+  <p>This response is HTTP 402. Pay with <strong>BSV Browser</strong> (native 402), the <strong>402-extension</strong>, or <strong>BSV Desktop</strong>. There is no account. The paid fetch is the login.</p>
+  <p class="meta">${sats} sats · BRC-121 · headers x-bsv-sats and x-bsv-server</p>
+  <p><a href="/">Back to the index</a> (free)</p>
+</article>`
+  return pageShell(`402 · ${heading}`, body)
+}

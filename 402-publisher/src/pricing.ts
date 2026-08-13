@@ -88,3 +88,15 @@ export function priceForRequest(
 ): number {
   return isCrawler(headers) ? crawlerSats(env) : humanSats(env)
 }
+
+/**
+ * Chrome navigation of an empty 402 is net::ERR_HTTP_RESPONSE_CODE_FAILURE.
+ * Browsers that ask for HTML get a paywall body. Crawlers / JSON Accept stay
+ * machine-readable.
+ */
+export function prefersHtmlPaywall(headers: HeaderBag): boolean {
+  if (isCrawler(headers)) return false
+  const accept = headerValue(headers, 'accept').toLowerCase()
+  if (accept.includes('application/json') && !accept.includes('text/html')) return false
+  return accept.includes('text/html') || accept === '' || accept === '*/*'
+}
