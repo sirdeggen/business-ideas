@@ -4,7 +4,7 @@ First versions of BSV product ideas, shipped fast.
 
 Switcher on GitHub Pages: https://sirdeggen.github.io/business-ideas/
 
-Three v0s share this repo. The Pages site is a static catalog: tickets is live there; the 402 apps are servers (run locally / Docker, later on a cluster).
+Four v0s share this repo. The Pages site is a static catalog: tickets and the receivable desk are live there; the 402 apps are servers (run locally / Docker, later on a cluster).
 
 ## Event tickets (live)
 
@@ -12,6 +12,13 @@ Tickets as BSV UTXOs: mint into a BRC-100 basket, hold/show a QR, transfer by sp
 
 - Demo: https://sirdeggen.github.io/business-ideas/tickets/
 - How to run overlay + frontend: [event-tickets/README.md](./event-tickets/README.md)
+
+## Receivable desk (live)
+
+Public invoice registry (who is owed, by whom, amount, due, status). Advance 70% is a stub. BSV only. Not a bank.
+
+- Demo: https://sirdeggen.github.io/business-ideas/receivables/
+- How to run overlay + frontend: [receivable-desk/README.md](./receivable-desk/README.md)
 
 ## 402 publisher (coming / run via Docker)
 
