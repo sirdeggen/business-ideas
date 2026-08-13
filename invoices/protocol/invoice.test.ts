@@ -25,7 +25,10 @@ function demoInvoice(invoiceId = 'ab'.repeat(16)): InvoicePayload {
     amountSats: 1500,
     memo: 'Choir robes',
     dueDate: '2026-09-01',
-    createdAt: '2026-08-13T18:00:00.000Z'
+    createdAt: '2026-08-13T18:00:00.000Z',
+    orgName: 'Riverside Community Church',
+    billedTo: 'Jordan Lee',
+    amountUsd: '50.00'
   }
 }
 
@@ -49,6 +52,16 @@ describe('invoice protocol', () => {
   it('round-trips PushDrop invoice fields', () => {
     const fields = encodeInvoiceFields(demoInvoice())
     expect(parseInvoiceFields(fields)).toEqual(demoInvoice())
+  })
+
+  it('reads invoices that predate the display field', () => {
+    const fields = encodeInvoiceFields(demoInvoice()).slice(0, 7)
+    expect(parseInvoiceFields(fields)).toEqual({
+      ...demoInvoice(),
+      orgName: '',
+      billedTo: '',
+      amountUsd: ''
+    })
   })
 
   it('round-trips PushDrop receipt fields', () => {
