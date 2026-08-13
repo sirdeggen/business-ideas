@@ -1,0 +1,39 @@
+{
+  "name": "402-publisher",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ghost-class page that charges readers and crawlers per fetch via HTTP 402 / BRC-121",
+  "type": "module",
+  "main": "dist/server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "tsx --test src/pricing.test.ts src/server.test.ts"
+  },
+  "keywords": [
+    "bsv",
+    "402",
+    "brc-121",
+    "pay-per-crawl"
+  ],
+  "license": "ISC",
+  "dependencies": {
+    "@bsv/402-pay": "0.2.4",
+    "@bsv/sdk": "^2.1.6",
+    "@bsv/wallet-toolbox": "^2.1.28",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.13.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}
