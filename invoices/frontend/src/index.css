@@ -283,6 +283,10 @@ dd {
   margin: 10px 0 0;
 }
 
+.helper.chrome-hint {
+  max-width: 42ch;
+}
+
 .install {
   margin-top: 16px;
   padding: 14px;

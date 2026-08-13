@@ -41,13 +41,32 @@ function stampClass(status: UiStatus): string {
   return 'stamp unpaid'
 }
 
-function InstallPrompt({ verb }: { verb: 'send' | 'pay' }) {
+const CHROME_HINT =
+  'Chrome may ask to allow this site to talk to apps on this device. Allow, then Retry, with Desktop unlocked.'
+
+function ChromeHint() {
+  return <p className="helper chrome-hint">{CHROME_HINT}</p>
+}
+
+function InstallPrompt({
+  verb,
+  onRetry
+}: {
+  verb: 'send' | 'pay'
+  onRetry: () => void
+}) {
   return (
     <div className="install">
-      <p>To {verb} this, install BSV Desktop.</p>
-      <a className="btn primary" href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">
-        Install BSV Desktop
-      </a>
+      <p>
+        To {verb} this, Chrome must be allowed to talk to apps on this device, and
+        Desktop must be unlocked. Allow, then Retry.
+      </p>
+      <div className="row">
+        <button className="btn primary" onClick={onRetry}>Retry</button>
+        <a className="btn" href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">
+          Install BSV Desktop
+        </a>
+      </div>
     </div>
   )
 }
@@ -311,9 +330,9 @@ function Create({
           </button>
         </div>
         <p className="helper">We’ll ask you to approve this in a moment.</p>
-        {showInstall && <InstallPrompt verb="send" />}
-        {error && !showInstall && <p className="status err">{error}</p>}
-        {error && showInstall && <p className="status err">{error}</p>}
+        <ChromeHint />
+        {showInstall && <InstallPrompt verb="send" onRetry={() => void send()} />}
+        {error && <p className="status err">{error}</p>}
       </section>
 
       <Advanced />
@@ -442,7 +461,8 @@ function InvoicePage({ invoiceId, onHome }: { invoiceId: string, onHome: () => v
               {busy || connecting || status === 'processing' ? 'Approve in your wallet…' : 'Pay'}
             </button>
           </div>
-          {showInstall && <InstallPrompt verb="pay" />}
+          {(busy || connecting || showInstall) && <ChromeHint />}
+          {showInstall && <InstallPrompt verb="pay" onRetry={() => void pay()} />}
           {error && <p className="status err">{error}</p>}
         </section>
       )}
