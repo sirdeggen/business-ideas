@@ -1,40 +1,36 @@
 import type { ReactNode } from 'react'
-import { ADVANCE_PERCENT, advanceSats, type ReceivablePayload } from '../../../protocol/receivable'
+import { agingLabel, daysLate, type ReceivablePayload } from '../../../protocol/receivable'
 import { samplePartyName } from '../../../protocol/samples'
 import { formatSats, shortKey } from '../lib/config'
-import type { OverlayReceivable } from '../lib/overlay'
 
-export function partyLabel(identityKey: string): string {
-  const name = samplePartyName(identityKey)
-  if (name) return `${name} (${shortKey(identityKey, 6)})`
-  return shortKey(identityKey, 8)
+export function partyName(identityKey: string): string {
+  return samplePartyName(identityKey) ?? shortKey(identityKey, 8)
 }
 
 export function InvoiceCard({
   item,
-  outpoint,
   children
 }: {
   item: ReceivablePayload
   outpoint?: string
   children?: ReactNode
 }) {
-  const overlay = item as OverlayReceivable
-  const point = outpoint ?? (overlay.txid ? `${overlay.txid}.${overlay.outputIndex}` : '')
+  const unpaid = item.status !== 'paid'
+  const aging = unpaid ? agingLabel(daysLate(item.dueDate)) : 'paid'
   return (
     <article className={`invoice status-${item.status}`}>
       <div className="invoice-head">
         <h3>{item.invoiceId}</h3>
-        <span className={`pill ${item.status}`}>{item.status}</span>
+        <span className={`pill ${unpaid ? 'open' : 'paid'}`}>{unpaid ? aging : 'paid'}</span>
       </div>
       <dl className="meta">
         <div>
-          <dt>Creditor</dt>
-          <dd>{partyLabel(item.creditor)}</dd>
+          <dt>Owed to</dt>
+          <dd>{partyName(item.creditor)}</dd>
         </div>
         <div>
-          <dt>Debtor</dt>
-          <dd>{partyLabel(item.debtor)}</dd>
+          <dt>Who owes</dt>
+          <dd>{partyName(item.debtor)}</dd>
         </div>
         <div>
           <dt>Amount</dt>
@@ -46,13 +42,6 @@ export function InvoiceCard({
         </div>
       </dl>
       {item.memo && <p className="memo">{item.memo}</p>}
-      {item.advanceBps > 0 && (
-        <p className="intent">
-          Advance-intent {ADVANCE_PERCENT}% = {formatSats(advanceSats(item.amountSats, item.advanceBps))}
-          {' '}(recorded, no credit moved)
-        </p>
-      )}
-      {point && <p className="outpoint">UTXO {shortKey(point, 12)}</p>}
       {children}
     </article>
   )

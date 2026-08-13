@@ -3,49 +3,66 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BSV business ideas</title>
+    <title>Business ideas</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="app">
       <header class="masthead">
         <div>
-          <p class="eyebrow">BSV · v0</p>
-          <h1>BSV business ideas</h1>
+          <p class="eyebrow">v0</p>
+          <h1>Business ideas</h1>
           <p class="lede">
-            First versions, shipped fast. Tickets and the receivable desk are
-            static demos here; invoices, treasury, and the HTTP 402 servers run
-            from their repo folders (local Docker, later on a cluster). The
-            receivable overlay is localhost — settle does not work from GitHub
-            Pages.
+            Invoices first: send a payable, get a receipt — local Docker, not a
+            public URL yet. The receivable desk is a collections list (this
+            desk’s own registry), not a second product. Tickets sit after
+            invoices. Desk settle is localhost Docker, not GitHub Pages.
           </p>
         </div>
       </header>
 
       <section class="cards" aria-label="Demos">
         <article class="card">
-          <p class="eyebrow live">Live</p>
-          <h2>Event tickets</h2>
+          <p class="eyebrow soon">Server</p>
+          <h2>Invoices</h2>
           <p>
-            Mint a tranche, hold a QR, transfer by spend, redeem at the door.
-            Tickets are BSV UTXOs in a BRC-100 basket.
+            Send a payable. Get a receipt. Local Docker, not a Pages demo — there
+            is no working public URL yet.
           </p>
-          <p class="path">Pages path: <code>/tickets/</code></p>
-          <a class="btn primary" href="./tickets/">Open demo</a>
+          <p class="path">
+            Cluster path later: <code>/invoices</code><br />
+            <code>cd invoices &amp;&amp; docker compose up --build</code> —
+            overlay <strong>:8081</strong>, UI <strong>:5174</strong>
+          </p>
+          <div class="row">
+            <a class="btn" href="https://github.com/sirdeggen/business-ideas/tree/main/invoices">Repo folder</a>
+            <a class="btn" href="https://github.com/sirdeggen/business-ideas/blob/main/invoices/README.md">How to run</a>
+          </div>
+        </article>
+
+        <article class="card">
+          <p class="eyebrow soon">Feature of invoices</p>
+          <h2>Receivable desk</h2>
+          <p>
+            Who do we chase today? A collections list on this desk’s registry —
+            on time / a bit late / call them / board should know. Not a bank.
+            Overlay and settle are local Docker, not live from Pages:
+            <code>cd receivable-desk &amp;&amp; docker compose up --build</code>
+            (overlay <strong>:8082</strong>, UI <strong>:5175</strong>).
+          </p>
+          <p class="path">Pages UI (no settle): <code>/receivables/</code></p>
+          <a class="btn" href="./receivables/">Open list</a>
         </article>
 
         <article class="card">
           <p class="eyebrow live">Live</p>
-          <h2>Receivable desk</h2>
+          <h2>Event tickets</h2>
           <p>
-            Public invoice registry (who is owed, by whom, amount, due, status).
-            Advance 70% is a stub. BSV only. Not a bank. Overlay is localhost —
-            settle does not work from GitHub Pages until you run
-            <code>cd receivable-desk &amp;&amp; docker compose up --build</code>
-            (overlay <strong>:8082</strong>, UI <strong>:5175</strong>).
+            Tickets you can send, show on a phone, and spend at the door so they
+            can’t be used twice.
           </p>
-          <p class="path">Pages path: <code>/receivables/</code></p>
-          <a class="btn primary" href="./receivables/">Open demo</a>
+          <p class="path">Pages path: <code>/tickets/</code></p>
+          <a class="btn" href="./tickets/">Open demo</a>
         </article>
 
         <article class="card">
@@ -55,7 +72,7 @@
             Pay-per-crawl Ghost-class page. Readers and crawlers get an HTTP 402
             invoice in sats. Not static — Express + Docker.
           </p>
-          <p class="path">Live cluster path will be <code>/402-publisher</code></p>
+          <p class="path">Cluster path later: <code>/402-publisher</code></p>
           <div class="row">
             <a class="btn" href="https://github.com/sirdeggen/business-ideas/tree/main/402-publisher">Repo folder</a>
             <a class="btn" href="https://github.com/sirdeggen/business-ideas/blob/main/402-publisher/README.md">How to run</a>
@@ -69,7 +86,7 @@
             Paid MCP tools in sats. Payment is the credential — no signup, no API
             key. Not static — Express / MCP + Docker.
           </p>
-          <p class="path">Live cluster path will be <code>/402-mcp</code></p>
+          <p class="path">Cluster path later: <code>/402-mcp</code></p>
           <div class="row">
             <a class="btn" href="https://github.com/sirdeggen/business-ideas/tree/main/402-mcp">Repo folder</a>
             <a class="btn" href="https://github.com/sirdeggen/business-ideas/blob/main/402-mcp/README.md">How to run</a>
@@ -77,30 +94,11 @@
         </article>
 
         <article class="card">
-          <p class="eyebrow soon">Server</p>
-          <h2>Invoices</h2>
-          <p>
-            Payable invoices on BSV. Payee creates a PushDrop UTXO; payer settles
-            with BRC-29. Overlay is the audit trail. Local Docker, not a Pages
-            demo.
-          </p>
-          <p class="path">
-            Live cluster path will be <code>/invoices</code><br />
-            <code>cd invoices &amp;&amp; docker compose up --build</code> —
-            overlay <strong>:8081</strong>, UI <strong>:5174</strong>
-          </p>
-          <div class="row">
-            <a class="btn" href="https://github.com/sirdeggen/business-ideas/tree/main/invoices">Repo folder</a>
-            <a class="btn" href="https://github.com/sirdeggen/business-ideas/blob/main/invoices/README.md">How to run</a>
-          </div>
-        </article>
-
-        <article class="card">
           <p class="eyebrow soon">Server / PR</p>
           <h2>Treasury</h2>
           <p>
-            Grassroots BSV treasury, 2-of-3 (BRC-47 P2MS). Create, invite signers,
-            fund, propose, approve, export CSV. Not an EVM Safe, not a custodian.
+            Shared treasury, two of three must agree. Create, invite signers,
+            fund, propose, approve, export CSV. Not a custodian.
           </p>
           <p class="path">
             Not on main yet — <a href="https://github.com/sirdeggen/business-ideas/pull/7">PR #7</a><br />
@@ -118,7 +116,6 @@
       <footer>
         Source:
         <a href="https://github.com/sirdeggen/business-ideas">sirdeggen/business-ideas</a>.
-        BSV only.
       </footer>
     </main>
   </body>

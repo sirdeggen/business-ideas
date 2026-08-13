@@ -5,15 +5,16 @@ import { Partner } from './components/Partner'
 import { Register } from './components/Register'
 import { Registry } from './components/Registry'
 import { WalletProvider, useWallet } from './context/WalletContext'
-import { shortKey } from './lib/config'
+import { LOCAL_DESK_HINT, isGitHubPages, shortKey } from './lib/config'
 
-type Tab = 'register' | 'desk' | 'registry' | 'partner'
+type Tab = 'desk' | 'owe' | 'register' | 'partner'
 
 function Shell() {
   const { identityKey, connecting, error, connect } = useWallet()
   const { url, setUrl, online } = useOverlay()
-  const [tab, setTab] = useState<Tab>('registry')
+  const [tab, setTab] = useState<Tab>('desk')
   const [copied, setCopied] = useState(false)
+  const pages = isGitHubPages()
 
   const copyIdentity = async (): Promise<void> => {
     if (!identityKey) return
@@ -26,21 +27,21 @@ function Shell() {
     <div className="app">
       <header className="masthead">
         <div>
-          <p className="eyebrow">BRC-100 · BSV registry</p>
-          <h1>Receivable desk</h1>
+          <p className="eyebrow">Invoices · collections</p>
+          <h1>Who do we chase today?</h1>
           <p className="lede">
-            Who is owed, by whom, amount, due, status. A cheap public invoice
-            registry — Figure DART analog, invoices not houses. Not a lender.
+            The paper that proves an invoice — same treasurer, after a few real
+            invoices exist. Not a second product. Not a bank.
           </p>
         </div>
         <div className="identity">
-          {connecting && <div>Connecting BSV wallet…</div>}
+          {connecting && <div>Checking wallet…</div>}
           {identityKey && (
             <>
-              Identity key
-              <code>{shortKey(identityKey, 12)}</code>
+              Signed in
+              <code>{shortKey(identityKey, 8)}</code>
               <button className="btn" style={{ marginTop: 8 }} onClick={() => void copyIdentity()}>
-                {copied ? 'Copied' : 'Copy identity key'}
+                {copied ? 'Copied' : 'Copy id'}
               </button>
             </>
           )}
@@ -51,22 +52,28 @@ function Shell() {
             </>
           )}
           {!connecting && !identityKey && !error && (
-            <button className="btn primary" onClick={() => void connect()}>Connect BSV wallet</button>
+            <button className="btn" onClick={() => void connect()}>Connect wallet</button>
           )}
         </div>
       </header>
 
       <p className="banner">
-        Overlay {online ? 'online' : online === false ? 'offline — start docker compose' : 'checking'} · {url}
-        {' · '}This app never holds keys, never lends, never custodies invoice funds.
+        {pages
+          ? LOCAL_DESK_HINT
+          : online
+            ? `Local index reachable at ${url}.`
+            : online === false
+              ? `Local index is not running. ${LOCAL_DESK_HINT}`
+              : 'Checking the local index…'}
+        {' '}Not a bank. Not a lender.
       </p>
 
       <nav className="tabs">
         {([
-          ['register', 'Register'],
-          ['desk', 'Approve / settle'],
-          ['registry', 'Registry'],
-          ['partner', 'Credit partner']
+          ['desk', 'Chase'],
+          ['owe', 'You owe us'],
+          ['register', 'Record invoice'],
+          ['partner', 'Advance']
         ] as Array<[Tab, string]>).map(([id, label]) => (
           <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
             {label}
@@ -74,20 +81,22 @@ function Shell() {
         ))}
       </nav>
 
-      {tab === 'register' && <Register />}
       {tab === 'desk' && <Desk />}
-      {tab === 'registry' && <Registry />}
+      {tab === 'owe' && <Registry />}
+      {tab === 'register' && <Register />}
       {tab === 'partner' && <Partner />}
 
-      <section className="panel">
-        <h2>Overlay URL</h2>
-        <p>GitHub Pages is static. Point this at a local overlay-express node (default localhost:8082).</p>
+      <section className="panel quiet-panel">
+        <h2>Local index URL</h2>
+        <p>
+          GitHub Pages cannot settle. Point this at the Docker index (default
+          http://localhost:8082).
+        </p>
         <input value={url} onChange={(event) => setUrl(event.target.value)} />
       </section>
 
       <footer>
-        Needs BSV Desktop or BSV Browser. The app calls createAction, getPublicKey,
-        listOutputs, signAction, and internalizeAction. Keys stay in the wallet. BSV only.
+        Wallet stays on your machine. This desk does not lend.
       </footer>
     </div>
   )

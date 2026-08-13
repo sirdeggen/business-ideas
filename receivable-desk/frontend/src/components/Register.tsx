@@ -29,7 +29,7 @@ export function Register() {
     setStatus(null)
     try {
       if (!isIdentityKey(creditor) || !isIdentityKey(debtor)) {
-        throw new Error('Creditor and debtor must be 66-hex identity keys')
+        throw new Error('Who is owed and who owes must be 66-hex account ids')
       }
       const result = await registerReceivable(wallet, url, {
         invoiceId,
@@ -39,7 +39,7 @@ export function Register() {
         dueDate,
         memo
       })
-      setStatus(`Registered ${result.invoiceId} in ${result.txid}`)
+      setStatus(`Recorded ${result.invoiceId}.`)
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -49,21 +49,20 @@ export function Register() {
 
   return (
     <section className="panel">
-      <h2>Register a receivable</h2>
+      <h2>Record an invoice</h2>
       <p>
-        Creates one PushDrop UTXO in the <code>receivables</code> basket (status
-        <code> open</code>) and submits it to <code>tm_receivables</code>. Duplicate
-        invoice ids are rejected. This is a public registry entry — not a loan.
+        Same treasurer — the paper that proves an invoice you already issued.
+        Not a loan.
       </p>
       <label htmlFor="invoiceId">Invoice id</label>
       <input id="invoiceId" value={invoiceId} onChange={(event) => setInvoiceId(event.target.value)} />
-      <label htmlFor="creditor">Creditor identity</label>
+      <label htmlFor="creditor">Who is owed</label>
       <input id="creditor" value={creditor} onChange={(event) => setCreditor(event.target.value)} />
-      <label htmlFor="debtor">Debtor identity</label>
-      <input id="debtor" value={debtor} onChange={(event) => setDebtor(event.target.value)} placeholder="02… or 03… compressed pubkey" />
+      <label htmlFor="debtor">Who owes us</label>
+      <input id="debtor" value={debtor} onChange={(event) => setDebtor(event.target.value)} placeholder="Account id" />
       <div className="row">
         <div className="grow">
-          <label htmlFor="amount">Amount (sats)</label>
+          <label htmlFor="amount">Amount</label>
           <input
             id="amount"
             type="number"
@@ -81,7 +80,7 @@ export function Register() {
       <input id="memo" value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="What is owed" />
       <div className="row" style={{ marginTop: 16 }}>
         <button className="btn primary" disabled={!wallet || busy || online === false} onClick={() => void submit()}>
-          {busy ? 'Registering…' : 'Register'}
+          {busy ? 'Recording…' : 'Record'}
         </button>
       </div>
       {status && <p className="status ok">{status}</p>}
