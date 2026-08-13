@@ -1,5 +1,6 @@
 import { WalletClient } from '@bsv/sdk'
 import { create402Fetch } from '@bsv/402-pay/client'
+import { mcpRequestBody, mcpRequestHeaders } from './mcp-request.js'
 
 const MCP_URL = process.env.MCP_URL || 'http://127.0.0.1:3000/mcp'
 const ORIGINATOR = process.env.ORIGINATOR || 'http://127.0.0.1:3000'
@@ -9,17 +10,6 @@ function argValue(flag: string, fallback: string): string {
   const index = process.argv.indexOf(flag)
   if (index >= 0 && process.argv[index + 1]) return process.argv[index + 1]
   return fallback
-}
-
-function mcpHeaders(method: string, name?: string): Record<string, string> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json, text/event-stream',
-    'Mcp-Protocol-Version': '2026-07-28',
-    'Mcp-Method': method
-  }
-  if (name) headers['Mcp-Name'] = name
-  return headers
 }
 
 async function readMcpResponse(res: Response): Promise<unknown> {
@@ -55,13 +45,8 @@ async function mcpPost(
 ): Promise<{ status: number; headers: Headers; body: unknown }> {
   const res = await fetchImpl(MCP_URL, {
     method: 'POST',
-    headers: mcpHeaders(method, name),
-    body: JSON.stringify({
-      jsonrpc: '2.0',
-      id: Date.now(),
-      method,
-      ...(params ? { params } : {})
-    })
+    headers: mcpRequestHeaders(method, name),
+    body: JSON.stringify(mcpRequestBody(method, params, Date.now()))
   })
   return { status: res.status, headers: res.headers, body: await readMcpResponse(res) }
 }
