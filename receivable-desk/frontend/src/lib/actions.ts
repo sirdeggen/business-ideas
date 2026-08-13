@@ -14,6 +14,7 @@ import {
   BRC29_PROTOCOL,
   PROTOCOL_ID,
   encodeReceivableFields,
+  findPaymentOutputIndex,
   isIdentityKey,
   parseReceivableFields,
   type ReceivablePayload,
@@ -289,6 +290,8 @@ async function brc29PaymentOutput(
   satoshis: number
   lockingScript: string
   outputDescription: string
+  derivationPrefix: string
+  derivationSuffix: string
   customInstructions: string
 }> {
   const derivationPrefix = randomKeyId()
@@ -296,13 +299,16 @@ async function brc29PaymentOutput(
   const { publicKey } = await wallet.getPublicKey({
     protocolID: BRC29_PROTOCOL,
     keyID: `${derivationPrefix} ${derivationSuffix}`,
-    counterparty: payee
+    counterparty: payee,
+    forSelf: false
   })
   const lockingScript = new P2PKH().lock(PublicKey.fromString(publicKey).toHash())
   return {
     satoshis,
     lockingScript: lockingScript.toHex(),
     outputDescription: `BRC-29 settle ${invoiceId}`,
+    derivationPrefix,
+    derivationSuffix,
     customInstructions: JSON.stringify({
       derivationPrefix,
       derivationSuffix,
@@ -311,11 +317,22 @@ async function brc29PaymentOutput(
   }
 }
 
+export interface SettlePackage {
+  tx: number[]
+  txid: string
+  invoiceId: string
+  paymentOutputIndex: number
+  derivationPrefix: string
+  derivationSuffix: string
+  senderIdentityKey: string
+  amountSats: number
+}
+
 export async function settleReceivable(
   wallet: WalletClient,
   overlayUrl: string,
   held: HeldReceivable
-): Promise<{ txid: string }> {
+): Promise<SettlePackage> {
   if (held.item.status === 'paid') throw new Error('Already paid')
   const paid = await nextStateOutput(wallet, held, 'paid', 0)
   const payment = await brc29PaymentOutput(
@@ -327,14 +344,75 @@ export async function settleReceivable(
   const spent = await spendReceivable(
     wallet,
     held,
-    [paid, payment],
+    [paid, {
+      satoshis: payment.satoshis,
+      lockingScript: payment.lockingScript,
+      outputDescription: payment.outputDescription,
+      customInstructions: payment.customInstructions
+    }],
     `BRC-29 settle ${held.item.invoiceId}`
   )
   const submitted = await submitReceivableTx(overlayUrl, spent.tx)
   if (submitted.admitted.length === 0) {
     throw new Error('Overlay rejected the settle spend')
   }
-  return { txid: spent.txid }
+  const { publicKey: senderIdentityKey } = await wallet.getPublicKey({ identityKey: true })
+  const settledTx = Transaction.fromBEEF(spent.tx)
+  return {
+    tx: spent.tx,
+    txid: spent.txid,
+    invoiceId: held.item.invoiceId,
+    paymentOutputIndex: paymentOutputIndex(settledTx, held.item.amountSats),
+    derivationPrefix: payment.derivationPrefix,
+    derivationSuffix: payment.derivationSuffix,
+    senderIdentityKey,
+    amountSats: held.item.amountSats
+  }
+}
+
+export async function acceptSettlePayment(
+  wallet: WalletClient,
+  pack: SettlePackage
+): Promise<void> {
+  await wallet.internalizeAction({
+    tx: pack.tx,
+    outputs: [{
+      outputIndex: pack.paymentOutputIndex,
+      protocol: 'wallet payment',
+      paymentRemittance: {
+        derivationPrefix: pack.derivationPrefix,
+        derivationSuffix: pack.derivationSuffix,
+        senderIdentityKey: pack.senderIdentityKey
+      }
+    }],
+    description: `Accept BRC-29 settle for ${pack.invoiceId}`
+  })
+}
+
+export function parseSettlePackage(raw: string): SettlePackage {
+  const parsed = JSON.parse(raw) as SettlePackage
+  if (!Array.isArray(parsed.tx) || !parsed.invoiceId || !parsed.derivationPrefix || !parsed.txid) {
+    throw new Error('Not a receivable settle package')
+  }
+  return parsed
+}
+
+function paymentOutputIndex(tx: Transaction, amountSats: number): number {
+  const satoshis = tx.outputs.map((output) => Number(output.satoshis ?? 0))
+  let markerIndex = -1
+  for (const [index, output] of tx.outputs.entries()) {
+    try {
+      const item = parseReceivableFields(PushDrop.decode(output.lockingScript).fields)
+      if (item?.status === 'paid') {
+        markerIndex = index
+        break
+      }
+    } catch {
+      // BRC-29 payment and change are not markers.
+    }
+  }
+  const found = findPaymentOutputIndex(satoshis, markerIndex, amountSats, 1)
+  return found >= 0 ? found : 1
 }
 
 export async function advanceReceivableOnChain(

@@ -81,13 +81,13 @@ function Shell() {
 
       <section className="panel">
         <h2>Overlay URL</h2>
-        <p>GitHub Pages is static. Point this at a local overlay-express node (default localhost:8081).</p>
+        <p>GitHub Pages is static. Point this at a local overlay-express node (default localhost:8082).</p>
         <input value={url} onChange={(event) => setUrl(event.target.value)} />
       </section>
 
       <footer>
         Needs BSV Desktop or BSV Browser. The app calls createAction, getPublicKey,
-        listOutputs, and signAction. Keys stay in the wallet. BSV only.
+        listOutputs, signAction, and internalizeAction. Keys stay in the wallet. BSV only.
       </footer>
     </div>
   )

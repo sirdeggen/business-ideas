@@ -7,7 +7,7 @@ services:
       MYSQL_USER: receivables
       MYSQL_PASSWORD: receivables
     ports:
-      - "3307:3306"
+      - "3308:3306"
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
@@ -22,7 +22,7 @@ services:
       MONGO_INITDB_ROOT_USERNAME: root
       MONGO_INITDB_ROOT_PASSWORD: example
     ports:
-      - "27018:27017"
+      - "27019:27017"
     volumes:
       - mongo-data:/data/db
     healthcheck:
@@ -36,14 +36,14 @@ services:
       context: .
       dockerfile: overlay/Dockerfile
     ports:
-      - "8081:8080"
+      - "8082:8080"
     env_file:
       - .env.example
     environment:
       PORT: "8080"
       KNEX_URL: mysql://receivables:receivables@mysql:3306/receivables
       MONGO_URL: mongodb://root:example@mongodb:27017/?authSource=admin
-      HOSTING_URL: http://localhost:8081
+      HOSTING_URL: http://localhost:8082
       HOSTING_FQDN: localhost
     depends_on:
       mysql:
@@ -74,10 +74,10 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        VITE_OVERLAY_URL: http://localhost:8081
+        VITE_OVERLAY_URL: http://localhost:8082
         VITE_BASE: /
     ports:
-      - "5174:80"
+      - "5175:80"
     depends_on:
       - overlay
 

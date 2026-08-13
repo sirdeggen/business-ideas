@@ -4,11 +4,13 @@ A cheap public **invoice registry** on BSV. Analog of Figure’s DART idea — w
 
 **This desk does not originate HELOCs, become a bank, lend, or custody funds.** Advance 70% records intent only. BSV Blockchain only.
 
+Sibling payable-invoice app lives in [`invoices/`](../invoices/) (basket `invoices`, topic `tm_invoices`). This desk does not modify that folder. Local compose ports here are offset again so tickets (8080), invoices (8081), and this registry (8082) can run together.
+
 Public UI (GitHub Pages, after Bob adds the catalog card): `https://sirdeggen.github.io/business-ideas/receivables/`
 
 ## Stack
 
-- Wallet interface: BRC-100. The app never holds keys. It calls `createAction`, `getPublicKey`, `listOutputs`, and `signAction`.
+- Wallet interface: BRC-100. The app never holds keys. It calls `createAction`, `getPublicKey`, `listOutputs`, `signAction`, and `internalizeAction`.
 - Identity: 66-hex compressed pubkey. Receivable UTXOs lock with PushDrop (BRC-48) using BRC-42 derivation inside the wallet. Settle pays the creditor with [BRC-29](https://bsv.brc.dev/payments/0029) P2PKH.
 - State: wallet basket `receivables` plus overlay topic `tm_receivables` / lookup `ls_receivables`.
 - Encoding: PushDrop fields — magic, invoice id, creditor, debtor, amount sats, due date, status (`open` / `approved` / `paid`), memo, advance-intent bps.
@@ -52,8 +54,9 @@ Unpaid = `open` or `approved`. Paid markers stay in the index so the invoice id 
 Settle is a BRC-29 spend of the live receipt:
 
 1. On **Approve / settle**, pick an unpaid UTXO this wallet holds.
-2. **Settle (BRC-29)** spends it to a `paid` marker and adds a BRC-29 P2PKH output of `amountSats` to the creditor identity (`protocolID [2, "3241645161d8"]`, derivation prefix/suffix in `customInstructions`).
-3. Overlay admits the paid marker. Lookup of that invoice as unpaid is empty.
+2. **Settle (BRC-29)** spends it to a `paid` marker and adds a BRC-29 P2PKH output of `amountSats` to the creditor identity (`protocolID [2, "3241645161d8"]`, `forSelf: false`, derivation prefix/suffix in `customInstructions`).
+3. Overlay admits the paid marker **only if** a same-tx output pays the billed satoshis. Lookup of that invoice as unpaid is empty.
+4. Copy the JSON package (invoice id + payment txid). The creditor **Accept BRC-29 payment** calls `internalizeAction` with `wallet payment` remittance.
 
 The wallet must be able to fund the BRC-29 output (the invoice amount). The 1-sat registry token is not custody of the invoice funds.
 
@@ -76,13 +79,13 @@ cp .env.example .env   # optional; compose already loads .env.example
 docker compose up --build
 ```
 
-- Overlay HTTP: http://localhost:8081 (`POST /submit`, `POST /lookup`, `POST /intent`, `GET /version`)
-- Frontend container: http://localhost:5174
-- MySQL: 3307 / MongoDB: 27018 (offset from event-tickets so both can run)
+- Overlay HTTP: http://localhost:8082 (`POST /submit`, `POST /lookup`, `POST /intent`, `GET /version`)
+- Frontend container: http://localhost:5175
+- MySQL: 3308 / MongoDB: 27019 (offset from event-tickets `8080` and invoices `8081`)
 
 The seed service waits until overlay is healthy, then submits ten invoices (`INV-2026-001` … `INV-2026-010`) — mix of open, approved, approved+intent, and paid. Each output is a BRC-48 PushDrop script, not a fake table.
 
-Point the static UI at a reachable overlay with **Overlay URL** (stored in localStorage). Default is `http://localhost:8081`.
+Point the static UI at a reachable overlay with **Overlay URL** (stored in localStorage). Default is `http://localhost:8082`.
 
 ### Frontend only (wallet against a running overlay)
 
@@ -92,7 +95,7 @@ npm install
 npm run dev
 ```
 
-Vite serves at http://localhost:5173. Keep overlay compose running.
+Vite serves at http://localhost:5175. Keep overlay compose running.
 
 ### Overlay only
 
@@ -100,8 +103,8 @@ Vite serves at http://localhost:5173. Keep overlay compose running.
 cd receivable-desk/overlay
 npm install
 # start mysql + mongo via compose, then:
-KNEX_URL=mysql://receivables:receivables@127.0.0.1:3307/receivables \
-MONGO_URL=mongodb://root:example@127.0.0.1:27018/?authSource=admin \
+KNEX_URL=mysql://receivables:receivables@127.0.0.1:3308/receivables \
+MONGO_URL=mongodb://root:example@127.0.0.1:27019/?authSource=admin \
 SERVER_PRIVATE_KEY=0000000000000000000000000000000000000000000000000000000000000001 \
 HOSTING_FQDN=localhost \
 npm run dev

@@ -57,7 +57,8 @@ export default class ReceivablesTopicManager implements TopicManager {
       if (item) outputItems.push({ index, item })
     }
 
-    const classified = classifyReceivableTransaction(inputItems, outputItems)
+    const outputSatoshis = parsedTx.outputs.map((output) => Number(output.satoshis ?? 0))
+    const classified = classifyReceivableTransaction(inputItems, outputItems, outputSatoshis)
     if (classified.action === 'invalid') {
       return { outputsToAdmit: [], coinsToRetain: [] }
     }
@@ -79,7 +80,7 @@ export default class ReceivablesTopicManager implements TopicManager {
   }> {
     return {
       name: 'Receivables Topic Manager',
-      shortDescription: 'Admit invoice registry UTXOs; reject duplicate ids, junk, and already-paid spends.',
+      shortDescription: 'Admit invoice registry UTXOs; settle requires a same-tx BRC-29 payment of the billed sats.',
       version: '0.1.0'
     }
   }

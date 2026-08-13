@@ -6,7 +6,7 @@ Each live receivable is one UTXO. The topic manager:
 
 - admits **register** transactions that create N new invoices with unique invoice ids
 - admits **approve** spends that move open → approved without changing parties, amount, or due date
-- admits **settle** spends that move open|approved → paid (the BRC-29 settle spend lands a paid marker)
+- admits **settle** spends that move open|approved → paid only when a same-tx output pays the billed satoshis (BRC-29)
 - admits **advance-intent** spends that stamp 70% on an approved unpaid invoice (no sats of credit move)
 - rejects malformed PushDrop data, duplicate invoice ids in a register, identity/amount mutations, and spends of an already-paid marker
 

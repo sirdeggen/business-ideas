@@ -41,7 +41,12 @@ export interface Classification {
 
 const IDENTITY_KEY = /^(02|03)[0-9a-fA-F]{64}$/
 const INVOICE_ID = /^[A-Za-z0-9._:-]{1,64}$/
-const DUE_DATE = /^\d{4}-\d{2}-\d{2}$/
+
+export function isIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const date = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
 
 export function isIdentityKey(value: string): boolean {
   return IDENTITY_KEY.test(value.trim())
@@ -110,7 +115,7 @@ export function validateReceivable(item: ReceivablePayload): string | null {
   if (!isIdentityKey(item.debtor)) return 'invalid debtor identity'
   if (item.creditor === item.debtor) return 'creditor and debtor must differ'
   if (!Number.isInteger(item.amountSats) || item.amountSats < 1) return 'amount must be a positive integer of sats'
-  if (!DUE_DATE.test(item.dueDate)) return 'due date must be YYYY-MM-DD'
+  if (!isIsoDate(item.dueDate)) return 'due date must be YYYY-MM-DD'
   if (!STATUSES.includes(item.status)) return 'status must be open, approved, or paid'
   if (item.memo.length > 200) return 'memo too long'
   if (!Number.isInteger(item.advanceBps) || item.advanceBps < 0 || item.advanceBps > 10000) {
@@ -133,16 +138,39 @@ function sameInvoice(a: ReceivablePayload, b: ReceivablePayload): boolean {
 }
 
 /**
+ * Prefer the claimed BRC-29 output index when it carries the billed satoshis;
+ * otherwise find any other output with that exact amount (change is usually
+ * a different value). Returns -1 when no payment output exists.
+ */
+export function findPaymentOutputIndex(
+  outputSatoshis: number[],
+  receivableOutputIndex: number,
+  amountSats: number,
+  claimedIndex = 1
+): number {
+  if (
+    claimedIndex !== receivableOutputIndex &&
+    claimedIndex >= 0 &&
+    claimedIndex < outputSatoshis.length &&
+    outputSatoshis[claimedIndex] === amountSats
+  ) {
+    return claimedIndex
+  }
+  return outputSatoshis.findIndex((sats, index) => index !== receivableOutputIndex && sats === amountSats)
+}
+
+/**
  * Stateless overlay admission rules:
  * - register: no previous receipts, N new unique invoice ids
  * - approve: one open → one approved, identity fields preserved
- * - settle: one open|approved → one paid marker (BRC-29 settle spend)
+ * - settle: one open|approved → one paid marker plus a same-tx output of amountSats (BRC-29)
  * - advance: one approved unpaid → same approved with 70% advance-intent (no sats moved)
  * Anything else is junk and must not be admitted.
  */
 export function classifyReceivableTransaction(
   inputItems: Array<{ index: number; item: ReceivablePayload }>,
-  outputItems: Array<{ index: number; item: ReceivablePayload }>
+  outputItems: Array<{ index: number; item: ReceivablePayload }>,
+  outputSatoshis: number[] = []
 ): Classification {
   const inputs = inputItems.filter(({ item }) => validateReceivable(item) === null)
   const outputs = outputItems.filter(({ item }) => validateReceivable(item) === null)
@@ -175,6 +203,14 @@ export function classifyReceivableTransaction(
       return { action: 'approve', admitOutputIndexes: [outputs[0].index] }
     }
     if ((prev.status === 'open' || prev.status === 'approved') && next.status === 'paid') {
+      const payIndex = findPaymentOutputIndex(outputSatoshis, outputs[0].index, next.amountSats)
+      if (payIndex < 0) {
+        return {
+          action: 'invalid',
+          admitOutputIndexes: [],
+          reason: 'BRC-29 payment output missing or wrong satoshis'
+        }
+      }
       return { action: 'settle', admitOutputIndexes: [outputs[0].index] }
     }
     if (

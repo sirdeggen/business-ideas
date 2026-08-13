@@ -112,14 +112,16 @@ describe('receivable protocol', () => {
 
     const settledFromOpen = classifyReceivableTransaction(
       [{ index: 0, item: open }],
-      [{ index: 0, item: paid }]
+      [{ index: 0, item: paid }],
+      [1, 1000]
     )
     expect(settledFromOpen.action).toBe('settle')
     expect(settledFromOpen.admitOutputIndexes).toEqual([0])
 
     const settledFromApproved = classifyReceivableTransaction(
       [{ index: 0, item: approved }],
-      [{ index: 0, item: paid }]
+      [{ index: 0, item: paid }],
+      [1, 1000]
     )
     expect(settledFromApproved.action).toBe('settle')
 
@@ -134,10 +136,19 @@ describe('receivable protocol', () => {
     const paid = invoice({ status: 'paid' })
     const settle = classifyReceivableTransaction(
       [{ index: 0, item: approved }],
-      [{ index: 0, item: paid }]
+      [{ index: 0, item: paid }],
+      [1, 1000]
     )
     expect(settle.action).toBe('settle')
     expect(paid.status).toBe('paid')
+
+    const withoutPayment = classifyReceivableTransaction(
+      [{ index: 0, item: approved }],
+      [{ index: 0, item: paid }],
+      [1]
+    )
+    expect(withoutPayment.action).toBe('invalid')
+    expect(withoutPayment.reason).toMatch(/BRC-29/)
 
     const second = classifyReceivableTransaction(
       [{ index: 0, item: paid }],
