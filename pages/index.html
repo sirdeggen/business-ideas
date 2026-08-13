@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BSV business ideas</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">BSV · v0</p>
+          <h1>BSV business ideas</h1>
+          <p class="lede">
+            First versions, shipped fast. One static demo lives here; the HTTP 402
+            servers run from their repo folders (or later on a cluster).
+          </p>
+        </div>
+      </header>
+
+      <section class="cards" aria-label="Demos">
+        <article class="card">
+          <p class="eyebrow live">Live</p>
+          <h2>Event tickets</h2>
+          <p>
+            Mint a tranche, hold a QR, transfer by spend, redeem at the door.
+            Tickets are BSV UTXOs in a BRC-100 basket.
+          </p>
+          <p class="path">Pages path: <code>/tickets/</code></p>
+          <a class="btn primary" href="./tickets/">Open demo</a>
+        </article>
+
+        <article class="card">
+          <p class="eyebrow soon">Server</p>
+          <h2>402 publisher</h2>
+          <p>
+            Pay-per-crawl Ghost-class page. Readers and crawlers get an HTTP 402
+            invoice in sats. Not static — Express + Docker.
+          </p>
+          <p class="path">Live cluster path will be <code>/402-publisher</code></p>
+          <div class="row">
+            <a class="btn" href="https://github.com/sirdeggen/business-ideas/tree/main/402-publisher">Repo folder</a>
+            <a class="btn" href="https://github.com/sirdeggen/business-ideas/blob/main/402-publisher/README.md">How to run</a>
+          </div>
+        </article>
+
+        <article class="card">
+          <p class="eyebrow soon">Server</p>
+          <h2>402 MCP</h2>
+          <p>
+            Paid MCP tools in sats. Payment is the credential — no signup, no API
+            key. Not static — Express / MCP + Docker.
+          </p>
+          <p class="path">Live cluster path will be <code>/402-mcp</code></p>
+          <div class="row">
+            <a class="btn" href="https://github.com/sirdeggen/business-ideas/tree/main/402-mcp">Repo folder</a>
+            <a class="btn" href="https://github.com/sirdeggen/business-ideas/blob/main/402-mcp/README.md">How to run</a>
+          </div>
+        </article>
+      </section>
+
+      <footer>
+        Source:
+        <a href="https://github.com/sirdeggen/business-ideas">sirdeggen/business-ideas</a>.
+        BSV only.
+      </footer>
+    </main>
+  </body>
+</html>

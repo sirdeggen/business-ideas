@@ -1,0 +1,136 @@
+:root {
+  color-scheme: dark;
+  --bg: #0e1110;
+  --bg-raise: #171c1a;
+  --ink: #f3efe4;
+  --muted: #b7b1a3;
+  --gold: #e2c275;
+  --gold-dim: #9a7b3c;
+  --line: #2c332f;
+  --ok: #7dcfb6;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(1200px 500px at 10% -10%, #2a2318 0%, transparent 55%),
+    var(--bg);
+  color: var(--ink);
+}
+
+a { color: var(--gold); }
+
+.app {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+}
+
+.masthead {
+  border-bottom: 1px dashed var(--gold-dim);
+  padding-bottom: 20px;
+  margin-bottom: 32px;
+}
+
+.eyebrow {
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--gold);
+  margin: 0 0 8px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.eyebrow.live { color: var(--ok); }
+.eyebrow.soon { color: var(--muted); }
+
+h1 {
+  font-size: 42px;
+  line-height: 0.95;
+  margin: 0;
+  font-weight: 600;
+}
+
+h2 {
+  margin: 0 0 8px;
+  font-size: 24px;
+}
+
+.lede {
+  color: var(--muted);
+  max-width: 48ch;
+  margin: 10px 0 0;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.card {
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+}
+
+.card p {
+  color: var(--muted);
+  margin-top: 0;
+  flex: 1;
+}
+
+.path {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 16px;
+}
+
+.path code {
+  color: var(--ink);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  display: inline-block;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  width: fit-content;
+}
+
+.btn.primary {
+  background: var(--gold);
+  color: #1a140c;
+  border-color: var(--gold);
+}
+
+footer {
+  margin-top: 40px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 860px) {
+  .cards { grid-template-columns: 1fr; }
+  h1 { font-size: 34px; }
+}
