@@ -1,5 +1,4 @@
 import { Overlay } from '@bsv/simple/browser'
-import { Transaction } from '@bsv/sdk'
 import { DEMO_EVENT, LOOKUP_SERVICE, MAGIC, TICKET_TYPE, TOPIC } from '../../../protocol/ticket'
 import type { TicketPayload } from '../../../protocol/ticket'
 
@@ -19,40 +18,36 @@ function overlayUrl(base: string): string {
 }
 
 async function localOverlay(base: string): Promise<Overlay> {
+  const url = overlayUrl(base)
   return Overlay.create({
     topics: [TOPIC],
     network: 'mainnet',
     hostOverrides: {
-      [TOPIC]: [overlayUrl(base)]
+      [TOPIC]: [url],
+      [LOOKUP_SERVICE]: [url]
     }
   })
 }
 
 export async function submitTicketTx(base: string, beef: number[]): Promise<SubmitResult> {
   const url = overlayUrl(base)
-  try {
-    const overlay = await localOverlay(url)
-    const tx = Transaction.fromBEEF(beef)
-    const broadcast = await overlay.broadcast(tx, [TOPIC])
-    if (!broadcast.success) {
-      throw new Error(broadcast.description || 'Overlay broadcast failed')
-    }
-    return { admitted: [0], raw: broadcast }
-  } catch {
-    const response = await fetch(`${url}/submit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ beef, topics: [TOPIC] })
-    })
-    const raw: unknown = await response.json().catch(() => undefined)
-    if (!response.ok) {
-      throw new Error(`Overlay /submit failed (${response.status})`)
-    }
-    const topicResult = (raw as Record<string, { outputsToAdmit?: number[] }>)?.[TOPIC]
-    return {
-      admitted: topicResult?.outputsToAdmit ?? [0],
-      raw
-    }
+  const response = await fetch(`${url}/submit`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-topics': TOPIC
+    },
+    body: JSON.stringify(beef)
+  })
+  const raw: unknown = await response.json().catch(() => undefined)
+  if (!response.ok) {
+    const message = (raw as { message?: string } | undefined)?.message
+    throw new Error(message || `Overlay /submit failed (${response.status})`)
+  }
+  const topicResult = (raw as Record<string, { outputsToAdmit?: number[] }>)?.[TOPIC]
+  return {
+    admitted: topicResult?.outputsToAdmit ?? [],
+    raw
   }
 }
 
@@ -63,22 +58,28 @@ export async function lookupTickets(
   const url = overlayUrl(base)
   try {
     const overlay = await localOverlay(url)
-    const answer = await overlay.query(LOOKUP_SERVICE, query)
-    return unwrapLookup(answer)
-  } catch {
-    const response = await fetch(`${url}/lookup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        service: LOOKUP_SERVICE,
-        query
-      })
-    })
-    if (!response.ok) {
-      throw new Error(`Overlay /lookup failed (${response.status})`)
+    const outputs = await overlay.lookupOutputs(LOOKUP_SERVICE, query)
+    if (outputs.length > 0) {
+      return outputs.map((output) =>
+        fromContext(output.context, output.outputIndex) ?? ticketStub({ outputIndex: output.outputIndex })
+      )
     }
-    return unwrapLookup(await response.json())
+  } catch {
+    // Fall through to direct /lookup against the configured node.
   }
+
+  const response = await fetch(`${url}/lookup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      service: LOOKUP_SERVICE,
+      query
+    })
+  })
+  if (!response.ok) {
+    throw new Error(`Overlay /lookup failed (${response.status})`)
+  }
+  return unwrapLookup(await response.json())
 }
 
 function ticketStub(partial: Partial<OverlayTicket> & { outputIndex: number }): OverlayTicket {
