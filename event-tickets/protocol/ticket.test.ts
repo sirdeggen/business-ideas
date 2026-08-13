@@ -67,6 +67,24 @@ describe('ticket protocol', () => {
     expect(result.admitOutputIndexes).toEqual([])
   })
 
+  it('rejects a mint that is not the demo event', () => {
+    const other: TicketPayload = { ...demoTicket('1'), eventId: 'other-show' }
+    const result = classifyTicketTransaction([], [{ index: 0, ticket: other }])
+    expect(result.action).toBe('invalid')
+    expect(result.admitOutputIndexes).toEqual([])
+  })
+
+  it('rejects a two-input spend that is not a single-ticket transfer or redeem', () => {
+    const result = classifyTicketTransaction(
+      [
+        { index: 0, ticket: demoTicket('1') },
+        { index: 1, ticket: demoTicket('2') }
+      ],
+      [{ index: 0, ticket: demoTicket('1') }]
+    )
+    expect(result.action).toBe('invalid')
+  })
+
   it('encodes a door QR that can be scanned as JSON or a raw outpoint', () => {
     const payload = qrPayload('ab'.repeat(32) + '.0', demoTicket('3'))
     expect(parseQrPayload(payload)?.serial).toBe('3')

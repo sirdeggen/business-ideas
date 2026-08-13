@@ -33,7 +33,8 @@ export function Organizer() {
       <h2>Mint Demo Night</h2>
       <p>
         Creates {count} general-admission UTXOs for {DEMO_EVENT.name} into the
-        <code> eventtickets </code> basket, then submits them to <code>tm_tickets</code>.
+        <code> eventtickets </code> basket, then submits them to <code>tm_tickets</code>
+        on BSV overlay-express.
       </p>
       <label htmlFor="count">Ticket count</label>
       <div className="row">

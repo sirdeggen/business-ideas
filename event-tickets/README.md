@@ -2,7 +2,7 @@
 
 Tickets are UTXOs. The organizer mints a tranche of Demo Night general-admission tickets into a BRC-100 basket. An attendee holds one in BSV Desktop or BSV Browser, shows a QR at the door, can transfer it by spending to another identity key, and the door redeems by spending the UTXO. After redeem, the overlay lookup of that outpoint is empty.
 
-This is not an NFT marketplace and not an L2. One event (`demonight`), one ticket type (`ga`).
+This stack is BSV only: BRC-100 wallets, PushDrop ticket UTXOs, and overlay-express. One event (`demonight`), one ticket type (`ga`).
 
 Public UI (GitHub Pages): after merge, `https://sirdeggen.github.io/business-ideas/`
 
@@ -12,7 +12,7 @@ Public UI (GitHub Pages): after merge, `https://sirdeggen.github.io/business-ide
 - Identity: 66-hex compressed pubkey. Transfers lock a PushDrop output to that key (BRC-29 / BRC-42 derivation inside PushDrop), not a Bitcoin address.
 - Ticket state: wallet basket `eventtickets` (BRC-45/46) plus overlay topic `tm_tickets` / lookup `ls_tickets` (BRC-22/24).
 - Encoding: PushDrop (BRC-48) fields: magic, event id, serial, type, venue metadata.
-- Frontend: Vite + React, `@bsv/sdk` `WalletClient('auto', originator)` and `@bsv/simple/browser` `Overlay`.
+- Frontend: Vite + React. Wallet via `createWallet()` from `@bsv/simple/browser` (falls back to `WalletClient('auto', originator)` from `@bsv/sdk`). Overlay lookup via `@bsv/simple/browser` `Overlay` plus direct `POST /submit` and `POST /lookup`.
 - Overlay: `@bsv/overlay-express` + MongoDB + MySQL, `POST /submit` and `POST /lookup`.
 
 ## Prerequisites
@@ -89,7 +89,7 @@ cd event-tickets/overlay
 npm install
 # start mysql + mongo via compose, then:
 KNEX_URL=mysql://tickets:tickets@127.0.0.1:3306/tickets \
-MONGO_URL=mongodb://root:example@127.0.0.1:27017 \
+MONGO_URL=mongodb://root:example@127.0.0.1:27017/?authSource=admin \
 SERVER_PRIVATE_KEY=0000000000000000000000000000000000000000000000000000000000000001 \
 HOSTING_FQDN=localhost \
 npm run dev

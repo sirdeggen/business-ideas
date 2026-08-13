@@ -19,7 +19,7 @@ export function Attendee() {
   const { url } = useOverlay()
   const [tickets, setTickets] = useState<HeldTicket[]>([])
   const [qrs, setQrs] = useState<Record<string, string>>({})
-  const [recipient, setRecipient] = useState('')
+  const [recipients, setRecipients] = useState<Record<string, string>>({})
   const [incoming, setIncoming] = useState('')
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -48,7 +48,12 @@ export function Attendee() {
     setError(null)
     setStatus(null)
     try {
-      const pack: TransferPackage = await transferTicket(wallet, url, held, recipient.trim())
+      const pack: TransferPackage = await transferTicket(
+        wallet,
+        url,
+        held,
+        (recipients[held.outpoint] ?? '').trim()
+      )
       setPackageJson(JSON.stringify(pack))
       setStatus(`Transferred ticket ${held.ticket.serial}. Give the package below to the recipient.`)
       await refresh()
@@ -74,43 +79,52 @@ export function Attendee() {
     <>
       <section className="panel">
         <h2>Your tickets</h2>
-        <p>Show the QR at the door. Transfer is a spend to another identity key — not an NFT listing.</p>
+        <p>
+          Show the QR at the door. Transfer is a BSV spend to another identity key
+          (66-hex compressed pubkey), not a listing.
+        </p>
         <div className="row">
           <button className="btn" onClick={() => void refresh()}>Refresh basket</button>
         </div>
         {tickets.length === 0 && <p className="hint">No tickets in the eventtickets basket yet.</p>}
-        {tickets.map((held) => (
-          <article className="ticket" key={held.outpoint}>
-            <div className="ticket-body">
-              <div className="serial">GA · {held.ticket.serial.padStart(3, '0')}</div>
-              <h3>{held.ticket.name}</h3>
-              <div className="ticket-meta">
-                <div>Venue<strong>{held.ticket.venue}</strong></div>
-                <div>Outpoint<strong>{shortKey(held.outpoint, 8)}</strong></div>
+        {tickets.map((held) => {
+          const recipient = recipients[held.outpoint] ?? ''
+          return (
+            <article className="ticket" key={held.outpoint}>
+              <div className="ticket-body">
+                <div className="serial">GA · {held.ticket.serial.padStart(3, '0')}</div>
+                <h3>{held.ticket.name}</h3>
+                <div className="ticket-meta">
+                  <div>Venue<strong>{held.ticket.venue}</strong></div>
+                  <div>Outpoint<strong>{shortKey(held.outpoint, 8)}</strong></div>
+                </div>
+                <label htmlFor={`to-${held.outpoint}`}>Transfer to identity key</label>
+                <div className="row">
+                  <input
+                    id={`to-${held.outpoint}`}
+                    placeholder="02… or 03… compressed pubkey"
+                    value={recipient}
+                    onChange={(event) => setRecipients((current) => ({
+                      ...current,
+                      [held.outpoint]: event.target.value
+                    }))}
+                  />
+                  <button
+                    className="btn"
+                    disabled={!isIdentityKey(recipient) || recipient === identityKey}
+                    onClick={() => void send(held)}
+                  >
+                    Transfer
+                  </button>
+                </div>
               </div>
-              <label htmlFor={`to-${held.outpoint}`}>Transfer to identity key</label>
-              <div className="row">
-                <input
-                  id={`to-${held.outpoint}`}
-                  placeholder="02… or 03… compressed pubkey"
-                  value={recipient}
-                  onChange={(event) => setRecipient(event.target.value)}
-                />
-                <button
-                  className="btn"
-                  disabled={!isIdentityKey(recipient) || recipient === identityKey}
-                  onClick={() => void send(held)}
-                >
-                  Transfer
-                </button>
+              <div className="stub">
+                {qrs[held.outpoint] && <img alt={`QR for ticket ${held.ticket.serial}`} src={qrs[held.outpoint]} />}
+                <span className="serial">{held.ticket.serial.padStart(3, '0')}</span>
               </div>
-            </div>
-            <div className="stub">
-              {qrs[held.outpoint] && <img alt={`QR for ticket ${held.ticket.serial}`} src={qrs[held.outpoint]} />}
-              <span className="serial">{held.ticket.serial.padStart(3, '0')}</span>
-            </div>
-          </article>
-        ))}
+            </article>
+          )
+        })}
       </section>
 
       <section className="panel">
@@ -129,6 +143,14 @@ export function Attendee() {
           <h2>Handoff package</h2>
           <p>The recipient pastes this into Accept a transfer. The UTXO is already theirs on-chain.</p>
           <textarea rows={8} readOnly value={packageJson} />
+          <div className="row" style={{ marginTop: 12 }}>
+            <button
+              className="btn"
+              onClick={() => void navigator.clipboard.writeText(packageJson)}
+            >
+              Copy package
+            </button>
+          </div>
         </section>
       )}
 

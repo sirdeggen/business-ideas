@@ -58,9 +58,14 @@ export function Door() {
       const held = (await listHeldTickets(wallet)).find((item) => item.outpoint === outpoint)
       if (!held) throw new Error('This wallet does not hold that ticket UTXO')
       const result = await redeemTicket(wallet, url, held)
+      const stillLive = await lookupTickets(url, { outpoint })
       setValid(false)
       setCanRedeem(false)
-      setDetail(`Redeemed. Ticket UTXO spent in ${result.txid}. Overlay lookup will now fail.`)
+      if (stillLive.length === 0) {
+        setDetail(`Redeemed in ${result.txid}. Overlay lookup now rejects this spent UTXO.`)
+      } else {
+        setDetail(`Spent in ${result.txid}, but overlay still listed it. Check the overlay logs.`)
+      }
     } catch (err) {
       setDetail(errorMessage(err))
     } finally {
@@ -72,8 +77,8 @@ export function Door() {
     <section className="panel">
       <h2>Door</h2>
       <p>
-        Paste the attendee QR payload. Lookup talks to the overlay — spent tickets are gone.
-        Redeem spends the UTXO from the wallet that holds it.
+        Paste the attendee QR payload. Lookup talks to overlay-express on BSV —
+        spent tickets are gone. Redeem spends the UTXO from the wallet that holds it.
       </p>
       <label htmlFor="scan">QR payload or outpoint</label>
       <textarea id="scan" rows={4} value={scan} onChange={(event) => setScan(event.target.value)} />

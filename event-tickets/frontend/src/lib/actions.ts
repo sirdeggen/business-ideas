@@ -1,4 +1,5 @@
 import {
+  Beef,
   LockingScript,
   PushDrop,
   Transaction,
@@ -14,6 +15,7 @@ import {
   parseTicketFields,
   type TicketPayload
 } from '../../../protocol/ticket'
+import { originator } from './config'
 import { submitTicketTx } from './overlay'
 
 export interface HeldTicket {
@@ -69,6 +71,31 @@ function ticketFields(serial: string): number[][] {
   })
 }
 
+function pushdrop(wallet: WalletClient): PushDrop {
+  return new PushDrop(wallet, originator())
+}
+
+function beefForOutpoint(listedBeef: number[] | undefined, outpoint: string): number[] | undefined {
+  if (!listedBeef || listedBeef.length === 0) return listedBeef
+  const [txid] = outpoint.split('.')
+  const beef = new Beef()
+  beef.mergeBeef(listedBeef)
+  if (beef.findTxid(txid)) return beef.toBinaryAtomic(txid)
+  return listedBeef
+}
+
+function ticketOutputIndex(tx: Transaction): number {
+  for (const [index, output] of tx.outputs.entries()) {
+    try {
+      const ticket = parseTicketFields(PushDrop.decode(output.lockingScript).fields)
+      if (ticket) return index
+    } catch {
+      // Change and unrelated outputs are ignored.
+    }
+  }
+  return 0
+}
+
 export async function listHeldTickets(wallet: WalletClient): Promise<HeldTicket[]> {
   const listed = await wallet.listOutputs({
     basket: BASKET,
@@ -89,7 +116,7 @@ export async function listHeldTickets(wallet: WalletClient): Promise<HeldTicket[
         satoshis: Number(output.satoshis ?? 1),
         ticket,
         customInstructions: output.customInstructions ?? '',
-        beef: listed.BEEF as number[] | undefined
+        beef: beefForOutpoint(listed.BEEF as number[] | undefined, output.outpoint)
       })
     } catch {
       // Skip non-ticket basket items.
@@ -105,11 +132,11 @@ export async function mintTickets(
 ): Promise<{ txid: string, count: number }> {
   if (count < 1 || count > 20) throw new Error('Mint between 1 and 20 tickets')
 
-  const pushdrop = new PushDrop(wallet)
+  const token = pushdrop(wallet)
   const outputs = []
   for (let serial = 1; serial <= count; serial++) {
     const keyID = randomKeyId()
-    const lockingScript = await pushdrop.lock(
+    const lockingScript = await token.lock(
       ticketFields(String(serial)),
       PROTOCOL_ID,
       keyID,
@@ -182,10 +209,13 @@ async function spendTicket(
   }
 
   const txToSign = Transaction.fromBEEF(response.signableTransaction.tx)
-  txToSign.inputs[0].unlockingScriptTemplate = new PushDrop(wallet).unlock(
+  txToSign.inputs[0].unlockingScriptTemplate = pushdrop(wallet).unlock(
     instructions.protocolID,
     instructions.keyID,
-    instructions.counterparty
+    instructions.counterparty,
+    'all',
+    false,
+    held.satoshis
   )
   await txToSign.sign()
   const unlockingScript = txToSign.inputs[0].unlockingScript?.toHex()
@@ -215,8 +245,7 @@ export async function transferTicket(
   }
 
   const keyID = randomKeyId()
-  const pushdrop = new PushDrop(wallet)
-  const lockingScript = await pushdrop.lock(
+  const lockingScript = await pushdrop(wallet).lock(
     ticketFields(held.ticket.serial),
     PROTOCOL_ID,
     keyID,
@@ -242,15 +271,16 @@ export async function transferTicket(
   }
 
   const { publicKey: sender } = await wallet.getPublicKey({ identityKey: true })
+  const outputIndex = ticketOutputIndex(Transaction.fromBEEF(spent.tx))
   return {
     tx: spent.tx,
     txid: spent.txid,
-    outputIndex: 0,
+    outputIndex,
     protocolID: PROTOCOL_ID,
     keyID,
     sender,
     serial: held.ticket.serial,
-    outpoint: `${spent.txid}.0`
+    outpoint: `${spent.txid}.${outputIndex}`
   }
 }
 
