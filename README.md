@@ -22,12 +22,11 @@ The list is this desk’s own registry (sample invoices in `receivable-desk/`). 
 - Overlay and settle: `cd receivable-desk && docker compose up --build` (overlay :8082, UI :5175)
 - How to run: [receivable-desk/README.md](./receivable-desk/README.md)
 
-## Event tickets (Pages demo)
+## Event tickets
 
 Tickets you can send, show on a phone, and spend at the door so they can’t be used twice.
 
-- Demo: https://sirdeggen.github.io/business-ideas/tickets/
-- How to run overlay + frontend: [event-tickets/README.md](./event-tickets/README.md)
+Silent until a door actually scans. How to run overlay + frontend: [event-tickets/README.md](./event-tickets/README.md)
 
 ## 402 publisher (server / local Docker)
 

@@ -29,7 +29,7 @@ function reminderText(row: OverlayReceivable, late: number, aging: AgingLabel): 
 }
 
 export function Desk() {
-  const { wallet } = useWallet()
+  const { wallet, connecting, error: walletError, connect } = useWallet()
   const { url, online } = useOverlay()
   const [held, setHeld] = useState<HeldReceivable[]>([])
   const [rows, setRows] = useState<OverlayReceivable[]>([])
@@ -84,7 +84,16 @@ export function Desk() {
   }
 
   const markPaid = async (row: OverlayReceivable): Promise<void> => {
-    if (!wallet || !canSettle) return
+    if (!wallet) {
+      const ok = await connect()
+      if (!ok) return
+      setStatus('Wallet connected. Click Mark paid again.')
+      return
+    }
+    if (!canSettle) {
+      setError(LOCAL_DESK_HINT)
+      return
+    }
     const item = held.find((entry) => entry.item.invoiceId === row.invoiceId && entry.item.status !== 'paid')
     if (!item) {
       setError('Mark paid needs the wallet that recorded this invoice, and the local desk running.')
@@ -114,12 +123,12 @@ export function Desk() {
       {preview && (
         <p className="hint">
           Showing sample invoices because the local index is not running.
-          {pages ? ` ${LOCAL_DESK_HINT}` : ' Start docker compose to chase the live registry.'}
+          {pages ? ` ${LOCAL_DESK_HINT}` : ' Start docker compose to chase this desk’s registry.'}
         </p>
       )}
       <button className="btn" onClick={() => void refresh()}>Refresh list</button>
       {status && <p className="status ok">{status}</p>}
-      {error && <p className="status err">{error}</p>}
+      {(error || walletError) && <p className="status err">{error || walletError}</p>}
 
       {AGING_LABELS.map((label) => (
         <div key={label} className={`aging-group aging-${label.replace(/\s+/g, '-')}`}>
@@ -127,9 +136,10 @@ export function Desk() {
           {grouped[label].length === 0 && <p className="hint">None.</p>}
           {grouped[label].map((row) => {
             const late = Math.max(0, daysLate(row.dueDate))
-            const settleReady = canSettle && held.some(
+            const settleReady = canSettle && !!wallet && held.some(
               (entry) => entry.item.invoiceId === row.invoiceId && entry.item.status !== 'paid'
             )
+            const markNeedsConnect = !wallet && canSettle
             return (
               <article key={`${row.txid}.${row.outputIndex}`} className="work-row">
                 <div>
@@ -144,11 +154,17 @@ export function Desk() {
                   </button>
                   <button
                     className="btn primary"
-                    disabled={!settleReady || busy !== null}
-                    title={settleReady ? 'Mark this invoice paid' : LOCAL_DESK_HINT}
+                    disabled={(!settleReady && !markNeedsConnect) || busy !== null || connecting}
+                    title={
+                      markNeedsConnect
+                        ? 'Connect only when you mark paid'
+                        : settleReady
+                          ? 'Mark this invoice paid'
+                          : LOCAL_DESK_HINT
+                    }
                     onClick={() => void markPaid(row)}
                   >
-                    {busy === row.invoiceId ? 'Marking…' : 'Mark paid'}
+                    {busy === row.invoiceId ? 'Marking…' : connecting ? 'Connecting…' : 'Mark paid'}
                   </button>
                 </div>
               </article>

@@ -4,24 +4,15 @@ import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { Partner } from './components/Partner'
 import { Register } from './components/Register'
 import { Registry } from './components/Registry'
-import { WalletProvider, useWallet } from './context/WalletContext'
-import { LOCAL_DESK_HINT, isGitHubPages, shortKey } from './lib/config'
+import { WalletProvider } from './context/WalletContext'
+import { LOCAL_DESK_HINT, isGitHubPages } from './lib/config'
 
 type Tab = 'desk' | 'owe' | 'register' | 'partner'
 
 function Shell() {
-  const { identityKey, connecting, error, connect } = useWallet()
   const { url, setUrl, online } = useOverlay()
   const [tab, setTab] = useState<Tab>('desk')
-  const [copied, setCopied] = useState(false)
   const pages = isGitHubPages()
-
-  const copyIdentity = async (): Promise<void> => {
-    if (!identityKey) return
-    await navigator.clipboard.writeText(identityKey)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1500)
-  }
 
   return (
     <div className="app">
@@ -33,27 +24,6 @@ function Shell() {
             The paper that proves an invoice — same treasurer, after a few real
             invoices exist. Not a second product. Not a bank.
           </p>
-        </div>
-        <div className="identity">
-          {connecting && <div>Checking wallet…</div>}
-          {identityKey && (
-            <>
-              Signed in
-              <code>{shortKey(identityKey, 8)}</code>
-              <button className="btn" style={{ marginTop: 8 }} onClick={() => void copyIdentity()}>
-                {copied ? 'Copied' : 'Copy id'}
-              </button>
-            </>
-          )}
-          {error && (
-            <>
-              <div className="status err">{error}</div>
-              <button className="btn" onClick={() => void connect()}>Retry wallet</button>
-            </>
-          )}
-          {!connecting && !identityKey && !error && (
-            <button className="btn" onClick={() => void connect()}>Connect wallet</button>
-          )}
         </div>
       </header>
 

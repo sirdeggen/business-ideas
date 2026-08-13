@@ -6,7 +6,7 @@ import { registerReceivable } from '../lib/actions'
 import { errorMessage } from '../lib/config'
 
 export function Register() {
-  const { wallet, identityKey } = useWallet()
+  const { wallet, identityKey, connecting, error: walletError, connect } = useWallet()
   const { url, online } = useOverlay()
   const [invoiceId, setInvoiceId] = useState('INV-2026-')
   const [creditor, setCreditor] = useState('')
@@ -23,7 +23,12 @@ export function Register() {
   }, [identityKey, creditor])
 
   const submit = async (): Promise<void> => {
-    if (!wallet) return
+    if (!wallet) {
+      const ok = await connect()
+      if (!ok) return
+      setStatus('Wallet connected. Click Record again.')
+      return
+    }
     setBusy(true)
     setError(null)
     setStatus(null)
@@ -79,12 +84,12 @@ export function Register() {
       <label htmlFor="memo">Memo</label>
       <input id="memo" value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="What is owed" />
       <div className="row" style={{ marginTop: 16 }}>
-        <button className="btn primary" disabled={!wallet || busy || online === false} onClick={() => void submit()}>
-          {busy ? 'Recording…' : 'Record'}
+        <button className="btn primary" disabled={busy || connecting || online === false} onClick={() => void submit()}>
+          {busy ? 'Recording…' : connecting ? 'Connecting…' : 'Record'}
         </button>
       </div>
       {status && <p className="status ok">{status}</p>}
-      {error && <p className="status err">{error}</p>}
+      {(error || walletError) && <p className="status err">{error || walletError}</p>}
     </section>
   )
 }
