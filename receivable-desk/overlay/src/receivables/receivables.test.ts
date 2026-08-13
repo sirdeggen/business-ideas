@@ -87,7 +87,11 @@ function memoryDb(): { collection: (name: string) => unknown } {
   return { collection: () => collection }
 }
 
-function receivableTx(outputs: ReceivablePayload[], previous?: Transaction): Transaction {
+function receivableTx(
+  outputs: ReceivablePayload[],
+  previous?: Transaction,
+  paymentSats?: number
+): Transaction {
   const tx = new Transaction()
   if (previous) {
     tx.addInput({
@@ -101,6 +105,15 @@ function receivableTx(outputs: ReceivablePayload[], previous?: Transaction): Tra
     tx.addOutput({
       satoshis: 1,
       lockingScript: lockPushDrop(encodeReceivableFields(item), sampleOperatorPublicKey())
+    })
+  }
+  if (paymentSats && paymentSats > 0) {
+    tx.addOutput({
+      satoshis: paymentSats,
+      lockingScript: lockPushDrop(
+        [Array.from(new TextEncoder().encode('brc29-settle-stub'))],
+        sampleOperatorPublicKey()
+      )
     })
   }
   return tx
@@ -169,7 +182,11 @@ describe('receivables topic manager', () => {
     const manager = new ReceivablesTopicManager()
     const open = invoice({ status: 'open' })
     const mint = receivableTx([open])
-    const settle = receivableTx([invoice({ status: 'paid' })], mint)
+    const noPay = receivableTx([invoice({ status: 'paid' })], mint)
+    const missing = await manager.identifyAdmissibleOutputs(noPay.toBEEF(), [0])
+    expect(missing.outputsToAdmit).toEqual([])
+
+    const settle = receivableTx([invoice({ status: 'paid' })], mint, open.amountSats)
     const admitted = await manager.identifyAdmissibleOutputs(settle.toBEEF(), [0])
     expect(admitted.outputsToAdmit).toEqual([0])
 

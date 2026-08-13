@@ -5,7 +5,7 @@ COPY frontend/package.json frontend/package-lock.json* ./frontend/
 WORKDIR /repo/frontend
 RUN npm install
 COPY frontend ./
-ARG VITE_OVERLAY_URL=http://localhost:8081
+ARG VITE_OVERLAY_URL=http://localhost:8082
 ARG VITE_BASE=/
 ENV VITE_OVERLAY_URL=$VITE_OVERLAY_URL
 ENV VITE_BASE=$VITE_BASE

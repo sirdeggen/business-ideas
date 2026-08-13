@@ -1,5 +1,5 @@
 export const DEFAULT_OVERLAY_URL =
-  (import.meta.env.VITE_OVERLAY_URL as string | undefined) || 'http://localhost:8081'
+  (import.meta.env.VITE_OVERLAY_URL as string | undefined) || 'http://localhost:8082'
 
 export const OVERLAY_STORAGE_KEY = 'receivable-desk.overlayUrl'
 
