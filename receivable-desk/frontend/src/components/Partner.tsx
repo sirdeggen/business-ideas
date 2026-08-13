@@ -1,86 +1,66 @@
 import { useEffect, useState } from 'react'
-import { ADVANCE_PERCENT, advanceSats } from '../../../protocol/receivable'
+import { sampleReceivables } from '../../../protocol/samples'
 import { useOverlay } from '../context/OverlayContext'
-import { useWallet } from '../context/WalletContext'
-import { advanceReceivableOnChain, listHeldReceivables } from '../lib/actions'
 import { errorMessage, formatSats } from '../lib/config'
-import { lookupReceivables, recordAdvanceIntent, type OverlayReceivable } from '../lib/overlay'
-import { InvoiceCard } from './InvoiceCard'
+import { lookupReceivables, type OverlayReceivable } from '../lib/overlay'
+import { partyName } from './InvoiceCard'
+
+const ADVANCE_LABEL = 'Advance against this invoice — not available.'
+
+function previewApproved(): OverlayReceivable[] {
+  return sampleReceivables()
+    .filter((item) => item.status === 'approved')
+    .map((item, outputIndex) => ({ ...item, txid: 'sample', outputIndex }))
+}
 
 export function Partner() {
-  const { wallet } = useWallet()
   const { url } = useOverlay()
   const [rows, setRows] = useState<OverlayReceivable[]>([])
-  const [busy, setBusy] = useState<string | null>(null)
-  const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const refresh = async (): Promise<void> => {
-    setRows(await lookupReceivables(url, { approvedUnpaid: true }))
+    try {
+      const book = await lookupReceivables(url, { approvedUnpaid: true })
+      if (book.length > 0) {
+        setRows(book.filter((row) => row.status === 'approved'))
+        setError(null)
+        return
+      }
+    } catch {
+      // Local index is down — show sample rows so the disabled control is visible.
+    }
+    setRows(previewApproved())
   }
 
   useEffect(() => {
     void refresh().catch((err: unknown) => setError(errorMessage(err)))
   }, [url])
 
-  const advance = async (row: OverlayReceivable): Promise<void> => {
-    setBusy(row.invoiceId)
-    setError(null)
-    setStatus(null)
-    try {
-      if (wallet) {
-        const held = (await listHeldReceivables(wallet)).find(
-          (item) => item.item.invoiceId === row.invoiceId && item.item.status === 'approved'
-        )
-        if (held) {
-          const spent = await advanceReceivableOnChain(wallet, url, held)
-          setStatus(`On-chain advance-intent for ${row.invoiceId} in ${spent.txid}. No credit moved.`)
-          await refresh()
-          return
-        }
-      }
-      const recorded = await recordAdvanceIntent(url, row.invoiceId)
-      setStatus(
-        `${recorded.notice} Stub ${ADVANCE_PERCENT}% of ${row.invoiceId} = ${formatSats(recorded.stubAdvanceSats)}.`
-      )
-      await refresh()
-    } catch (err) {
-      setError(errorMessage(err))
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  const book = rows.filter((row) => row.status === 'approved')
-
   return (
     <section className="panel">
-      <h2>Credit partner</h2>
+      <h2>Advance</h2>
       <p>
-        Approved, unpaid invoices only. <strong>Advance {ADVANCE_PERCENT}%</strong> is a stub:
-        it records intent against the receipt. This desk does not originate HELOCs,
-        lend, become a bank, or custody funds.
+        We are not a bank or a lender. Advance is not available.
       </p>
-      <button className="btn" onClick={() => void refresh()}>Refresh book</button>
-      {status && <p className="status ok">{status}</p>}
+      <button className="btn" onClick={() => void refresh()}>Refresh</button>
       {error && <p className="status err">{error}</p>}
-      {book.length === 0 && <p className="hint">No approved unpaid invoices.</p>}
-      {book.map((row) => (
-        <InvoiceCard key={`${row.txid}.${row.outputIndex}`} item={row}>
-          {row.advanceBps === 0 ? (
-            <button
-              className="btn primary"
-              disabled={busy !== null}
-              onClick={() => void advance(row)}
-            >
-              {busy === row.invoiceId
-                ? 'Recording…'
-                : `Advance ${ADVANCE_PERCENT}% (${formatSats(advanceSats(row.amountSats))}) — stub`}
-            </button>
-          ) : (
-            <p className="hint">Intent already recorded. Still not a loan.</p>
-          )}
-        </InvoiceCard>
+      {rows.length === 0 && (
+        <div className="work-row">
+          <div>No invoices in this view.</div>
+          <button className="btn" disabled>{ADVANCE_LABEL}</button>
+        </div>
+      )}
+      {rows.map((row) => (
+        <article key={`${row.txid}.${row.outputIndex}`} className="work-row">
+          <div>
+            <strong>{partyName(row.debtor)}</strong>
+            <span className="work-id">{row.invoiceId}</span>
+          </div>
+          <div className="work-amount">{formatSats(row.amountSats)}</div>
+          <button className="btn" disabled title={ADVANCE_LABEL}>
+            {ADVANCE_LABEL}
+          </button>
+        </article>
       ))}
     </section>
   )

@@ -48,6 +48,30 @@ export function isIsoDate(value: string): boolean {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
 }
 
+const MS_PER_DAY = 86_400_000
+
+export function utcIsoDate(now = new Date()): string {
+  return now.toISOString().slice(0, 10)
+}
+
+/** Days past due. Negative means the invoice is still on time. */
+export function daysLate(dueDate: string, asOf = utcIsoDate()): number {
+  const due = Date.parse(`${dueDate}T00:00:00Z`)
+  const today = Date.parse(`${asOf}T00:00:00Z`)
+  if (Number.isNaN(due) || Number.isNaN(today)) return 0
+  return Math.round((today - due) / MS_PER_DAY)
+}
+
+export const AGING_LABELS = ['on time', 'a bit late', 'call them', 'board should know'] as const
+export type AgingLabel = typeof AGING_LABELS[number]
+
+export function agingLabel(days: number): AgingLabel {
+  if (days <= 0) return 'on time'
+  if (days <= 14) return 'a bit late'
+  if (days <= 45) return 'call them'
+  return 'board should know'
+}
+
 export function isIdentityKey(value: string): boolean {
   return IDENTITY_KEY.test(value.trim())
 }

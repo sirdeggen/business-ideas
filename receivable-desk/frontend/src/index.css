@@ -114,6 +114,40 @@ h1 {
   cursor: not-allowed;
 }
 
+.quiet-panel h2 {
+  font-size: 16px;
+}
+
+.work-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 0.6fr auto;
+  gap: 12px 16px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin: 10px 0;
+  background: #10161a;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+}
+
+.work-id {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.work-amount { color: var(--ink); }
+.work-late { color: var(--muted); }
+.work-actions { margin: 0; justify-content: flex-end; }
+
+.aging-group .subhead {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .panel {
   background: var(--bg-raise);
   border: 1px solid var(--line);
@@ -245,4 +279,6 @@ footer {
   .masthead { display: block; }
   .identity { text-align: left; margin-top: 16px; }
   .meta { grid-template-columns: 1fr; }
+  .work-row { grid-template-columns: 1fr 1fr; }
+  .work-actions { grid-column: 1 / -1; }
 }

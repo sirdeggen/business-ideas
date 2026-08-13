@@ -21,3 +21,11 @@ export function errorMessage(error: unknown): string {
 export function formatSats(sats: number): string {
   return `${sats.toLocaleString()} sats`
 }
+
+export function isGitHubPages(): boolean {
+  if (typeof window === 'undefined') return false
+  return window.location.hostname.endsWith('github.io')
+}
+
+export const LOCAL_DESK_HINT =
+  'Mark paid needs the local desk: cd receivable-desk && docker compose up --build (index :8082, UI :5175). It does not run from GitHub Pages.'

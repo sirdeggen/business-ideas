@@ -1,12 +1,23 @@
 # Receivable desk (v0)
 
-A cheap public **invoice registry** on BSV. Analog of Figure’s DART idea — who is owed, by whom, amount, due, status — so a licensed partner could later advance against the receipt. This v0 is the registry plus a stub credit-partner view.
+Collections for invoices you already issued — **who do we chase today?** Same treasurer, after a few real invoices exist. This is the paper that proves the invoice, not a second product.
 
-**This desk does not originate HELOCs, become a bank, lend, or custody funds.** Advance 70% records intent only. BSV Blockchain only.
+Aging is in English: **on time / a bit late / call them / board should know**. Worklist rows: name, amount, days late, Send reminder / Mark paid.
 
-Sibling payable-invoice app lives in [`invoices/`](../invoices/) (basket `invoices`, topic `tm_invoices`). This desk does not modify that folder. Local compose ports here are offset again so tickets (8080), invoices (8081), and this registry (8082) can run together.
+**This desk does not originate loans, become a bank, lend, or custody funds.** Advance is not available (`Advance against this invoice — not available.`).
 
-Public UI (GitHub Pages, after Bob adds the catalog card): `https://sirdeggen.github.io/business-ideas/receivables/`
+The list is this folder’s own registry (sample invoices here). It does not read Peter’s `invoices/` objects. Overlay is localhost. **Settle does not work from GitHub Pages** — run Docker:
+
+```bash
+cd receivable-desk
+docker compose up --build
+```
+
+Overlay **:8082**, UI **:5175**.
+
+Public UI (GitHub Pages, list only — no settle): `https://sirdeggen.github.io/business-ideas/receivables/`
+
+Sibling payable-invoice app lives in [`invoices/`](../invoices/). This desk does not modify that folder. Local compose ports here are offset so tickets (8080), invoices (8081), and this registry (8082) can run together.
 
 ## Stack
 
@@ -25,49 +36,39 @@ Status changes are spends that create the next-state UTXO (or a paid marker). Du
 - Node 22+ for local frontend and tests
 - Docker + Docker Compose for the local overlay (and the 10 sample invoices)
 
-## Register
+## Record
 
-1. Connect a BRC-100 wallet.
-2. Open **Register**.
-3. Set invoice id, creditor identity, debtor identity, amount in sats, due date, memo.
-4. Approve `createAction`. The wallet creates a 1-sat PushDrop output in basket `receivables` with status `open`.
-5. The app submits Atomic BEEF to overlay topic `tm_receivables`. A second register of the same invoice id is rejected.
-
-## Approve
-
-1. Open **Approve / settle**.
-2. Refresh the basket. An `open` UTXO this wallet holds can be approved.
-3. **Approve** spends the open output and creates an `approved` PushDrop with the same invoice identity, parties, amount, and due date.
+1. Connect a wallet.
+2. Open **Record invoice**.
+3. Set invoice id, who is owed, who owes us, amount, due date, memo.
+4. Approve the wallet prompt. Duplicate invoice ids are rejected.
 
 ## List
 
-**Registry** is the overlay explorer a lender could refresh.
+**Chase** is the treasurer worklist: name, amount, days late, Send reminder / Mark paid. Aging is English: on time / a bit late / call them / board should know.
 
-- Filter `all` / `open` / `approved` / `paid` / `unpaid`
-- Optional creditor or debtor identity key
-- **Refresh overlay** calls `POST /lookup` on `ls_receivables`
+**You owe us** is the public unpaid list. No wallet needed to read it.
 
-Unpaid = `open` or `approved`. Paid markers stay in the index so the invoice id cannot be minted again.
+Unpaid = `open` or `approved`. Paid markers stay in the index so the invoice id cannot be recorded again.
 
-## Settle
+## Mark paid
 
-Settle is a BRC-29 spend of the live receipt:
+Mark paid is a settle of the live receipt. It does **not** run from GitHub Pages.
 
-1. On **Approve / settle**, pick an unpaid UTXO this wallet holds.
-2. **Settle (BRC-29)** spends it to a `paid` marker and adds a BRC-29 P2PKH output of `amountSats` to the creditor identity (`protocolID [2, "3241645161d8"]`, `forSelf: false`, derivation prefix/suffix in `customInstructions`).
-3. Overlay admits the paid marker **only if** a same-tx output pays the billed satoshis. Lookup of that invoice as unpaid is empty.
-4. Copy the JSON package (invoice id + payment txid). The creditor **Accept BRC-29 payment** calls `internalizeAction` with `wallet payment` remittance.
+1. Run `docker compose` so the index is on **:8082** and the UI on **:5175**.
+2. On **Chase**, pick an unpaid invoice this wallet recorded.
+3. **Mark paid** spends it to a `paid` marker and pays the billed amount to whoever is owed.
+4. Overlay admits the paid marker only if that payment is present. Lookup of that invoice as unpaid is empty.
 
-The wallet must be able to fund the BRC-29 output (the invoice amount). The 1-sat registry token is not custody of the invoice funds.
+The wallet must be able to fund the billed amount. The registry token is not custody of the invoice funds.
 
-## Show the registry / credit partner
+## Show the registry / advance
 
-**Credit partner** lists `approved` + unpaid invoices. **Advance 70%** is a stub:
+**You owe us** is the public unpaid list. **Advance** stays visible but disabled:
 
-- If this wallet holds the UTXO, it spends to the same approved state with `advanceBps = 7000` (on-chain intent).
-- Otherwise it `POST /intent` and the overlay records 70% against the receipt.
+**Advance against this invoice — not available.**
 
-No sats of credit move. No loan is originated.
+No calculator. No APR. We are not a bank or a lender.
 
 ## Run the overlay locally
 

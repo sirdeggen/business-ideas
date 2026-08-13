@@ -4,7 +4,9 @@ import { lockPushDrop } from './pushdrop'
 import {
   ADVANCE_BPS,
   MAGIC,
+  agingLabel,
   classifyReceivableTransaction,
+  daysLate,
   encodeReceivableFields,
   parseReceivableFields,
   validateReceivable,
@@ -32,6 +34,17 @@ function invoice(partial: Partial<ReceivablePayload> = {}): ReceivablePayload {
 }
 
 describe('receivable protocol', () => {
+  it('maps due date into English aging, not numeric buckets', () => {
+    const asOf = '2026-08-13'
+    expect(daysLate('2026-08-20', asOf)).toBe(-7)
+    expect(agingLabel(daysLate('2026-08-20', asOf))).toBe('on time')
+    expect(daysLate('2026-08-13', asOf)).toBe(0)
+    expect(agingLabel(0)).toBe('on time')
+    expect(agingLabel(daysLate('2026-08-06', asOf))).toBe('a bit late')
+    expect(agingLabel(daysLate('2026-07-20', asOf))).toBe('call them')
+    expect(agingLabel(daysLate('2026-06-01', asOf))).toBe('board should know')
+  })
+
   it('round-trips PushDrop fields', () => {
     const item = invoice()
     const fields = encodeReceivableFields(item)

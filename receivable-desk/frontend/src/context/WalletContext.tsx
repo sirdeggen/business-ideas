@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useState, type ReactNode } from 'react'
 import type { WalletClient } from '@bsv/sdk'
 import { connectWallet } from '../lib/wallet'
 import { errorMessage } from '../lib/config'
@@ -8,7 +8,7 @@ interface WalletState {
   identityKey: string | null
   connecting: boolean
   error: string | null
-  connect: () => Promise<void>
+  connect: () => Promise<boolean>
 }
 
 const WalletContext = createContext<WalletState | undefined>(undefined)
@@ -19,25 +19,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const connect = async (): Promise<void> => {
+  const connect = async (): Promise<boolean> => {
     setConnecting(true)
     setError(null)
     try {
       const result = await connectWallet()
       setWallet(result.wallet)
       setIdentityKey(result.identityKey)
+      return true
     } catch (err) {
       setError(errorMessage(err))
       setWallet(null)
       setIdentityKey(null)
+      return false
     } finally {
       setConnecting(false)
     }
   }
-
-  useEffect(() => {
-    void connect()
-  }, [])
 
   return (
     <WalletContext.Provider value={{ wallet, identityKey, connecting, error, connect }}>
