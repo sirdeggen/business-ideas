@@ -17,7 +17,7 @@ import { errorMessage, shortKey } from '../lib/config'
 export function Attendee() {
   const { wallet, identityKey } = useWallet()
   const { url } = useOverlay()
-  const { tickets, diagnostic, error: basketError, refresh: refreshBasket } = useBasket()
+  const { tickets, inspection, diagnostic, error: basketError, refresh: refreshBasket } = useBasket()
   const [qrs, setQrs] = useState<Record<string, string>>({})
   const [recipients, setRecipients] = useState<Record<string, string>>({})
   const [incoming, setIncoming] = useState('')
@@ -96,6 +96,17 @@ export function Attendee() {
         {diagnostic && tickets.length > 0 && <p className="hint">{diagnostic}</p>}
         {(basketError || (diagnostic && tickets.length === 0)) && (
           <p className="status err">{basketError || diagnostic}</p>
+        )}
+        {tickets.length === 0 && inspection && inspection.primary.unparsed.length > 0 && (
+          <ul className="hint">
+            {inspection.primary.unparsed
+              .filter((item) => item.spendable !== false && (item.scriptBytes ?? 0) >= 100)
+              .map((item) => (
+                <li key={item.outpoint}>
+                  {item.outpoint}: {item.scriptBytes}B script did not parse — {item.reason}
+                </li>
+              ))}
+          </ul>
         )}
         {tickets.map((held) => {
           const recipient = recipients[held.outpoint] ?? ''

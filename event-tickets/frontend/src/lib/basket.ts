@@ -19,11 +19,15 @@ export interface HeldTicket {
 export interface UnparsedOutput {
   outpoint: string
   reason: string
+  scriptBytes?: number
+  spendable?: boolean
 }
 
 export interface BasketSlice {
   basket: string
   listed: number
+  totalOutputs: number
+  spendable: number
   parsed: number
   unparsed: UnparsedOutput[]
 }
@@ -39,12 +43,14 @@ export interface ListedOutput {
   satoshis?: number | string
   lockingScript?: unknown
   customInstructions?: string
+  spendable?: boolean
   beef?: unknown
   BEEF?: unknown
 }
 
 export interface ListOutputsResult {
   outputs?: ListedOutput[]
+  totalOutputs?: number
   BEEF?: unknown
   beef?: unknown
 }
@@ -142,6 +148,17 @@ export function beefForOutpoint(listedBeef: number[] | undefined, outpoint: stri
   return listedBeef
 }
 
+function scriptByteLength(hex: string): number {
+  return Math.floor(hex.length / 2)
+}
+
+function describeScript(hex: string): string {
+  const bytes = scriptByteLength(hex)
+  if (bytes === 34 && hex.startsWith('21')) return `${bytes}-byte pubkey push (not a ticket)`
+  if (bytes === 33) return '33-byte pubkey (not a ticket)'
+  return `${bytes}-byte script`
+}
+
 function fieldsFromScript(script: LockingScript): { fields: Array<number[] | Uint8Array>, note?: string } {
   const errors: string[] = []
   for (const position of ['before', 'after'] as const) {
@@ -186,24 +203,28 @@ export function inspectListedOutputs(
 
   for (const output of outputs) {
     const outpoint = output.outpoint || '(missing outpoint)'
+    const resolved = resolveLockingScript(output, listedBeef)
+    if (!resolved.hex) {
+      unparsed.push({
+        outpoint,
+        spendable: output.spendable,
+        reason: listedBeef && listedBeef.length > 0
+          ? 'missing lockingScript and outpoint not in listed BEEF'
+          : 'missing lockingScript (listOutputs did not include a script or BEEF)'
+      })
+      continue
+    }
+    const scriptBytes = scriptByteLength(resolved.hex)
     try {
-      const resolved = resolveLockingScript(output, listedBeef)
-      if (!resolved.hex) {
-        unparsed.push({
-          outpoint,
-          reason: listedBeef && listedBeef.length > 0
-            ? 'missing lockingScript and outpoint not in listed BEEF'
-            : 'missing lockingScript (listOutputs did not include a script or BEEF)'
-        })
-        continue
-      }
       const decoded = fieldsFromScript(LockingScript.fromHex(resolved.hex))
       const ticket = parseTicketFields(decoded.fields)
       if (!ticket) {
         const why = explainTicketParse(decoded.fields)
         unparsed.push({
           outpoint,
-          reason: decoded.note ? `${why} (${decoded.note})` : why
+          scriptBytes,
+          spendable: output.spendable,
+          reason: `${describeScript(resolved.hex)}: ${decoded.note ? `${why} (${decoded.note})` : why}`
         })
         continue
       }
@@ -216,11 +237,14 @@ export function inspectListedOutputs(
         basket
       })
     } catch (error) {
+      const detail = error instanceof Error && error.message.trim()
+        ? error.message
+        : 'lockingScript is not a PushDrop ticket'
       unparsed.push({
         outpoint,
-        reason: error instanceof Error && error.message.trim()
-          ? error.message
-          : 'lockingScript is not a PushDrop ticket'
+        scriptBytes,
+        spendable: output.spendable,
+        reason: `${describeScript(resolved.hex)}: ${detail}`
       })
     }
   }
@@ -230,73 +254,122 @@ export function inspectListedOutputs(
     slice: {
       basket,
       listed: outputs.length,
+      totalOutputs: outputs.length,
+      spendable: outputs.filter((item) => item.spendable !== false).length,
       parsed: tickets.length,
       unparsed
     }
   }
 }
 
-async function listOneBasket(listOutputs: ListOutputsFn, basket: string): Promise<{
-  outputs: ListedOutput[]
-  beef?: number[]
-}> {
-  let listed: ListOutputsResult
+function listFailure(basket: string, include: string, error: unknown): string {
+  const detail = error instanceof Error && error.message.trim() ? error.message : String(error ?? '')
+  return detail.trim()
+    ? `listOutputs(${basket}, include=${include}) failed: ${detail}`
+    : `listOutputs(${basket}, include=${include}) failed with no message`
+}
+
+async function tryListOutputs(
+  listOutputs: ListOutputsFn,
+  basket: string,
+  include: 'entire transactions' | 'locking scripts'
+): Promise<{ outputs: ListedOutput[], beef?: number[], totalOutputs: number, error?: string }> {
   try {
-    listed = await listOutputs({
+    const listed = await listOutputs({
       basket,
-      include: 'entire transactions',
+      include,
       includeCustomInstructions: true,
       limit: 1000
     })
-  } catch (error) {
-    const detail = error instanceof Error && error.message.trim() ? error.message : String(error ?? '')
-    throw new Error(
-      detail.trim()
-        ? `listOutputs(${basket}) failed: ${detail}`
-        : `listOutputs(${basket}) failed with no message`
-    )
-  }
-
-  if (!listed || !Array.isArray(listed.outputs)) {
-    const keys = listed && typeof listed === 'object' ? Object.keys(listed).join(', ') : String(listed)
-    throw new Error(`listOutputs(${basket}) did not return outputs (keys: ${keys})`)
-  }
-
-  const outputs = listed.outputs.map((output) => ({ ...output }))
-  const beef = bytesOf(listed.BEEF ?? listed.beef)
-  const missing = outputs.filter((output) => !lockingScriptHex(output.lockingScript))
-  if (missing.length > 0) {
-    try {
-      const withScripts = await listOutputs({
-        basket,
-        include: 'locking scripts',
-        includeCustomInstructions: true,
-        limit: 1000
-      })
-      const byOutpoint = new Map((withScripts.outputs ?? []).map((item) => [item.outpoint, item]))
-      for (const output of outputs) {
-        if (lockingScriptHex(output.lockingScript)) continue
-        const extra = byOutpoint.get(output.outpoint)
-        const hex = lockingScriptHex(extra?.lockingScript)
-        if (hex) output.lockingScript = hex
+    if (!listed || !Array.isArray(listed.outputs)) {
+      const keys = listed && typeof listed === 'object' ? Object.keys(listed).join(', ') : String(listed)
+      return {
+        outputs: [],
+        totalOutputs: typeof listed?.totalOutputs === 'number' ? listed.totalOutputs : 0,
+        error: `listOutputs(${basket}, include=${include}) did not return outputs (keys: ${keys})`
       }
-    } catch {
-      // BEEF decode still runs for outputs that lack a script.
+    }
+    return {
+      outputs: listed.outputs.map((output) => ({ ...output })),
+      beef: bytesOf(listed.BEEF ?? listed.beef),
+      totalOutputs: typeof listed.totalOutputs === 'number' ? listed.totalOutputs : listed.outputs.length
+    }
+  } catch (error) {
+    return { outputs: [], totalOutputs: 0, error: listFailure(basket, include, error) }
+  }
+}
+
+function mergeListedOutputs(primary: ListedOutput[], extra: ListedOutput[]): ListedOutput[] {
+  const byOutpoint = new Map<string, ListedOutput>()
+  for (const output of [...primary, ...extra]) {
+    const existing = byOutpoint.get(output.outpoint)
+    if (!existing) {
+      byOutpoint.set(output.outpoint, { ...output })
+      continue
+    }
+    if (!lockingScriptHex(existing.lockingScript) && lockingScriptHex(output.lockingScript)) {
+      existing.lockingScript = output.lockingScript
+    }
+    if (!existing.customInstructions && output.customInstructions) {
+      existing.customInstructions = output.customInstructions
+    }
+    if (existing.spendable == null && output.spendable != null) {
+      existing.spendable = output.spendable
+    }
+    if (!bytesOf(existing.BEEF ?? existing.beef)) {
+      existing.BEEF = output.BEEF ?? output.beef
     }
   }
-  return { outputs, beef }
+  return [...byOutpoint.values()]
+}
+
+async function listOneBasket(listOutputs: ListOutputsFn, basket: string): Promise<{
+  outputs: ListedOutput[]
+  beef?: number[]
+  totalOutputs: number
+  error?: string
+}> {
+  // Locking scripts first: Desktop already has the 144-byte ticket scripts.
+  // `entire transactions` can throw while assembling BEEF and hide those rows.
+  const scripts = await tryListOutputs(listOutputs, basket, 'locking scripts')
+  const entire = await tryListOutputs(listOutputs, basket, 'entire transactions')
+  const outputs = mergeListedOutputs(scripts.outputs, entire.outputs)
+  const totalOutputs = Math.max(scripts.totalOutputs, entire.totalOutputs, outputs.length)
+  const error = outputs.length === 0
+    ? [scripts.error, entire.error].filter((item): item is string => Boolean(item)).join('; ') || undefined
+    : undefined
+
+  if (outputs.length === 0 && scripts.error && entire.error) {
+    throw new Error(error)
+  }
+
+  return {
+    outputs,
+    beef: entire.beef ?? scripts.beef,
+    totalOutputs,
+    error
+  }
+}
+
+function emptySlice(basket: string): BasketSlice {
+  return { basket, listed: 0, totalOutputs: 0, spendable: 0, parsed: 0, unparsed: [] }
 }
 
 export async function inspectBaskets(listOutputs: ListOutputsFn): Promise<BasketInspection> {
   const primaryListed = await listOneBasket(listOutputs, BASKET)
   const primary = inspectListedOutputs(primaryListed.outputs, primaryListed.beef, BASKET)
+  primary.slice.totalOutputs = Math.max(primary.slice.totalOutputs, primaryListed.totalOutputs)
+  if (primaryListed.error && primary.tickets.length === 0 && primary.slice.listed === 0) {
+    primary.slice.unparsed.push({ outpoint: '(listOutputs)', reason: primaryListed.error })
+  }
 
-  let legacy = inspectListedOutputs([], undefined, LEGACY_BASKET)
+  let legacy = { tickets: [] as HeldTicket[], slice: emptySlice(LEGACY_BASKET) }
   try {
     const legacyListed = await listOneBasket(listOutputs, LEGACY_BASKET)
     legacy = inspectListedOutputs(legacyListed.outputs, legacyListed.beef, LEGACY_BASKET)
+    legacy.slice.totalOutputs = Math.max(legacy.slice.totalOutputs, legacyListed.totalOutputs)
   } catch {
-    // Two-word basket may not exist on this wallet.
+    // Two-word basket may not exist on this wallet. Do not make it the primary list.
   }
 
   return {
@@ -304,6 +377,13 @@ export async function inspectBaskets(listOutputs: ListOutputsFn): Promise<Basket
     primary: primary.slice,
     legacy: legacy.slice
   }
+}
+
+function formatUnparsed(item: UnparsedOutput): string {
+  const spendable = item.spendable === false ? 'unspendable' : item.spendable === true ? 'spendable' : undefined
+  const size = item.scriptBytes != null ? `${item.scriptBytes}B` : undefined
+  const prefix = [spendable, size].filter(Boolean).join(' ')
+  return prefix ? `${item.outpoint} ${prefix}: ${item.reason}` : `${item.outpoint}: ${item.reason}`
 }
 
 export function formatBasketDiagnostic(inspection: BasketInspection): string {
@@ -316,23 +396,24 @@ export function formatBasketDiagnostic(inspection: BasketInspection): string {
 
   const parts: string[] = []
   if (primary.listed > 0) {
-    const first = primary.unparsed[0]
-    const extra = primary.unparsed.length > 1
-      ? `; ${primary.unparsed[1].outpoint}: ${primary.unparsed[1].reason}`
-      : ''
+    const fat = primary.unparsed.filter((item) => (item.scriptBytes ?? 0) >= 100)
+    const shown = (fat.length > 0 ? fat : primary.unparsed).slice(0, 2)
+    const detail = shown.map(formatUnparsed).join('; ')
     parts.push(
-      `${BASKET} has ${primary.listed} outputs; none parsed as Demo Night tickets` +
-      (first ? ` (${first.outpoint}: ${first.reason}${extra})` : '')
+      `${BASKET} has ${primary.listed} outputs` +
+      (primary.spendable ? ` (${primary.spendable} spendable)` : '') +
+      `; none parsed as Demo Night tickets` +
+      (detail ? ` (${detail})` : '')
     )
+  } else if (primary.totalOutputs > 0) {
+    parts.push(
+      `listOutputs(${BASKET}) reported totalOutputs=${primary.totalOutputs} but returned 0 output rows`
+    )
+  } else if (primary.unparsed[0]) {
+    parts.push(primary.unparsed[0].reason)
   }
   if (legacy.listed > 0) {
-    const first = legacy.unparsed[0]
-    parts.push(
-      `also found ${legacy.listed} in “${LEGACY_BASKET}”` +
-      (legacy.parsed === 0 && first ? ` (${first.outpoint}: ${first.reason})` : legacy.parsed > 0
-        ? ` (${legacy.parsed} parsed)`
-        : '')
-    )
+    parts.push(`also found ${legacy.listed} in “${LEGACY_BASKET}”`)
   }
   return parts.join('. ')
 }
