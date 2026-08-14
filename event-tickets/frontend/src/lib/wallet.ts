@@ -1,5 +1,19 @@
 import { WalletClient } from '@bsv/sdk'
-import { originator } from './config'
+import { UNLOCK_RETRY, originator } from './config'
+
+export const CONNECT_MS = 8000
+
+export const CONNECT_TIMEOUT_MESSAGE = UNLOCK_RETRY
+
+export function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer)
+  })
+}
 
 /**
  * Bind the page hostname. `@bsv/simple` `createWallet()` uses originator
@@ -8,8 +22,12 @@ import { originator } from './config'
  * under the other. Mint and list both use this client; Refresh also probes
  * `"simple"` so older createWallet() mints still appear.
  */
-export async function connectWallet(): Promise<{ wallet: WalletClient, identityKey: string }> {
+async function connectWalletInner(): Promise<{ wallet: WalletClient, identityKey: string }> {
   const wallet = new WalletClient('auto', originator())
   const { publicKey } = await wallet.getPublicKey({ identityKey: true })
   return { wallet, identityKey: publicKey }
+}
+
+export async function connectWallet(): Promise<{ wallet: WalletClient, identityKey: string }> {
+  return withTimeout(connectWalletInner(), CONNECT_MS, CONNECT_TIMEOUT_MESSAGE)
 }

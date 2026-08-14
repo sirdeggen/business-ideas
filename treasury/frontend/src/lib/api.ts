@@ -23,9 +23,16 @@ import {
   type Role
 } from '../../../protocol/treasury'
 import { notifySigners } from './messagebox'
-import { loadTreasury, pingOverlay as pingOverlayHost, publishBoardEvent, rememberEvents } from './overlay'
+import {
+  loadTreasury,
+  pingOverlay as pingOverlayHost,
+  publishBoardEvent,
+  rememberEvents,
+  writeCreatedTxid,
+  type TreasuryLoad
+} from './overlay'
 
-export type { Approval, FeedEvent, P2msSig, Proposal, Treasury }
+export type { Approval, FeedEvent, P2msSig, Proposal, Treasury, TreasuryLoad }
 export { pingOverlayHost as pingOverlay }
 
 function beefHex(bytes: number[]): string {
@@ -86,8 +93,8 @@ async function applyEvent(
   return next
 }
 
-export async function getTreasury(id: string): Promise<Treasury | null> {
-  return loadTreasury(id)
+export async function getTreasury(id: string, opts?: { txid?: string }): Promise<TreasuryLoad> {
+  return loadTreasury(id, opts)
 }
 
 export async function createTreasury(
@@ -98,7 +105,7 @@ export async function createTreasury(
     treasurerIdentityKey: string
     signers: Array<{ role: Role; identityKey?: string }>
   }
-): Promise<Treasury> {
+): Promise<{ treasury: Treasury; createdTxid: string }> {
   const treasuryId = crypto.randomUUID()
   const { publicKey } = await wallet.getPublicKey({
     protocolID: PROTOCOL_ID,
@@ -118,11 +125,12 @@ export async function createTreasury(
     identityKey: body.treasurerIdentityKey,
     derivedPubkey: publicKey
   })
-  await publishBoardEvent(wallet, created)
+  const published = await publishBoardEvent(wallet, created)
   await publishBoardEvent(wallet, joined)
+  writeCreatedTxid(treasuryId, published.txid)
   const next = reconstructTreasury(rememberEvents(treasuryId, [created, joined]))
   if (!next) throw new Error('failed to reconstruct treasury after create')
-  return next
+  return { treasury: next, createdTxid: published.txid }
 }
 
 export async function joinTreasury(
@@ -136,11 +144,12 @@ export async function joinTreasury(
 export async function recordFund(
   wallet: WalletClient,
   treasury: Treasury,
-  funded: { satoshis: number; txid: string; vout: number; beef: number[]; lockingScriptHex: string }
+  funded: { satoshis: number; txid: string; vout: number; beef: number[]; lockingScriptHex: string; amountUsd?: string }
 ): Promise<Treasury> {
   return applyEvent(wallet, treasury, makeEvent(treasury.id, 'funded', {
     satoshis: funded.satoshis,
     amountSats: funded.satoshis,
+    amountUsd: funded.amountUsd,
     txid: funded.txid,
     vout: funded.vout,
     lockingScriptHex: funded.lockingScriptHex,
@@ -154,7 +163,9 @@ export async function postProposal(
   body: {
     proposalId: string
     amountSats: number
+    amountUsd?: string
     payeeIdentityKey: string
+    payeeName?: string
     memo: string
     payeeLockingScriptHex: string
     identityKey: string
@@ -216,6 +227,24 @@ export async function postP2msSig(
   }), true)
 }
 
+export async function postDecline(
+  wallet: WalletClient,
+  treasury: Treasury,
+  body: {
+    proposalId: string
+    identityKey: string
+    memo?: string
+    role?: Role
+  }
+): Promise<Treasury> {
+  return applyEvent(wallet, treasury, makeEvent(treasury.id, 'declined', {
+    proposalId: body.proposalId,
+    identityKey: body.identityKey,
+    role: body.role ?? signerRole(treasury, body.identityKey),
+    memo: body.memo
+  }), true)
+}
+
 export async function postPaid(
   wallet: WalletClient,
   treasury: Treasury,
@@ -226,6 +255,7 @@ export async function postPaid(
     proposalId: body.proposalId,
     txid: body.txid,
     amountSats: proposal?.amountSats,
+    amountUsd: proposal?.amountUsd,
     memo: proposal?.memo,
     changeVout: body.changeVout,
     changeSatoshis: proposal?.changeSats,

@@ -12,7 +12,7 @@
     "dev": "tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/server/src/index.js",
-    "test": "tsx --test src/server.test.ts ../protocol/treasury.test.ts ../protocol/events.test.ts",
+    "test": "tsx --test src/server.test.ts ../protocol/treasury.test.ts ../protocol/events.test.ts ../protocol/lookup.test.ts ../protocol/money.test.ts ../protocol/board.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

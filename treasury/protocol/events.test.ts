@@ -6,6 +6,7 @@ import {
   encodeEventFields,
   fundGate,
   inviteHeadline,
+  orderBoardEvents,
   parseEventFields,
   proposeGate,
   reconstructTreasury,
@@ -410,5 +411,111 @@ describe('board event tokens', () => {
     assert.equal(open.reason, '')
     assert.equal(allJoined.vault.length, 0)
     assert.equal(proposeGate({ wallet: {}, treasury: allJoined, busy: false }).disabled, true)
+  })
+
+  it('applies created before joined when both share the same at', () => {
+    const at = '2026-08-14T03:43:41.785Z'
+    const treasurer = '02' + 'c5'.repeat(32)
+    const derived = '02' + 'aa'.repeat(32)
+    const joinedFirst: BoardEvent[] = [
+      event({
+        treasuryId: 'fd99a97b-0415-4036-909d-ca7794a70f04',
+        kind: 'joined',
+        at,
+        payload: { role: 'treasurer', identityKey: treasurer, derivedPubkey: derived }
+      }),
+      event({
+        treasuryId: 'fd99a97b-0415-4036-909d-ca7794a70f04',
+        kind: 'created',
+        at,
+        payload: { name: 'Demo Club', signerCount: 3 }
+      })
+    ]
+    const ordered = orderBoardEvents(joinedFirst)
+    assert.equal(ordered[0].kind, 'created')
+    assert.equal(ordered[1].kind, 'joined')
+    const treasury = reconstructTreasury(joinedFirst)
+    assert.ok(treasury)
+    assert.equal(treasury.name, 'Demo Club')
+    assert.equal(treasury.signers[0].derivedPubkey, derived)
+    assert.ok(treasury.feed.some((item) => item.text.includes('Demo Club opened')))
+    assert.ok(treasury.feed.some((item) => item.text.includes('Treasurer joined')))
+  })
+
+  it('records a decline as a board event and does not mark the proposal paid', () => {
+    const treasurer = key()
+    const chair = key()
+    const derived = [key(), key()]
+    const payee = key()
+    const events: BoardEvent[] = [
+      event({
+        treasuryId: 'club',
+        kind: 'created',
+        at: '2026-08-14T03:00:00.000Z',
+        payload: {
+          name: 'Demo Club',
+          signerCount: 2,
+          signers: [
+            { role: 'treasurer', identityKey: treasurer },
+            { role: 'chair', identityKey: chair }
+          ]
+        }
+      }),
+      event({
+        treasuryId: 'club',
+        kind: 'joined',
+        at: '2026-08-14T03:00:01.000Z',
+        payload: { role: 'treasurer', identityKey: treasurer, derivedPubkey: derived[0] }
+      }),
+      event({
+        treasuryId: 'club',
+        kind: 'joined',
+        at: '2026-08-14T03:00:02.000Z',
+        payload: { role: 'chair', identityKey: chair, derivedPubkey: derived[1] }
+      }),
+      event({
+        treasuryId: 'club',
+        kind: 'proposed',
+        at: '2026-08-14T03:01:00.000Z',
+        payload: {
+          proposalId: 'p-no',
+          amountSats: 12_000,
+          amountUsd: '25.00',
+          payeeName: 'Hall Committee',
+          payeeIdentityKey: payee,
+          memo: 'hall hire',
+          payeeLockingScriptHex: '76a914' + 'ab'.repeat(20) + '88ac',
+          vaultTxid: 'ab'.repeat(32),
+          vaultVout: 0,
+          vaultSatoshis: 50_000,
+          feeSats: 100,
+          changeSats: 37_900,
+          identityKey: treasurer,
+          derivedPubkey: derived[0],
+          role: 'treasurer',
+          signature: [4, 5, 6]
+        }
+      }),
+      event({
+        treasuryId: 'club',
+        kind: 'declined',
+        at: '2026-08-14T03:02:00.000Z',
+        payload: {
+          proposalId: 'p-no',
+          identityKey: chair,
+          role: 'chair',
+          memo: 'hall hire'
+        }
+      })
+    ]
+    const treasury = reconstructTreasury(events)
+    assert.ok(treasury)
+    assert.equal(treasury.proposals[0].status, 'declined')
+    assert.equal(treasury.proposals[0].amountUsd, '25.00')
+    assert.equal(treasury.proposals[0].payeeName, 'Hall Committee')
+    assert.ok(treasury.feed.some((item) => item.text.includes('declined')))
+    assert.ok(treasury.feed.some((item) => item.text.includes('$25.00')))
+    assert.ok(treasury.feed.some((item) => item.text.includes('Hall Committee')))
+    assert.ok(!treasury.feed.some((item) => /\bsats\b/i.test(item.text)))
   })
 })

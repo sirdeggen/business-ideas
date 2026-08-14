@@ -1,0 +1,155 @@
+import assert from 'node:assert/strict'
+import { describe, it } from 'node:test'
+import { reconstructTreasury, type BoardEvent } from './events.ts'
+import {
+  DEMO_CLUB_CREATE_TX,
+  DEMO_CLUB_ID,
+  DEMO_CLUB_JOIN_TX,
+  MINUTES_COPY,
+  keepLastGoodEvents,
+  legalAnytxQuery,
+  minutesEmptyCopy,
+  overlayBanner,
+  reconstructPreferringCache,
+  relatedTxids,
+  resolveCreateTxid,
+  retryEmptyLookup,
+  resolveMinutesView,
+  shortPageIsEof,
+  shouldRetryEmptyLookup
+} from './lookup.ts'
+
+const DEMO = 'fd99a97b-0415-4036-909d-ca7794a70f04'
+
+function created(at = '2026-08-14T03:43:00.000Z'): BoardEvent {
+  return {
+    treasuryId: DEMO,
+    kind: 'created',
+    at,
+    payload: { name: 'Demo Club', signerCount: 3 }
+  }
+}
+
+function joined(at = '2026-08-14T03:43:10.000Z'): BoardEvent {
+  return {
+    treasuryId: DEMO,
+    kind: 'joined',
+    at,
+    payload: { role: 'treasurer', identityKey: '02' + 'c5'.repeat(32), derivedPubkey: '02' + 'aa'.repeat(32) }
+  }
+}
+
+describe('flaky overlay lookup + empty-state copy', () => {
+  it('retries a known ?treasury= id when ls_anytx comes back empty', async () => {
+    assert.equal(shouldRetryEmptyLookup({ treasuryId: DEMO, found: 0, attempt: 1 }), true)
+    assert.equal(shouldRetryEmptyLookup({ treasuryId: DEMO, found: 2, attempt: 1 }), false)
+    assert.equal(shouldRetryEmptyLookup({ treasuryId: '', found: 0, attempt: 1 }), false)
+    assert.equal(shouldRetryEmptyLookup({ treasuryId: DEMO, found: 0, attempt: 3 }), false)
+
+    let calls = 0
+    const result = await retryEmptyLookup(async () => {
+      calls += 1
+      if (calls < 3) return []
+      return [created(), joined()]
+    }, { delayMs: 0, pause: async () => undefined })
+    assert.equal(result.attempts, 3)
+    assert.equal(result.failed, false)
+    assert.equal(result.items.length, 2)
+  })
+
+  it('keeps last-good minutes when a later lookup fails or returns empty', () => {
+    const cached = [created(), joined()]
+    const keptEmpty = keepLastGoodEvents(cached, [], true)
+    assert.equal(keptEmpty.length, 2)
+    const keptFail = keepLastGoodEvents(cached, [], true)
+    assert.deepEqual(keptFail, cached)
+
+    const live = reconstructTreasury([created(), joined()])
+    const wiped = resolveMinutesView({
+      inFlight: false,
+      overlayFailed: false,
+      live: null,
+      cached: live
+    })
+    assert.ok(wiped.board)
+    assert.equal(wiped.board?.name, 'Demo Club')
+    assert.equal(wiped.usedCache, true)
+    assert.equal(wiped.emptyCopy, null)
+    assert.notEqual(wiped.emptyCopy, MINUTES_COPY.empty)
+
+    const failed = resolveMinutesView({
+      inFlight: false,
+      overlayFailed: true,
+      live: null,
+      cached: live
+    })
+    assert.equal(failed.status, 'failed')
+    assert.ok(failed.board)
+    assert.equal(failed.emptyCopy, null)
+    assert.equal(overlayBanner(failed.status, true), 'Couldn’t refresh minutes')
+
+    const reconstructed = reconstructPreferringCache([], cached, true)
+    assert.ok(reconstructed)
+    assert.equal(reconstructed.name, 'Demo Club')
+    assert.ok(reconstructed.feed.some((item) => item.text.includes('Demo Club opened')))
+  })
+
+  it('uses honest empty-state copy: checking vs failed vs confirmed empty', () => {
+    assert.equal(
+      minutesEmptyCopy({ status: 'checking', hasMinutes: false }),
+      MINUTES_COPY.checking
+    )
+    assert.equal(
+      minutesEmptyCopy({ status: 'failed', hasMinutes: false }),
+      MINUTES_COPY.failed
+    )
+    assert.equal(
+      minutesEmptyCopy({ status: 'online', hasMinutes: false }),
+      MINUTES_COPY.empty
+    )
+    assert.equal(minutesEmptyCopy({ status: 'online', hasMinutes: true }), null)
+    assert.equal(overlayBanner('checking'), 'Looking up minutes…')
+    assert.equal(overlayBanner('online'), 'Minutes up to date')
+    assert.equal(overlayBanner('online', true), 'Minutes up to date')
+    assert.equal(overlayBanner('failed'), 'Couldn’t refresh minutes')
+
+    const inFlight = resolveMinutesView({
+      inFlight: true,
+      overlayFailed: false,
+      live: null,
+      cached: null
+    })
+    assert.equal(inFlight.status, 'checking')
+    assert.equal(inFlight.emptyCopy, MINUTES_COPY.checking)
+    assert.notEqual(inFlight.emptyCopy, MINUTES_COPY.empty)
+
+    const failedBare = resolveMinutesView({
+      inFlight: false,
+      overlayFailed: true,
+      live: null,
+      cached: null
+    })
+    assert.equal(failedBare.emptyCopy, MINUTES_COPY.failed)
+    assert.match(failedBare.emptyCopy ?? '', /not missing/)
+  })
+
+  it('queries ls_anytx by create txid, never by treasury uuid, and does not treat a short page as EOF', () => {
+    assert.equal(resolveCreateTxid(DEMO_CLUB_ID), DEMO_CLUB_CREATE_TX)
+    assert.equal(
+      resolveCreateTxid(DEMO_CLUB_ID, 'ec4f752843a15c3bb065286e6deefb34041f3795699516b6eafcc80438febb69'),
+      DEMO_CLUB_CREATE_TX
+    )
+    assert.deepEqual(relatedTxids(DEMO_CLUB_ID, DEMO_CLUB_CREATE_TX), [DEMO_CLUB_JOIN_TX])
+
+    const byTx = legalAnytxQuery({ txid: DEMO_CLUB_CREATE_TX })
+    assert.deepEqual(byTx, { txid: DEMO_CLUB_CREATE_TX })
+    assert.equal('treasuryId' in byTx, false)
+
+    const page = legalAnytxQuery({ limit: 50, skip: 0 })
+    assert.equal(page.limit, 50)
+    assert.equal('treasuryId' in page, false)
+    assert.equal(shortPageIsEof(49, 50), false)
+    assert.equal(shortPageIsEof(78, 100), false)
+    assert.equal(shortPageIsEof(0, 100), false)
+  })
+})

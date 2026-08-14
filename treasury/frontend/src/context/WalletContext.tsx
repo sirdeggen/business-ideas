@@ -8,7 +8,7 @@ interface WalletState {
   identityKey: string | null
   connecting: boolean
   error: string | null
-  connect: () => Promise<void>
+  connect: () => Promise<{ wallet: WalletClient; identityKey: string }>
 }
 
 const WalletContext = createContext<WalletState | undefined>(undefined)
@@ -19,17 +19,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const connect = async (): Promise<void> => {
+  const connect = async (): Promise<{ wallet: WalletClient; identityKey: string }> => {
     setConnecting(true)
     setError(null)
     try {
       const result = await connectWallet()
       setWallet(result.wallet)
       setIdentityKey(result.identityKey)
+      return result
     } catch (err) {
       setError(errorMessage(err))
       setWallet(null)
       setIdentityKey(null)
+      throw err
     } finally {
       setConnecting(false)
     }

@@ -19,8 +19,7 @@ import {
   DESKTOP_INSTALL_URL,
   errorMessage,
   formatSats,
-  overlayCheckFailed,
-  overlayHint
+  overlayCheckFailed
 } from '../lib/config'
 import { loadChaseRows, saveChaseRows } from '../lib/persist'
 import {
@@ -52,6 +51,7 @@ export function Desk() {
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
   const canSettle = online === true
 
   const refresh = async (connectIfNeeded = false): Promise<void> => {
@@ -75,19 +75,20 @@ export function Desk() {
       setHeld([])
     }
 
-    const showCombined = (overlayRows: OverlayReceivable[], previewMode: boolean): void => {
+    const finish = (overlayRows: OverlayReceivable[], previewMode: boolean): void => {
       const combined = unionChaseRows(overlayRows, heldItems, remembered)
       if (combined.length > 0) saveChaseRows(combined)
       setRows(combined)
       setPreview(previewMode)
       setError(notes.length > 0 ? notes.join(' ') : null)
+      setLoaded(true)
     }
 
     try {
       const lookup = await inspectLookupReceivables(url, { status: 'unpaid' })
       const lookupNote = formatLookupDiagnostic(lookup, usesPublicAnytx(url))
       if (lookupNote) notes.push(lookupNote)
-      showCombined(lookup.rows, false)
+      finish(lookup.rows, false)
       return
     } catch (err) {
       console.error('Desk lookup failed', err)
@@ -100,6 +101,7 @@ export function Desk() {
       setRows(fromBasket)
       setPreview(false)
       setError(notes.length > 0 ? notes.join(' ') : null)
+      setLoaded(true)
       return
     }
 
@@ -107,13 +109,17 @@ export function Desk() {
       setRows(remembered)
       setPreview(false)
       setError(notes.length > 0 ? notes.join(' ') : null)
+      setLoaded(true)
       return
     }
-    showCombined(previewRows(), true)
+    finish(previewRows(), true)
   }
 
   useEffect(() => {
-    void refresh().catch((err: unknown) => setError(errorMessage(err)))
+    void refresh().catch((err: unknown) => {
+      setError(errorMessage(err))
+      setLoaded(true)
+    })
   }, [wallet, url])
 
   const grouped = useMemo(() => {
@@ -169,7 +175,7 @@ export function Desk() {
     }
   }
 
-  const allEmpty = rows.length === 0
+  const allEmpty = loaded && rows.length === 0 && !preview
 
   return (
     <section className="panel">
@@ -179,10 +185,7 @@ export function Desk() {
         registry — not a second product.
       </p>
       {preview && (
-        <p className="hint">
-          Showing sample invoices because the local index is not running.
-          {` ${overlayHint(url)}`}
-        </p>
+        <p className="hint">Showing sample invoices because the local index is not running.</p>
       )}
       <button className="btn" onClick={() => void refresh(true)}>Refresh list</button>
       {status && <p className="status ok">{status}</p>}
@@ -199,16 +202,16 @@ export function Desk() {
         <p className="hint">{CHROME_ALLOW_HINT}</p>
       )}
 
-      {allEmpty && !preview && (
+      {allEmpty && (
         <p className="hint">
           No open invoices yet — <a href="../invoices/">create one</a>
         </p>
       )}
 
-      {AGING_LABELS.map((label) => (
+      {(preview || rows.length > 0) && AGING_LABELS.map((label) => (
         <div key={label} className={`aging-group aging-${label.replace(/\s+/g, '-')}`}>
           <h3 className="subhead">{label}</h3>
-          {grouped[label].length === 0 && !allEmpty && <p className="hint">None.</p>}
+          {grouped[label].length === 0 && <p className="hint">None.</p>}
           {grouped[label].map((row) => {
             const late = Math.max(0, daysLate(row.dueDate))
             const settleReady = canSettle && !!wallet && held.some(
