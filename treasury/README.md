@@ -86,9 +86,9 @@ DATA_DIR=./data npm run dev   # :8080, optional
 
 ## The 2-of-3 flow
 
-1. **Treasurer** connects a BSV wallet. Create a treasury named for the club. Optionally paste the chair and bookkeeper identity keys (or leave blank). Copy the invite link (`?treasury=<id>`).
+1. **Treasurer** connects a BSV wallet. Create a treasury named for the club. Optionally paste the chair and bookkeeper identity keys (or leave blank). **Copy invite** is the next step (`?treasury=<id>`).
 2. **Chair** and **bookkeeper** each open the link (readable without a wallet), connect a wallet, click **Join**. One wallet may hold more than one remaining seat. When the seats have joined, the P2MS vault script is live. Threshold counts distinct **roles**, so treasurer+chair on the same identity is still 2-of-3.
-3. Anyone with sats clicks **Fund from this wallet** and approves `createAction`. Coins lock to the 2-of-3 script (basket `treasury`). A 1-sat announcement records the outpoint + BEEF.
+3. Fund stays disabled until every seat has joined, and the button says to invite chair and bookkeeper first (tooltip and inline copy). There is no 1-of-1 pending vault. Once the 2-of-n script exists, anyone with sats clicks **Fund from this wallet**. A 1-sat announcement records the outpoint + BEEF.
 4. A signer **proposes**: sats, payee identity key, memo. Their wallet signs the proposal. The event goes to overlay and Message Box.
 5. A second signer clicks **Approve**. Threshold is met. Each of two signers clicks **Sign vault spend** (Bitcoin sighash, still via WalletClient). Then **Broadcast pay**. The paid announcement is a *separate* 1-sat tx — the P2MS spend itself is not a PushDrop.
 6. **Export** CSV or PDF for the month (`YYYY-MM`) from the reconstructed board.

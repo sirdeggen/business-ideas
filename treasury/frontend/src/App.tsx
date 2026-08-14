@@ -11,6 +11,7 @@ import {
   type Role
 } from '../../protocol/treasury'
 import { downloadCsv, downloadPdf } from '../../protocol/export'
+import { fundGate, inviteHeadline, proposeGate } from '../../protocol/events'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import {
   createTreasury,
@@ -93,6 +94,9 @@ function Shell() {
 
   const seats = treasury ? mySeats(treasury, identityKey) : []
   const joinable = treasury ? openSeat(treasury, identityKey) : undefined
+  const invite = treasury ? inviteHeadline(treasury) : null
+  const fund = fundGate({ wallet, treasury, busy: Boolean(busy) })
+  const propose = proposeGate({ wallet, treasury, busy: Boolean(busy) })
   const vaultSats = useMemo(
     () => treasury?.vault.reduce((sum, utxo) => sum + utxo.satoshis, 0) ?? 0,
     [treasury]
@@ -248,16 +252,35 @@ function Shell() {
                   const url = new URL(window.location.href)
                   url.searchParams.set('treasury', created.id)
                   window.history.replaceState({}, '', url)
-                  setNotice(`Created ${created.name}. Invite the other signers.`)
+                  setNotice(`Created ${created.name}. ${inviteHeadline(created) ?? 'Board is complete'}.`)
                 })}
               >
                 Create treasury
               </button>
-              <button className="btn" disabled={!treasury} onClick={() => void copyInvite()}>
+              <button
+                className={invite ? 'btn primary' : 'btn'}
+                disabled={!treasury}
+                onClick={() => void copyInvite()}
+              >
                 Copy invite link
               </button>
             </div>
           </section>
+
+          {treasury && invite && (
+            <section className="panel">
+              <h2>{invite}</h2>
+              <p>
+                The 2-of-{treasury.signers.length} vault does not exist until every seat has joined.
+                Copy the invite link and send it to the empty seats. Fund stays locked until then.
+              </p>
+              <div className="row">
+                <button className="btn primary" onClick={() => void copyInvite()}>
+                  Copy invite link
+                </button>
+              </div>
+            </section>
+          )}
 
           <section className="panel">
             <h2>2. Join as a signer</h2>
@@ -304,14 +327,19 @@ function Shell() {
             <h2>3. Fund the vault</h2>
             <p>
               Pays a BRC-47 2-of-{treasury?.signers.length ?? 3} locking script.
-              Anyone with sats can fund. Current vault: {vaultSats.toLocaleString()} sats.
+              Anyone with sats can fund once every seat has joined. Current vault: {vaultSats.toLocaleString()} sats.
             </p>
+            {fund.reason && <p className="hint">{fund.reason}</p>}
+            {!fund.reason && vaultSats === 0 && (
+              <p className="hint">Empty vault — fund from this wallet.</p>
+            )}
             <label>Amount (sats)</label>
             <input value={fundSats} onChange={(event) => setFundSats(event.target.value)} />
             <div className="row">
               <button
                 className="btn primary"
-                disabled={!wallet || !treasury?.lockingScriptHex || Boolean(busy)}
+                disabled={fund.disabled}
+                title={fund.reason || undefined}
                 onClick={() => void run('Funding vault…', async () => {
                   if (!wallet || !treasury) return
                   const funded = await fundVault(wallet, treasury, Number(fundSats))
@@ -341,10 +369,12 @@ function Shell() {
             <label>Memo</label>
             <input value={memo} onChange={(event) => setMemo(event.target.value)} />
             <p className="hint">Fee is {FEE_SATS} sats, taken from the vault. Change returns to the same 2-of-n script.</p>
+            {propose.reason && <p className="hint">{propose.reason}</p>}
             <div className="row">
               <button
                 className="btn primary"
-                disabled={!wallet || !identityKey || !treasury || Boolean(busy)}
+                disabled={propose.disabled}
+                title={propose.reason || undefined}
                 onClick={() => void run('Proposing…', async () => {
                   if (!wallet || !identityKey || !treasury) return
                   if (!isIdentityKey(payee)) throw new Error('Payee must be a 66-hex identity key')

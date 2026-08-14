@@ -189,9 +189,76 @@ function feedLine(event: BoardEvent): string {
   }
 }
 
-function maybeLockingScript(signers: Signer[], threshold: number): string | undefined {
-  if (!signers.every((signer) => signer.derivedPubkey) || signers.length < 2) return undefined
-  return p2msLock(signers.map((signer) => signer.derivedPubkey as string), threshold).toHex()
+/** 2-of-2 / 2-of-3 only. No lock until every required seat has a derivedPubkey. */
+export function vaultLockFromJoined(signers: Signer[]): {
+  pubkeys: string[]
+  threshold: number
+  lockingScriptHex: string
+} | null {
+  if (signers.length < 2 || !signers.every((signer) => signer.derivedPubkey)) return null
+  const pubkeys = signers.map((signer) => signer.derivedPubkey as string)
+  return {
+    pubkeys,
+    threshold: 2,
+    lockingScriptHex: p2msLock(pubkeys, 2).toHex()
+  }
+}
+
+function applyJoinedLock(treasury: Treasury): void {
+  treasury.lockingScriptHex = vaultLockFromJoined(treasury.signers)?.lockingScriptHex
+}
+
+export function seatsWaiting(treasury: Treasury): Signer[] {
+  return treasury.signers.filter((signer) => !signer.derivedPubkey)
+}
+
+export function inviteHeadline(treasury: Treasury): string | null {
+  const waiting = seatsWaiting(treasury)
+  if (waiting.length === 0) return null
+  const names = waiting.map((signer) => ROLE_LABEL[signer.role].toLowerCase())
+  if (names.includes('chair') && names.includes('bookkeeper')) return 'Invite chair and bookkeeper'
+  if (names.length === 1) return `Invite the ${names[0]}`
+  return `Invite ${names.join(' and ')}`
+}
+
+export function fundGate(input: {
+  wallet: unknown
+  treasury: Treasury | null | undefined
+  busy?: boolean
+}): { disabled: boolean; reason: string } {
+  if (!input.treasury) return { disabled: true, reason: 'Create or load a treasury first.' }
+  if (!input.wallet) return { disabled: true, reason: 'Connect a BSV wallet to fund.' }
+  if (input.busy) return { disabled: true, reason: 'Wait for the current action to finish.' }
+  if (!vaultLockFromJoined(input.treasury.signers)) {
+    const headline = inviteHeadline(input.treasury) ?? 'Invite the other signers'
+    return {
+      disabled: true,
+      reason: `${headline} first. Fund unlocks when every seat has joined.`
+    }
+  }
+  return { disabled: false, reason: '' }
+}
+
+export function fundActionDisabled(input: {
+  wallet: unknown
+  treasury: Treasury | null | undefined
+  busy?: boolean
+}): boolean {
+  return fundGate(input).disabled
+}
+
+export function proposeGate(input: {
+  wallet: unknown
+  treasury: Treasury | null | undefined
+  busy?: boolean
+}): { disabled: boolean; reason: string } {
+  if (!input.treasury) return { disabled: true, reason: 'Create or load a treasury first.' }
+  if (!input.wallet) return { disabled: true, reason: 'Connect a BSV wallet to propose.' }
+  if (input.busy) return { disabled: true, reason: 'Wait for the current action to finish.' }
+  if (input.treasury.vault.length === 0) {
+    return { disabled: true, reason: 'Fund the vault before proposing a payment.' }
+  }
+  return { disabled: false, reason: '' }
 }
 
 function findProposal(treasury: Treasury, proposalId: string): Proposal | undefined {
@@ -241,7 +308,7 @@ export function reconstructTreasury(events: BoardEvent[]): Treasury | null {
           slot.derivedPubkey = asString(event.payload.derivedPubkey).toLowerCase()
           slot.joinedAt = event.at
         }
-        treasury.lockingScriptHex = maybeLockingScript(treasury.signers, treasury.threshold)
+        applyJoinedLock(treasury)
       }
     }
 

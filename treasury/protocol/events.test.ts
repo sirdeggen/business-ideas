@@ -4,7 +4,10 @@ import { PrivateKey } from '@bsv/sdk'
 import {
   EVENT_TAG,
   encodeEventFields,
+  fundGate,
+  inviteHeadline,
   parseEventFields,
+  proposeGate,
   reconstructTreasury,
   type BoardEvent
 } from './events.ts'
@@ -325,5 +328,87 @@ describe('board event tokens', () => {
     assert.ok(afterVault)
     assert.equal(afterVault.proposals[0].p2msSigs.length, 2)
     assert.deepEqual(afterVault.proposals[0].p2msSigs.map((row) => row.role), ['treasurer', 'chair'])
+  })
+
+  it('keeps Fund disabled after create until every seat has joined, and says invite first', () => {
+    const treasurer = key()
+    const chair = key()
+    const bookkeeper = key()
+    const derived = [key(), key(), key()]
+    const created = reconstructTreasury([
+      event({
+        treasuryId: 'fresh',
+        kind: 'created',
+        at: '2026-08-14T03:00:00.000Z',
+        payload: {
+          name: 'Demo Club',
+          signerCount: 3,
+          signers: [
+            { role: 'treasurer', identityKey: treasurer },
+            { role: 'chair' },
+            { role: 'bookkeeper' }
+          ]
+        }
+      }),
+      event({
+        treasuryId: 'fresh',
+        kind: 'joined',
+        at: '2026-08-14T03:00:01.000Z',
+        payload: { role: 'treasurer', identityKey: treasurer, derivedPubkey: derived[0] }
+      })
+    ])
+    assert.ok(created)
+    assert.equal(created.lockingScriptHex, undefined)
+    assert.equal(created.vault.length, 0)
+    assert.equal(inviteHeadline(created), 'Invite chair and bookkeeper')
+    const blocked = fundGate({ wallet: {}, treasury: created, busy: false })
+    assert.equal(blocked.disabled, true)
+    assert.match(blocked.reason, /Invite chair and bookkeeper/)
+    assert.match(blocked.reason, /every seat has joined/)
+    assert.equal(proposeGate({ wallet: {}, treasury: created, busy: false }).reason, 'Fund the vault before proposing a payment.')
+
+    const allJoined = reconstructTreasury([
+      event({
+        treasuryId: 'fresh',
+        kind: 'created',
+        at: '2026-08-14T03:00:00.000Z',
+        payload: {
+          name: 'Demo Club',
+          signerCount: 3,
+          signers: [
+            { role: 'treasurer', identityKey: treasurer },
+            { role: 'chair' },
+            { role: 'bookkeeper' }
+          ]
+        }
+      }),
+      event({
+        treasuryId: 'fresh',
+        kind: 'joined',
+        at: '2026-08-14T03:00:01.000Z',
+        payload: { role: 'treasurer', identityKey: treasurer, derivedPubkey: derived[0] }
+      }),
+      event({
+        treasuryId: 'fresh',
+        kind: 'joined',
+        at: '2026-08-14T03:00:02.000Z',
+        payload: { role: 'chair', identityKey: chair, derivedPubkey: derived[1] }
+      }),
+      event({
+        treasuryId: 'fresh',
+        kind: 'joined',
+        at: '2026-08-14T03:00:03.000Z',
+        payload: { role: 'bookkeeper', identityKey: bookkeeper, derivedPubkey: derived[2] }
+      })
+    ])
+    assert.ok(allJoined)
+    assert.ok(allJoined.lockingScriptHex)
+    assert.equal(allJoined.threshold, 2)
+    assert.equal(inviteHeadline(allJoined), null)
+    const open = fundGate({ wallet: {}, treasury: allJoined, busy: false })
+    assert.equal(open.disabled, false)
+    assert.equal(open.reason, '')
+    assert.equal(allJoined.vault.length, 0)
+    assert.equal(proposeGate({ wallet: {}, treasury: allJoined, busy: false }).disabled, true)
   })
 })

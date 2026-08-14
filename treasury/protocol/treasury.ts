@@ -75,11 +75,11 @@ export function bytesToHex(bytes: number[]): string {
 
 /** BRC-47 bare M-of-N locking script. Pubkeys are compressed 33-byte hex. */
 export function p2msLock(pubkeys: string[], threshold: number): LockingScript {
-  if (threshold < 1 || threshold > pubkeys.length) {
-    throw new Error(`threshold must be 1..${pubkeys.length}`)
-  }
   if (pubkeys.length < 2 || pubkeys.length > 3) {
     throw new Error('treasury vault is 2-of-2 or 2-of-3')
+  }
+  if (threshold < 1 || threshold > pubkeys.length) {
+    throw new Error(`threshold must be 1..${pubkeys.length}`)
   }
   for (const key of pubkeys) {
     if (!isDerivedPubkey(key)) throw new Error(`not a compressed pubkey: ${key}`)
@@ -311,7 +311,6 @@ export function vaultKeyID(
   if (first?.role === role) return treasuryId
   return `${treasuryId}:${role}`
 }
-
 export function thresholdMet(approvalCount: number, threshold: number): boolean {
   return approvalCount >= threshold
 }

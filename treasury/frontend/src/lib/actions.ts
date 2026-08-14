@@ -65,7 +65,9 @@ export async function fundVault(
   treasury: Treasury,
   satoshis: number
 ): Promise<{ txid: string; vout: number; beef: number[]; satoshis: number }> {
-  if (!treasury.lockingScriptHex) throw new Error('Wait until every signer has joined')
+  if (!treasury.lockingScriptHex) {
+    throw new Error('Invite the other signers first. Fund unlocks when every seat has joined.')
+  }
   if (satoshis < 1) throw new Error('Fund at least 1 sat')
   const pubkeys = treasury.signers.map((signer) => {
     if (!signer.derivedPubkey) throw new Error(`${signer.role} has not joined`)
