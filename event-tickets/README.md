@@ -30,7 +30,7 @@ Local Docker `tm_tickets` / `ls_tickets` is an optional override: set **Overlay 
 
 1. Connect the organizer wallet (needs satoshis for 1 sat per ticket plus fees).
 2. Open **organizer**.
-3. Choose N (1–20) and click **Mint tickets**.
+3. Choose N (1–20) and click **Make tickets**.
 4. Approve `createAction`. Each output is a PushDrop ticket in basket `eventtickets`.
 5. The app broadcasts the Atomic BEEF with `TopicBroadcaster(['tm_anytx'])` (or `tm_tickets` when the Overlay URL is localhost). Public `tm_anytx` stores all outputs; the UI keeps Demo Night tickets only.
 
@@ -42,12 +42,9 @@ Local Docker `tm_tickets` / `ls_tickets` is an optional override: set **Overlay 
 
 ## Transfer
 
-Transfer is a spend. The old UTXO dies; a new PushDrop UTXO is locked to the recipient identity key.
+The attendee tab is “Send to a friend” (email / phone). Delivery is not wired — the button stays disabled. There is no Accept-a-transfer JSON / `internalizeAction` UI.
 
-1. On **attendee**, paste the recipient’s 66-hex identity key (`getPublicKey({ identityKey: true })`).
-2. Approve the spend (`createAction` + `signAction` with `PushDrop.unlock`).
-3. Overlay admits the new output only if it preserves event id + serial.
-4. Give the recipient the JSON handoff package. They paste it into **Accept a transfer**, which calls `internalizeAction` with `basket insertion` so their wallet tracks the UTXO. Without that step the coins are on-chain at their key but not in their basket UI.
+Identity-key spend stays under Advanced, collapsed, and only after a ticket exists.
 
 ## Redeem (door)
 
