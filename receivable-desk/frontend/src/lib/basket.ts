@@ -2,6 +2,7 @@ import { Beef, LockingScript, PushDrop, Transaction } from '@bsv/sdk'
 import {
   BASKET,
   explainReceivableParse,
+  isIdentityKey,
   parseReceivableFields,
   type ReceivablePayload
 } from '../../../protocol/receivable'
@@ -437,19 +438,61 @@ export function heldToOverlayRow(held: HeldReceivable): ChaseRow {
   }
 }
 
+export function chaseOutpointKey(row: Pick<ChaseRow, 'txid' | 'outputIndex'>): string {
+  return `${row.txid}.${row.outputIndex}`
+}
+
+export function chaseIdentityKey(row: Pick<ChaseRow, 'invoiceId' | 'creditor' | 'debtor' | 'amountSats' | 'dueDate'>): string {
+  return [row.invoiceId, row.creditor, row.debtor, String(row.amountSats), row.dueDate].join('\0')
+}
+
+function preferParty(primary: string, other: string): string {
+  if (isIdentityKey(primary) && other.trim() && !isIdentityKey(other)) return other
+  return primary
+}
+
+function preferAmount(primary: number, other: number): number {
+  if (primary <= 1 && other > 1) return other
+  return primary
+}
+
+export function mergeChaseRow(primary: ChaseRow, other: ChaseRow): ChaseRow {
+  return {
+    ...primary,
+    creditor: preferParty(primary.creditor, other.creditor),
+    debtor: preferParty(primary.debtor, other.debtor),
+    amountSats: preferAmount(primary.amountSats, other.amountSats),
+    memo: primary.memo || other.memo
+  }
+}
+
+function findChaseIndex(rows: ChaseRow[], row: ChaseRow): number {
+  const outpoint = chaseOutpointKey(row)
+  const identity = chaseIdentityKey(row)
+  return rows.findIndex((existing) => (
+    chaseOutpointKey(existing) === outpoint
+    || chaseIdentityKey(existing) === identity
+    || existing.invoiceId === row.invoiceId
+  ))
+}
+
 export function unionChaseRows(
   overlayRows: ChaseRow[],
   held: HeldReceivable[],
   remembered: ChaseRow[] = []
 ): ChaseRow[] {
-  const byKey = new Map<string, ChaseRow>()
+  const rows: ChaseRow[] = []
   const add = (row: ChaseRow): void => {
     if (row.status === 'paid') return
-    const key = `${row.txid}.${row.outputIndex}`
-    if (!byKey.has(key)) byKey.set(key, row)
+    const index = findChaseIndex(rows, row)
+    if (index >= 0) {
+      rows[index] = mergeChaseRow(rows[index], row)
+      return
+    }
+    rows.push(row)
   }
   for (const row of overlayRows) add(row)
   for (const item of held) add(heldToOverlayRow(item))
   for (const row of remembered) add(row)
-  return [...byKey.values()]
+  return rows
 }

@@ -30,7 +30,7 @@ import {
 } from './basket'
 import { originator } from './config'
 import { lookupReceivables, submitReceivableTx } from './overlay'
-import { chaseRowFromRegister, rememberChaseRow } from './persist'
+import { chaseRowFromRegister, loadChaseRows, rememberChaseRow } from './persist'
 import { CONNECT_MS, CONNECT_TIMEOUT_MESSAGE, withTimeout } from './wallet'
 
 export type { BasketInspection, HeldReceivable } from './basket'
@@ -149,6 +149,9 @@ export async function registerReceivable(
       throw new Error('Who is owed and who owes us must be different.')
     }
     throw new Error(invalid)
+  }
+  if (loadChaseRows().some((row) => row.invoiceId === item.invoiceId)) {
+    throw new Error(`Invoice ${input.invoiceId} is already registered`)
   }
   try {
     const duplicates = await withTimeout(
