@@ -27,5 +27,6 @@
     "src",
     "../protocol/receivable.ts",
     "../protocol/samples.ts"
-  ]
+  ],
+  "exclude": ["src/**/*.test.ts"]
 }

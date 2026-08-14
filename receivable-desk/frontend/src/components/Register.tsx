@@ -107,7 +107,10 @@ export function Register() {
         dueDate,
         memo
       })
-      setStatus(`Recorded ${result.invoiceId}.`)
+      setStatus(`Recorded ${result.invoiceId} (txid ${result.txid}).`)
+      if (result.overlayError) {
+        setError(`Recorded in wallet (txid ${result.txid}). Overlay submit failed: ${result.overlayError}`)
+      }
     } catch (err) {
       console.error('Register failed', err)
       setError(errorMessage(err))

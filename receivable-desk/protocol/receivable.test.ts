@@ -10,6 +10,7 @@ import {
   encodeReceivableFields,
   isDisplayName,
   isPartyIdentity,
+  explainReceivableParse,
   parseReceivableFields,
   resolvePartyIdentity,
   validateReceivable,
@@ -52,6 +53,24 @@ describe('receivable protocol', () => {
     const item = invoice()
     const fields = encodeReceivableFields(item)
     expect(parseReceivableFields(fields)).toEqual(item)
+  })
+
+  it('still parses an invoice when lock() adds extra fields before or after MAGIC', () => {
+    const item = invoice()
+    const fields = encodeReceivableFields(item)
+    const pubkey = new Array(33).fill(2)
+    const signature = new Array(71).fill(3)
+    expect(parseReceivableFields([...fields, pubkey, signature])).toEqual(item)
+    expect(parseReceivableFields([pubkey, ...fields, signature])).toEqual(item)
+    expect(parseReceivableFields([pubkey, signature, ...fields])).toEqual(item)
+  })
+
+  it('explains why parse failed', () => {
+    const fields = encodeReceivableFields(invoice())
+    fields[0] = Array.from(new TextEncoder().encode('notareceivable'))
+    expect(parseReceivableFields(fields)).toBeNull()
+    expect(explainReceivableParse(fields)).toMatch(/magic mismatch/)
+    expect(explainReceivableParse([])).toMatch(/0 fields/)
   })
 
   it('encodes a real PushDrop locking script that @bsv/sdk can decode', () => {

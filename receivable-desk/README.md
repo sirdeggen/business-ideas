@@ -31,7 +31,7 @@ Sibling payable-invoice app lives in [`invoices/`](../invoices/). This desk does
 - Identity: 66-hex compressed pubkey. Receivable UTXOs lock with PushDrop (BRC-48) using BRC-42 derivation inside the wallet. Settle pays the creditor with [BRC-29](https://bsv.brc.dev/payments/0029) P2PKH.
 - State: wallet basket `receivables`. Public Pages uses overlay topic `tm_anytx` / lookup `ls_anytx` (client-filtered). Local Docker still hosts custom `tm_receivables` / `ls_receivables`.
 - Encoding: PushDrop fields — magic, invoice id, creditor, debtor, amount sats, due date, status (`open` / `approved` / `paid`), memo, advance-intent bps.
-- Frontend: Vite + React. Wallet via `createWallet()` from `@bsv/simple/browser` (falls back to `WalletClient('auto', originator)` from `@bsv/sdk`). Overlay via `@bsv/sdk` `TopicBroadcaster` and `LookupResolver`.
+- Frontend: Vite + React. Wallet via `WalletClient('auto', originator)` from `@bsv/sdk` (page hostname, not `@bsv/simple` `"simple"`). Overlay via `@bsv/sdk` `TopicBroadcaster` and `LookupResolver`. Chase unions overlay lookup with wallet basket `receivables`.
 - Overlay (public): `https://overlay-us-1.bsvb.tech`. Overlay (local optional): `@bsv/overlay-express` + MongoDB + MySQL.
 
 Status changes are spends that create the next-state UTXO (or a paid marker). Duplicate invoice ids are rejected. Junk PushDrop data is not admitted.

@@ -196,6 +196,20 @@ describe('receivables topic manager', () => {
     expect(refused.outputsToAdmit).toEqual([])
   })
 
+  it('admits a register when lock() puts extra fields before MAGIC', async () => {
+    const manager = new ReceivablesTopicManager()
+    const item = invoice()
+    const fields = encodeReceivableFields(item)
+    const pubkey = new Array(33).fill(2)
+    const tx = new Transaction()
+    tx.addOutput({
+      satoshis: 1,
+      lockingScript: lockPushDrop([pubkey, ...fields], sampleOperatorPublicKey())
+    })
+    const admitted = await manager.identifyAdmissibleOutputs(tx.toBEEF(), [])
+    expect(admitted.outputsToAdmit).toEqual([0])
+  })
+
   it('admits a name-only register so the worklist can show the name', async () => {
     const manager = new ReceivablesTopicManager()
     const named = invoice({ creditor: 'Riverside Hall', debtor: 'Alex' })

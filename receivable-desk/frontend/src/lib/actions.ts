@@ -1,5 +1,4 @@
 import {
-  Beef,
   LockingScript,
   P2PKH,
   PublicKey,
@@ -23,16 +22,15 @@ import {
   type ReceivablePayload,
   type ReceivableStatus
 } from '../../../protocol/receivable'
+import {
+  inspectBaskets,
+  type BasketInspection,
+  type HeldReceivable
+} from './basket'
 import { originator } from './config'
 import { lookupReceivables, submitReceivableTx } from './overlay'
 
-export interface HeldReceivable {
-  outpoint: string
-  satoshis: number
-  item: ReceivablePayload
-  customInstructions: string
-  beef?: number[]
-}
+export type { BasketInspection, HeldReceivable } from './basket'
 
 export interface CustomInstructions {
   protocolID: [0 | 1 | 2, string]
@@ -66,42 +64,19 @@ function pushdrop(wallet: WalletClient): PushDrop {
   return new PushDrop(wallet, originator())
 }
 
-function beefForOutpoint(listedBeef: number[] | undefined, outpoint: string): number[] | undefined {
-  if (!listedBeef || listedBeef.length === 0) return listedBeef
-  const [txid] = outpoint.split('.')
-  const beef = new Beef()
-  beef.mergeBeef(listedBeef)
-  if (beef.findTxid(txid)) return beef.toBinaryAtomic(txid)
-  return listedBeef
+export async function inspectHeldReceivables(wallet: WalletClient): Promise<BasketInspection> {
+  const listers = [(args: { basket: string, include?: 'entire transactions' | 'locking scripts', includeCustomInstructions?: boolean, limit: number }) => wallet.listOutputs(args)]
+  const bound = (wallet as WalletClient & { originator?: string }).originator
+  const extras = ['simple', originator()].filter((item, index, all) => item && item !== bound && all.indexOf(item) === index)
+  for (const extra of extras) {
+    const other = new WalletClient('auto', extra)
+    listers.push((args) => other.listOutputs(args))
+  }
+  return inspectBaskets(listers)
 }
 
 export async function listHeldReceivables(wallet: WalletClient): Promise<HeldReceivable[]> {
-  const listed = await wallet.listOutputs({
-    basket: BASKET,
-    include: 'entire transactions',
-    includeCustomInstructions: true,
-    limit: 1000
-  })
-
-  const held: HeldReceivable[] = []
-  for (const output of listed.outputs) {
-    try {
-      if (!output.lockingScript) continue
-      const decoded = PushDrop.decode(LockingScript.fromHex(output.lockingScript))
-      const item = parseReceivableFields(decoded.fields)
-      if (!item) continue
-      held.push({
-        outpoint: output.outpoint,
-        satoshis: Number(output.satoshis ?? 1),
-        item,
-        customInstructions: output.customInstructions ?? '',
-        beef: beefForOutpoint(listed.BEEF as number[] | undefined, output.outpoint)
-      })
-    } catch {
-      // Skip non-receivable basket items.
-    }
-  }
-  return held
+  return (await inspectHeldReceivables(wallet)).held
 }
 
 async function lockReceivable(
@@ -130,11 +105,17 @@ async function lockReceivable(
   }
 }
 
+export interface RegisterResult {
+  txid: string
+  invoiceId: string
+  overlayError?: string
+}
+
 export async function registerReceivable(
   wallet: WalletClient,
   overlayUrl: string,
   input: RegisterInput
-): Promise<{ txid: string, invoiceId: string }> {
+): Promise<RegisterResult> {
   const item = {
     invoiceId: input.invoiceId.trim(),
     creditor: input.creditor.trim(),
@@ -192,11 +173,25 @@ export async function registerReceivable(
     )
   }
 
-  const submitted = await submitReceivableTx(overlayUrl, response.tx as number[])
-  if (submitted.admitted.length === 0) {
-    throw new Error('Overlay rejected the register (no outputs admitted)')
+  // Spend is the register. Overlay submit is a separate step and must not hide the txid.
+  try {
+    const submitted = await submitReceivableTx(overlayUrl, response.tx as number[])
+    if (submitted.admitted.length === 0) {
+      return {
+        txid: response.txid,
+        invoiceId: input.invoiceId.trim(),
+        overlayError: `no invoice outputs parsed after submit to ${submitted.topic} at ${submitted.host}`
+      }
+    }
+    return { txid: response.txid, invoiceId: input.invoiceId.trim() }
+  } catch (error) {
+    const detail = error instanceof Error && error.message.trim() ? error.message : String(error ?? '')
+    return {
+      txid: response.txid,
+      invoiceId: input.invoiceId.trim(),
+      overlayError: detail.trim() || 'overlay submit failed with no message'
+    }
   }
-  return { txid: response.txid, invoiceId: input.invoiceId.trim() }
 }
 
 async function spendReceivable(
@@ -438,7 +433,15 @@ function paymentOutputIndex(tx: Transaction, amountSats: number): number {
   let markerIndex = -1
   for (const [index, output] of tx.outputs.entries()) {
     try {
-      const item = parseReceivableFields(PushDrop.decode(output.lockingScript).fields)
+      let item = null
+      for (const position of ['before', 'after'] as const) {
+        try {
+          item = parseReceivableFields(PushDrop.decode(output.lockingScript, position).fields)
+          if (item) break
+        } catch {
+          // BRC-29 payment and change are not markers.
+        }
+      }
       if (item?.status === 'paid') {
         markerIndex = index
         break

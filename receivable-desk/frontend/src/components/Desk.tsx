@@ -9,12 +9,18 @@ import { sampleReceivables } from '../../../protocol/samples'
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
 import {
-  listHeldReceivables,
+  inspectHeldReceivables,
   settleReceivable,
   type HeldReceivable
 } from '../lib/actions'
+import { formatBasketDiagnostic, unionChaseRows } from '../lib/basket'
 import { errorMessage, formatSats, overlayCheckFailed, overlayHint, walletHint } from '../lib/config'
-import { lookupReceivables, usesPublicAnytx, type OverlayReceivable } from '../lib/overlay'
+import {
+  formatLookupDiagnostic,
+  inspectLookupReceivables,
+  usesPublicAnytx,
+  type OverlayReceivable
+} from '../lib/overlay'
 import { partyName } from './InvoiceCard'
 
 function previewRows(): OverlayReceivable[] {
@@ -40,25 +46,61 @@ export function Desk() {
   const [copied, setCopied] = useState<string | null>(null)
   const canSettle = online === true
 
-  const refresh = async (): Promise<void> => {
-    if (wallet) setHeld(await listHeldReceivables(wallet))
+  const refresh = async (connectIfNeeded = false): Promise<void> => {
+    const notes: string[] = []
+    let activeWallet = wallet
+    if (!activeWallet && connectIfNeeded) {
+      const result = await connect()
+      activeWallet = result?.wallet ?? null
+    }
+    let heldItems: HeldReceivable[] = []
+    if (activeWallet) {
+      try {
+        const inspection = await inspectHeldReceivables(activeWallet)
+        heldItems = inspection.held
+        setHeld(heldItems)
+        const basketNote = formatBasketDiagnostic(inspection)
+        if (basketNote) notes.push(basketNote)
+      } catch (err) {
+        console.error('Desk basket list failed', err)
+        notes.push(errorMessage(err))
+        setHeld([])
+      }
+    } else {
+      setHeld([])
+    }
+
     try {
-      const unpaid = await lookupReceivables(url, { status: 'unpaid' })
-      setRows(unpaid)
+      const lookup = await inspectLookupReceivables(url, { status: 'unpaid' })
+      const lookupNote = formatLookupDiagnostic(lookup, usesPublicAnytx(url))
+      if (lookupNote) notes.push(lookupNote)
+      const combined = unionChaseRows(lookup.rows, heldItems)
+      setRows(combined)
       setPreview(false)
-      setError(null)
+      setError(notes.length > 0 ? notes.join(' ') : null)
       return
     } catch (err) {
       console.error('Desk lookup failed', err)
-      setError(errorMessage(err))
+      notes.push(errorMessage(err))
     }
+
+    const fromBasket = unionChaseRows([], heldItems)
+    if (fromBasket.length > 0) {
+      setRows(fromBasket)
+      setPreview(false)
+      setError(notes.length > 0 ? notes.join(' ') : null)
+      return
+    }
+
     if (usesPublicAnytx(url)) {
       setRows([])
       setPreview(false)
+      setError(notes.length > 0 ? notes.join(' ') : null)
       return
     }
     setRows(previewRows())
     setPreview(true)
+    setError(notes.length > 0 ? notes.join(' ') : null)
   }
 
   useEffect(() => {
@@ -118,6 +160,8 @@ export function Desk() {
     }
   }
 
+  const allEmpty = rows.length === 0
+
   return (
     <section className="panel">
       <h2>Who do we chase today?</h2>
@@ -131,17 +175,23 @@ export function Desk() {
           {` ${overlayHint(url)}`}
         </p>
       )}
-      <button className="btn" onClick={() => void refresh()}>Refresh list</button>
+      <button className="btn" onClick={() => void refresh(true)}>Refresh list</button>
       {status && <p className="status ok">{status}</p>}
       {walletError && !walletError.includes('Access other apps') && (
         <p className="hint">{walletHint()}</p>
       )}
       {(error || walletError) && <p className="status err">{error || walletError}</p>}
 
+      {allEmpty && !preview && (
+        <p className="hint">
+          No open invoices yet — <a href="../invoices/">create one</a>
+        </p>
+      )}
+
       {AGING_LABELS.map((label) => (
         <div key={label} className={`aging-group aging-${label.replace(/\s+/g, '-')}`}>
           <h3 className="subhead">{label}</h3>
-          {grouped[label].length === 0 && <p className="hint">None.</p>}
+          {grouped[label].length === 0 && !allEmpty && <p className="hint">None.</p>}
           {grouped[label].map((row) => {
             const late = Math.max(0, daysLate(row.dueDate))
             const settleReady = canSettle && !!wallet && held.some(
