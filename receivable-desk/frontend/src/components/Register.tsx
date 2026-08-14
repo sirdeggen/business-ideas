@@ -7,7 +7,12 @@ import {
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
 import { registerReceivable } from '../lib/actions'
-import { errorMessage, overlayCheckFailed, walletHint } from '../lib/config'
+import {
+  CHROME_ALLOW_HINT,
+  DESKTOP_INSTALL_URL,
+  errorMessage,
+  overlayCheckFailed
+} from '../lib/config'
 
 function nameTooLong(value: string): boolean {
   const trimmed = value.trim()
@@ -98,6 +103,10 @@ export function Register() {
     setBusy(true)
     setError(null)
     setStatus(null)
+    const silent = window.setTimeout(() => {
+      setBusy(false)
+      setError(CHROME_ALLOW_HINT)
+    }, 8000)
     try {
       const result = await registerReceivable(activeWallet, url, {
         invoiceId,
@@ -107,11 +116,19 @@ export function Register() {
         dueDate,
         memo
       })
-      setStatus(`Recorded ${result.invoiceId}.`)
+      window.clearTimeout(silent)
+      setStatus(`Recorded ${result.invoiceId} (txid ${result.txid}).`)
+      if (result.overlayError) {
+        setError(`Recorded in wallet (txid ${result.txid}). Overlay submit failed: ${result.overlayError}`)
+      } else {
+        setError(null)
+      }
     } catch (err) {
+      window.clearTimeout(silent)
       console.error('Register failed', err)
-      setError(errorMessage(err))
+      setError(errorMessage(err, 'record'))
     } finally {
+      window.clearTimeout(silent)
       setBusy(false)
     }
   }
@@ -197,11 +214,21 @@ export function Register() {
         </button>
       </div>
       {overlayDown && <p className="status err">{overlayCheckFailed(probeError, url)}</p>}
-      {walletError && !walletError.includes('Access other apps') && (
-        <p className="hint">{walletHint()}</p>
-      )}
       {status && <p className="status ok">{status}</p>}
       {(error || walletError) && <p className="status err">{error || walletError}</p>}
+      {(error || walletError) && !overlayDown && (
+        <div className="row" style={{ marginTop: 8 }}>
+          <button className="btn primary" disabled={busy || connecting} onClick={() => void submit()}>
+            Retry
+          </button>
+          <a className="btn" href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">
+            Install BSV Desktop
+          </a>
+        </div>
+      )}
+      {(error === CHROME_ALLOW_HINT || walletError === CHROME_ALLOW_HINT) && (
+        <p className="hint">{CHROME_ALLOW_HINT}</p>
+      )}
     </section>
   )
 }

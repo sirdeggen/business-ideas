@@ -131,37 +131,88 @@ export function encodeReceivableFields(item: Omit<ReceivablePayload, 'magic'>): 
   ]
 }
 
-export function parseReceivableFields(fields: Array<number[] | Uint8Array>): ReceivablePayload | null {
-  if (fields.length < 8) return null
-  try {
-    const asBytes = (field: number[] | Uint8Array): number[] => Array.from(field)
-    const magic = utf8BytesToString(asBytes(fields[0]))
-    if (magic !== MAGIC) return null
-    const invoiceId = utf8BytesToString(asBytes(fields[1]))
-    const creditor = utf8BytesToString(asBytes(fields[2]))
-    const debtor = utf8BytesToString(asBytes(fields[3]))
-    const amountSats = Number(utf8BytesToString(asBytes(fields[4])))
-    const dueDate = utf8BytesToString(asBytes(fields[5]))
-    const status = utf8BytesToString(asBytes(fields[6])) as ReceivableStatus
-    const memo = utf8BytesToString(asBytes(fields[7] ?? []))
-    const advanceRaw = fields[8] ? utf8BytesToString(asBytes(fields[8])) : '0'
-    const advanceBps = Number(advanceRaw)
-    const parsed: ReceivablePayload = {
-      magic: MAGIC,
-      invoiceId,
-      creditor,
-      debtor,
-      amountSats,
-      dueDate,
-      status,
-      memo,
-      advanceBps: Number.isFinite(advanceBps) ? advanceBps : 0
+function fieldUtf8(field: number[] | Uint8Array): string {
+  return utf8BytesToString(Array.from(field))
+}
+
+function magicIndex(fields: Array<number[] | Uint8Array>): number {
+  return fields.findIndex((field) => {
+    try {
+      return fieldUtf8(field) === MAGIC
+    } catch {
+      return false
     }
-    const reason = validateReceivable(parsed)
-    if (reason) return null
+  })
+}
+
+function payloadFromFields(
+  fields: Array<number[] | Uint8Array>,
+  start: number
+): ReceivablePayload {
+  const invoiceId = fieldUtf8(fields[start + 1])
+  const creditor = fieldUtf8(fields[start + 2])
+  const debtor = fieldUtf8(fields[start + 3])
+  const amountSats = Number(fieldUtf8(fields[start + 4]))
+  const dueDate = fieldUtf8(fields[start + 5])
+  const status = fieldUtf8(fields[start + 6]) as ReceivableStatus
+  const memo = fieldUtf8(fields[start + 7] ?? [])
+  const advanceRaw = fields[start + 8] ? fieldUtf8(fields[start + 8]) : '0'
+  const advanceBps = Number(advanceRaw)
+  return {
+    magic: MAGIC,
+    invoiceId,
+    creditor,
+    debtor,
+    amountSats,
+    dueDate,
+    status,
+    memo,
+    advanceBps: Number.isFinite(advanceBps) ? advanceBps : 0
+  }
+}
+
+/**
+ * Accepts live lock() scripts where MAGIC is anywhere in the field list.
+ * Extra pubkey/signature fields may sit before or after the invoice.
+ */
+export function parseReceivableFields(fields: Array<number[] | Uint8Array>): ReceivablePayload | null {
+  const start = magicIndex(fields)
+  if (start < 0 || start + 7 >= fields.length) return null
+  try {
+    const parsed = payloadFromFields(fields, start)
+    if (validateReceivable(parsed)) return null
     return parsed
   } catch {
     return null
+  }
+}
+
+/** Why parseReceivableFields returned null — used when a list is non-empty but blind. */
+export function explainReceivableParse(fields: Array<number[] | Uint8Array>): string {
+  if (fields.length === 0) return 'PushDrop has 0 fields'
+  const start = magicIndex(fields)
+  if (start < 0) {
+    const preview = fields.slice(0, 4).map((field, index) => {
+      try {
+        const text = fieldUtf8(field)
+        if (text.length > 0 && text.length <= 32 && /^[\x20-\x7e]+$/.test(text)) {
+          return text
+        }
+      } catch {
+        // Fall through to byte count.
+      }
+      return `field[${index}] ${Array.from(field).length}B`
+    })
+    return `magic mismatch (no ${MAGIC}; ${preview.join(', ')})`
+  }
+  if (start + 7 >= fields.length) {
+    return `fields after ${MAGIC} incomplete (${fields.length - start} from magic, need invoice id through memo)`
+  }
+  try {
+    const parsed = payloadFromFields(fields, start)
+    return validateReceivable(parsed) ?? 'unknown parse failure'
+  } catch (error) {
+    return error instanceof Error ? error.message : 'field decode failed'
   }
 }
 

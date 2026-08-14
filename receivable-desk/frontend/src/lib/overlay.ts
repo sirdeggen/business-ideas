@@ -14,6 +14,7 @@ import {
   LOOKUP_SERVICE,
   MAGIC,
   TOPIC,
+  explainReceivableParse,
   parseReceivableFields,
   type ReceivablePayload
 } from '../../../protocol/receivable'
@@ -31,6 +32,15 @@ export interface OverlayReceivable extends ReceivablePayload {
 export interface SubmitResult {
   admitted: number[]
   raw: unknown
+  host: string
+  topic: string
+}
+
+export interface LookupInspection {
+  rows: OverlayReceivable[]
+  listed: number
+  parsed: number
+  unparsed: Array<{ reason: string }>
 }
 
 export interface ReceivableQuery {
@@ -91,16 +101,29 @@ function createResolver(host: string, service: string): LookupResolver {
   })
 }
 
+function parseScriptFields(lockingScript: Parameters<typeof PushDrop.decode>[0]): {
+  item: ReturnType<typeof parseReceivableFields>
+  why?: string
+} {
+  const errors: string[] = []
+  for (const position of ['before', 'after'] as const) {
+    try {
+      const fields = PushDrop.decode(lockingScript, position).fields
+      const item = parseReceivableFields(fields)
+      if (item) return { item }
+      errors.push(`${position}: ${explainReceivableParse(fields)}`)
+    } catch (error) {
+      errors.push(`${position}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  return { item: null, why: errors[0] }
+}
+
 function receivableOutputIndexes(tx: Transaction): number[] {
   const indexes: number[] = []
   for (const [index, output] of tx.outputs.entries()) {
-    try {
-      if (parseReceivableFields(PushDrop.decode(output.lockingScript).fields)) {
-        indexes.push(index)
-      }
-    } catch {
-      // Payment and change outputs are ignored.
-    }
+    const decoded = parseScriptFields(output.lockingScript)
+    if (decoded?.item) indexes.push(index)
   }
   return indexes
 }
@@ -121,14 +144,16 @@ export async function submitReceivableTx(base: string, beef: number[]): Promise<
   }
   return {
     admitted: receivableOutputIndexes(tx),
-    raw: result
+    raw: result,
+    host,
+    topic
   }
 }
 
-export async function lookupReceivables(
+export async function inspectLookupReceivables(
   base: string,
   query: ReceivableQuery = {}
-): Promise<OverlayReceivable[]> {
+): Promise<LookupInspection> {
   const host = overlayUrl(base)
   const service = overlayLookupService(host)
   const resolver = createResolver(host, service)
@@ -136,8 +161,33 @@ export async function lookupReceivables(
     ? await queryAnytx(resolver, service, query)
     : [await resolver.query({ service, query }, 15000)]
 
-  const rows = answers.flatMap(receivablesFromAnswer)
-  return rows.filter((row) => matchesReceivableQuery(row, query))
+  const inspected = answers.flatMap(inspectAnswer)
+  const rows = inspected
+    .map((entry) => entry.row)
+    .filter((row): row is OverlayReceivable => Boolean(row))
+    .filter((row) => matchesReceivableQuery(row, query))
+  return {
+    rows,
+    listed: inspected.length,
+    parsed: inspected.filter((entry) => entry.row).length,
+    unparsed: inspected.filter((entry) => !entry.row && entry.reason).map((entry) => ({ reason: entry.reason as string }))
+  }
+}
+
+export async function lookupReceivables(
+  base: string,
+  query: ReceivableQuery = {}
+): Promise<OverlayReceivable[]> {
+  return (await inspectLookupReceivables(base, query)).rows
+}
+
+export function formatLookupDiagnostic(inspection: LookupInspection, publicAnytx = false): string {
+  if (inspection.parsed > 0) return ''
+  if (inspection.listed === 0) return ''
+  // Public ls_anytx is a firehose — only report outputs that looked like invoices.
+  if (publicAnytx && inspection.unparsed.length === 0) return ''
+  const why = inspection.unparsed[0]?.reason
+  return `listed ${inspection.listed}, none parsed as invoices` + (why ? ` (${why})` : '')
 }
 
 async function queryAnytx(
@@ -164,31 +214,47 @@ async function queryAnytx(
   return answers
 }
 
-function receivablesFromAnswer(answer: LookupAnswer): OverlayReceivable[] {
+function inspectAnswer(answer: LookupAnswer): Array<{ row: OverlayReceivable | null, reason?: string }> {
   if (answer.type !== 'output-list' || !Array.isArray(answer.outputs)) return []
-  return answer.outputs.flatMap((output) => {
+  return answer.outputs.map((output) => {
     const fromScript = receivableFromBeef(output.beef, output.outputIndex)
-    if (fromScript) return [fromScript]
+    if (fromScript.row || fromScript.reason) return fromScript
     const fromCtx = fromContext(output.context, output.outputIndex)
-    return fromCtx ? [fromCtx] : []
+    return fromCtx ? { row: fromCtx } : { row: null }
   })
 }
 
-function receivableFromBeef(beef: number[] | undefined, outputIndex: number): OverlayReceivable | null {
-  if (!beef || beef.length === 0) return null
+function looksLikeReceivableAttempt(why?: string): boolean {
+  if (!why) return false
+  // MAGIC found but the rest failed — not every PushDrop on ls_anytx.
+  return /fields after receivable|incomplete|invalid invoice|invalid creditor|invalid debtor|amount must|due date|status must/i.test(why)
+}
+
+function receivableFromBeef(
+  beef: number[] | undefined,
+  outputIndex: number
+): { row: OverlayReceivable | null, reason?: string } {
+  if (!beef || beef.length === 0) return { row: null }
   try {
     const tx = Transaction.fromBEEF(beef)
     const output = tx.outputs[outputIndex]
-    if (!output) return null
-    const item = parseReceivableFields(PushDrop.decode(output.lockingScript).fields)
-    if (!item) return null
+    if (!output) return { row: null }
+    const decoded = parseScriptFields(output.lockingScript)
+    if (!decoded.item) {
+      return {
+        row: null,
+        reason: looksLikeReceivableAttempt(decoded.why) ? decoded.why : undefined
+      }
+    }
     return {
-      ...item,
-      txid: tx.id('hex'),
-      outputIndex
+      row: {
+        ...decoded.item,
+        txid: tx.id('hex'),
+        outputIndex
+      }
     }
   } catch {
-    return null
+    return { row: null }
   }
 }
 
