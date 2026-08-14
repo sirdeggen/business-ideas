@@ -189,6 +189,24 @@ describe('basket list', () => {
     expect(diagnostic).not.toMatch(/No tickets yet/)
   })
 
+  it('parses the older 61-byte event tickets script as a secondary basket item', () => {
+    const compact = [
+      Array.from(new TextEncoder().encode(MAGIC)),
+      Array.from(new TextEncoder().encode(DEMO_EVENT.eventId)),
+      Array.from(new TextEncoder().encode('1'))
+    ]
+    const hex = pushDropBeforeHex(compact)
+    expect(hex.length / 2).toBe(61)
+    const { tickets } = inspectListedOutputs(
+      [{ outpoint: '59cec5313460'.padEnd(64, '0') + '.8', satoshis: 1, spendable: true, lockingScript: hex }],
+      undefined,
+      LEGACY_BASKET
+    )
+    expect(tickets).toHaveLength(1)
+    expect(tickets[0].ticket.serial).toBe('1')
+    expect(tickets[0].basket).toBe(LEGACY_BASKET)
+  })
+
   it('lists locking scripts when entire-transactions BEEF assembly throws', async () => {
     const hex = pushDropBeforeHex(demoFields('2'))
     const inspection = await inspectBaskets(async ({ basket, include }) => {

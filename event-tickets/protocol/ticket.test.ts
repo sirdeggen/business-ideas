@@ -30,6 +30,19 @@ describe('ticket protocol', () => {
     expect(parseTicketFields(fields)).toEqual(demoTicket('7'))
   })
 
+  it('parses the older 61-byte magic/eventId/serial shape without kind/meta', () => {
+    const compact = [
+      Array.from(new TextEncoder().encode(MAGIC)),
+      Array.from(new TextEncoder().encode(DEMO_EVENT.eventId)),
+      [1]
+    ]
+    const parsed = parseTicketFields(compact)
+    expect(parsed?.serial).toBe('1')
+    expect(parsed?.eventId).toBe(DEMO_EVENT.eventId)
+    expect(parsed?.kind).toBe(TICKET_TYPE)
+    expect(parsed?.name).toBe(DEMO_EVENT.name)
+  })
+
   it('still parses a Demo Night ticket when lock() adds extra fields', () => {
     const fields = encodeTicketFields(demoTicket('7'))
     const pubkey = new Array(33).fill(2)

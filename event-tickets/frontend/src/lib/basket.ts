@@ -57,8 +57,8 @@ export interface ListOutputsResult {
 
 export type ListOutputsFn = (args: {
   basket: string
-  include: 'entire transactions' | 'locking scripts'
-  includeCustomInstructions: boolean
+  include?: 'entire transactions' | 'locking scripts'
+  includeCustomInstructions?: boolean
   limit: number
 }) => Promise<ListOutputsResult>
 
@@ -272,13 +272,15 @@ function listFailure(basket: string, include: string, error: unknown): string {
 async function tryListOutputs(
   listOutputs: ListOutputsFn,
   basket: string,
-  include: 'entire transactions' | 'locking scripts'
+  include?: 'entire transactions' | 'locking scripts',
+  includeCustomInstructions = true
 ): Promise<{ outputs: ListedOutput[], beef?: number[], totalOutputs: number, error?: string }> {
+  const label = include ?? 'default'
   try {
     const listed = await listOutputs({
       basket,
-      include,
-      includeCustomInstructions: true,
+      ...(include ? { include } : {}),
+      includeCustomInstructions,
       limit: 1000
     })
     if (!listed || !Array.isArray(listed.outputs)) {
@@ -286,7 +288,7 @@ async function tryListOutputs(
       return {
         outputs: [],
         totalOutputs: typeof listed?.totalOutputs === 'number' ? listed.totalOutputs : 0,
-        error: `listOutputs(${basket}, include=${include}) did not return outputs (keys: ${keys})`
+        error: `listOutputs(${basket}, include=${label}) did not return outputs (keys: ${keys})`
       }
     }
     return {
@@ -295,7 +297,7 @@ async function tryListOutputs(
       totalOutputs: typeof listed.totalOutputs === 'number' ? listed.totalOutputs : listed.outputs.length
     }
   } catch (error) {
-    return { outputs: [], totalOutputs: 0, error: listFailure(basket, include, error) }
+    return { outputs: [], totalOutputs: 0, error: listFailure(basket, label, error) }
   }
 }
 
@@ -333,21 +335,23 @@ async function listOneBasket(listOutputs: ListOutputsFn, basket: string): Promis
   // `entire transactions` can throw while assembling BEEF and hide those rows.
   const scripts = await tryListOutputs(listOutputs, basket, 'locking scripts')
   const entire = await tryListOutputs(listOutputs, basket, 'entire transactions')
-  const outputs = mergeListedOutputs(scripts.outputs, entire.outputs)
-  const totalOutputs = Math.max(scripts.totalOutputs, entire.totalOutputs, outputs.length)
-  const error = outputs.length === 0
-    ? [scripts.error, entire.error].filter((item): item is string => Boolean(item)).join('; ') || undefined
-    : undefined
-
-  if (outputs.length === 0 && scripts.error && entire.error) {
-    throw new Error(error)
+  let outputs = mergeListedOutputs(scripts.outputs, entire.outputs)
+  if (outputs.length === 0) {
+    const bare = await tryListOutputs(listOutputs, basket, undefined, false)
+    outputs = mergeListedOutputs(outputs, bare.outputs)
+    const totalOutputs = Math.max(scripts.totalOutputs, entire.totalOutputs, bare.totalOutputs, outputs.length)
+    const error = [scripts.error, entire.error, bare.error].filter((item): item is string => Boolean(item)).join('; ') || undefined
+    if (outputs.length === 0 && scripts.error && entire.error && bare.error) {
+      throw new Error(error)
+    }
+    return { outputs, beef: entire.beef ?? scripts.beef ?? bare.beef, totalOutputs, error }
   }
 
   return {
     outputs,
     beef: entire.beef ?? scripts.beef,
-    totalOutputs,
-    error
+    totalOutputs: Math.max(scripts.totalOutputs, entire.totalOutputs, outputs.length),
+    error: undefined
   }
 }
 
@@ -355,8 +359,44 @@ function emptySlice(basket: string): BasketSlice {
   return { basket, listed: 0, totalOutputs: 0, spendable: 0, parsed: 0, unparsed: [] }
 }
 
-export async function inspectBaskets(listOutputs: ListOutputsFn): Promise<BasketInspection> {
-  const primaryListed = await listOneBasket(listOutputs, BASKET)
+async function listBasketMerged(listers: ListOutputsFn[], basket: string): Promise<{
+  outputs: ListedOutput[]
+  beef?: number[]
+  totalOutputs: number
+  error?: string
+}> {
+  const results = await Promise.all(listers.map(async (listOutputs) => {
+    try {
+      return await listOneBasket(listOutputs, basket)
+    } catch (error) {
+      return {
+        outputs: [] as ListedOutput[],
+        totalOutputs: 0,
+        error: error instanceof Error ? error.message : String(error)
+      }
+    }
+  }))
+  let outputs: ListedOutput[] = []
+  let beef: number[] | undefined
+  let totalOutputs = 0
+  const errors: string[] = []
+  for (const result of results) {
+    outputs = mergeListedOutputs(outputs, result.outputs)
+    if (!beef && result.beef) beef = result.beef
+    totalOutputs = Math.max(totalOutputs, result.totalOutputs, result.outputs.length)
+    if (result.error) errors.push(result.error)
+  }
+  return {
+    outputs,
+    beef,
+    totalOutputs: Math.max(totalOutputs, outputs.length),
+    error: outputs.length === 0 ? errors.join('; ') || undefined : undefined
+  }
+}
+
+export async function inspectBaskets(listOutputs: ListOutputsFn | ListOutputsFn[]): Promise<BasketInspection> {
+  const listers = Array.isArray(listOutputs) ? listOutputs : [listOutputs]
+  const primaryListed = await listBasketMerged(listers, BASKET)
   const primary = inspectListedOutputs(primaryListed.outputs, primaryListed.beef, BASKET)
   primary.slice.totalOutputs = Math.max(primary.slice.totalOutputs, primaryListed.totalOutputs)
   if (primaryListed.error && primary.tickets.length === 0 && primary.slice.listed === 0) {
@@ -365,7 +405,7 @@ export async function inspectBaskets(listOutputs: ListOutputsFn): Promise<Basket
 
   let legacy = { tickets: [] as HeldTicket[], slice: emptySlice(LEGACY_BASKET) }
   try {
-    const legacyListed = await listOneBasket(listOutputs, LEGACY_BASKET)
+    const legacyListed = await listBasketMerged(listers, LEGACY_BASKET)
     legacy = inspectListedOutputs(legacyListed.outputs, legacyListed.beef, LEGACY_BASKET)
     legacy.slice.totalOutputs = Math.max(legacy.slice.totalOutputs, legacyListed.totalOutputs)
   } catch {
@@ -411,9 +451,11 @@ export function formatBasketDiagnostic(inspection: BasketInspection): string {
     )
   } else if (primary.unparsed[0]) {
     parts.push(primary.unparsed[0].reason)
+  } else {
+    parts.push(`listOutputs('${BASKET}') returned 0 outputs`)
   }
   if (legacy.listed > 0) {
-    parts.push(`also found ${legacy.listed} in “${LEGACY_BASKET}”`)
+    parts.push(`also found ${legacy.listed} in older basket “${LEGACY_BASKET}”`)
   }
   return parts.join('. ')
 }

@@ -78,11 +78,26 @@ function magicIndex(fields: Array<number[] | Uint8Array>): number {
   })
 }
 
+function decodeSerial(field: number[] | Uint8Array): string {
+  const bytes = Array.from(field)
+  if (bytes.length === 1 && bytes[0] >= 1 && bytes[0] <= 20) return String(bytes[0])
+  return fieldUtf8(field)
+}
+
+function looksLikeMeta(field: number[] | Uint8Array): boolean {
+  try {
+    const text = fieldUtf8(field).trim()
+    return text.startsWith('{') && text.includes('}')
+  } catch {
+    return false
+  }
+}
+
 function metaFromFields(
   fields: Array<number[] | Uint8Array>,
   start: number
 ): { name: string, venue: string, startsAt: string } {
-  for (let i = start + 4; i < fields.length; i++) {
+  for (let i = start + 3; i < fields.length; i++) {
     try {
       const meta = JSON.parse(fieldUtf8(fields[i])) as {
         name?: string
@@ -104,26 +119,32 @@ function metaFromFields(
 }
 
 /**
- * Accepts encodeTicketFields() plus extra PushDrop.lock() fields (pubkey /
- * signature before or after the ticket). Requires magic, eventId, serial, kind.
+ * Accepts both live scripts:
+ * - 144-byte lock() of encodeTicketFields() (magic/eventId/serial/kind/meta)
+ * - older 61-byte lock() of magic/eventId/serial only (kind defaults to ga)
+ * Extra lock() pubkey/signature fields may sit before or after the ticket.
  */
 export function parseTicketFields(fields: Array<number[] | Uint8Array>): TicketPayload | null {
   const start = magicIndex(fields)
-  if (start < 0 || start + 3 >= fields.length) return null
+  if (start < 0 || start + 2 >= fields.length) return null
   try {
     const eventId = fieldUtf8(fields[start + 1])
-    const serial = fieldUtf8(fields[start + 2])
-    const kind = fieldUtf8(fields[start + 3])
-    if (!eventId || !serial || kind !== TICKET_TYPE) return null
+    const serial = decodeSerial(fields[start + 2])
+    if (!eventId || !serial) return null
+    if (start + 3 < fields.length) {
+      const next = fieldUtf8(fields[start + 3])
+      if (next && next !== TICKET_TYPE && !looksLikeMeta(fields[start + 3])) return null
+    }
     const meta = metaFromFields(fields, start)
+    const demo = eventId === DEMO_EVENT.eventId
     return {
       magic: MAGIC,
       eventId,
       serial,
       kind: TICKET_TYPE,
-      name: meta.name,
-      venue: meta.venue,
-      startsAt: meta.startsAt
+      name: meta.name || (demo ? DEMO_EVENT.name : ''),
+      venue: meta.venue || (demo ? DEMO_EVENT.venue : ''),
+      startsAt: meta.startsAt || (demo ? DEMO_EVENT.startsAt : '')
     }
   } catch {
     return null
@@ -148,16 +169,20 @@ export function explainTicketParse(fields: Array<number[] | Uint8Array>): string
     })
     return `magic mismatch (no ${MAGIC}; ${preview.join(', ')})`
   }
-  if (start + 3 >= fields.length) {
-    return `fields after ${MAGIC} incomplete (${fields.length - start} from magic, need eventId/serial/kind)`
+  if (start + 2 >= fields.length) {
+    return `fields after ${MAGIC} incomplete (${fields.length - start} from magic, need eventId/serial)`
   }
   try {
     const eventId = fieldUtf8(fields[start + 1])
-    const serial = fieldUtf8(fields[start + 2])
-    const kind = fieldUtf8(fields[start + 3])
+    const serial = decodeSerial(fields[start + 2])
     if (!eventId) return 'empty eventId'
     if (!serial) return 'empty serial'
-    if (kind !== TICKET_TYPE) return `kind ${JSON.stringify(kind)} ≠ ${TICKET_TYPE}`
+    if (start + 3 < fields.length) {
+      const kind = fieldUtf8(fields[start + 3])
+      if (kind && kind !== TICKET_TYPE && !looksLikeMeta(fields[start + 3])) {
+        return `kind ${JSON.stringify(kind)} ≠ ${TICKET_TYPE}`
+      }
+    }
   } catch (error) {
     return error instanceof Error ? error.message : 'field decode failed'
   }

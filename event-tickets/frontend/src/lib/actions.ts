@@ -86,7 +86,14 @@ function ticketOutputIndex(tx: Transaction): number {
 }
 
 export async function inspectHeldBaskets(wallet: WalletClient): Promise<BasketInspection> {
-  return inspectBaskets((args) => wallet.listOutputs(args))
+  const listers = [(args: { basket: string, include?: 'entire transactions' | 'locking scripts', includeCustomInstructions?: boolean, limit: number }) => wallet.listOutputs(args)]
+  const bound = (wallet as WalletClient & { originator?: string }).originator
+  const extras = ['simple', originator()].filter((item, index, all) => item && item !== bound && all.indexOf(item) === index)
+  for (const extra of extras) {
+    const other = new WalletClient('auto', extra)
+    listers.push((args) => other.listOutputs(args))
+  }
+  return inspectBaskets(listers)
 }
 
 export async function listHeldTickets(wallet: WalletClient): Promise<HeldTicket[]> {

@@ -90,17 +90,18 @@ export function Attendee() {
         <div className="row">
           <button className="btn" onClick={() => void refresh()}>Refresh basket</button>
         </div>
-        {tickets.length === 0 && !diagnostic && !basketError && (
-          <p className="hint">No tickets in the {BASKET} basket yet.</p>
+        {tickets.length === 0 && !basketError && diagnostic && (
+          <p className={inspection && inspection.primary.listed > 0 ? 'status err' : 'hint'}>{diagnostic}</p>
+        )}
+        {tickets.length === 0 && !basketError && !diagnostic && (
+          <p className="hint">listOutputs('{BASKET}') has not run yet.</p>
         )}
         {diagnostic && tickets.length > 0 && <p className="hint">{diagnostic}</p>}
-        {(basketError || (diagnostic && tickets.length === 0)) && (
-          <p className="status err">{basketError || diagnostic}</p>
-        )}
+        {basketError && <p className="status err">{basketError}</p>}
         {tickets.length === 0 && inspection && inspection.primary.unparsed.length > 0 && (
           <ul className="hint">
             {inspection.primary.unparsed
-              .filter((item) => item.spendable !== false && (item.scriptBytes ?? 0) >= 100)
+              .filter((item) => item.spendable !== false && (item.scriptBytes ?? 0) >= 50)
               .map((item) => (
                 <li key={item.outpoint}>
                   {item.outpoint}: {item.scriptBytes}B script did not parse — {item.reason}
