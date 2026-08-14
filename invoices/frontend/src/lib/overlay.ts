@@ -2,12 +2,8 @@ import {
   HTTPSOverlayBroadcastFacilitator,
   LookupResolver,
   PushDrop,
-  TopicBroadcaster,
   Transaction,
-  type LookupAnswer,
-  type OverlayBroadcastFacilitator,
-  type STEAK,
-  type TaggedBEEF
+  type LookupAnswer
 } from '@bsv/sdk'
 import {
   LOOKUP_SERVICE,
@@ -78,31 +74,6 @@ export function overlayLookupService(base: string): string {
   return usesPublicAnytx(base) ? PUBLIC_LOOKUP : LOOKUP_SERVICE
 }
 
-class HostPinnedFacilitator implements OverlayBroadcastFacilitator {
-  readonly host: string
-  readonly allowHTTP: boolean
-
-  constructor(host: string, allowHTTP: boolean) {
-    this.host = host
-    this.allowHTTP = allowHTTP
-  }
-
-  async send(_url: string, taggedBEEF: TaggedBEEF): Promise<STEAK> {
-    return new HTTPSOverlayBroadcastFacilitator(undefined, this.allowHTTP).send(this.host, taggedBEEF)
-  }
-}
-
-function createBroadcaster(host: string, topic: string): TopicBroadcaster {
-  const allowHTTP = host.startsWith('http://')
-  return new TopicBroadcaster([topic], {
-    // Skip SHIP discovery; the facilitator always posts to `host`.
-    networkPreset: 'local',
-    facilitator: new HostPinnedFacilitator(host, allowHTTP),
-    requireAcknowledgmentFromAllHostsForTopics: [],
-    requireAcknowledgmentFromAnyHostForTopics: 'any'
-  })
-}
-
 function createResolver(host: string, service: string): LookupResolver {
   const allowHTTP = host.startsWith('http://')
   return new LookupResolver({
@@ -111,36 +82,83 @@ function createResolver(host: string, service: string): LookupResolver {
   })
 }
 
-function protocolOutputIndexes(tx: Transaction): number[] {
-  const indexes: number[] = []
-  for (const [index, output] of tx.outputs.entries()) {
-    try {
-      const fields = PushDrop.decode(output.lockingScript).fields
-      if (parseInvoiceFields(fields) || parseReceiptFields(fields)) indexes.push(index)
-    } catch {
-      // Change and BRC-29 payment outputs are ignored.
-    }
+export function txFromWalletBeef(beef: number[]): Transaction {
+  try {
+    return Transaction.fromAtomicBEEF(beef)
+  } catch {
+    return Transaction.fromBEEF(beef)
   }
-  return indexes
+}
+
+function standardBeef(tx: Transaction): number[] {
+  try {
+    return tx.toBEEF()
+  } catch {
+    return tx.toBEEF(true)
+  }
+}
+
+export function steakOutputsToAdmit(raw: unknown, topic: string): number[] | null {
+  if (!raw || typeof raw !== 'object') return null
+  const topicResult = (raw as Record<string, { outputsToAdmit?: unknown }>)[topic]
+  if (!topicResult || !Array.isArray(topicResult.outputsToAdmit)) return null
+  const admitted = topicResult.outputsToAdmit.filter((index): index is number => Number.isInteger(index))
+  return admitted
+}
+
+function overlaySubmitError(): Error {
+  return new Error('overlay submit failed')
+}
+
+async function submitBeefFallback(host: string, topic: string, beef: number[]): Promise<SubmitResult> {
+  const response = await fetch(`${host}/submit`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/octet-stream',
+      'x-topics': JSON.stringify([topic])
+    },
+    body: Uint8Array.from(beef)
+  })
+  const text = await response.text()
+  let raw: unknown = text
+  try {
+    raw = JSON.parse(text) as unknown
+  } catch {
+    // Overlay may return empty or non-JSON on failure.
+  }
+  if (!response.ok) throw overlaySubmitError()
+  const admitted = steakOutputsToAdmit(raw, topic)
+  if (!admitted || admitted.length === 0) throw overlaySubmitError()
+  return { admitted, raw }
 }
 
 export async function submitInvoiceTx(base: string, beef: number[]): Promise<SubmitResult> {
   const host = overlayUrl(base)
   const topic = overlayTopic(host)
-  const tx = Transaction.fromBEEF(beef)
-  const overlay = createBroadcaster(host, topic)
-  const result = await tx.broadcast(overlay)
-  if (result.status !== 'success') {
-    const description = 'description' in result ? result.description : ''
-    throw new Error(
-      description
-        ? `Overlay broadcast to ${topic} at ${host} failed: ${description}`
-        : `Overlay broadcast to ${topic} at ${host} failed`
-    )
+  let tx: Transaction
+  let beefBytes: number[]
+  try {
+    tx = txFromWalletBeef(beef)
+    beefBytes = standardBeef(tx)
+  } catch {
+    throw overlaySubmitError()
   }
-  return {
-    admitted: protocolOutputIndexes(tx),
-    raw: result
+
+  try {
+    const steak = await new HTTPSOverlayBroadcastFacilitator(undefined, host.startsWith('http://')).send(host, {
+      beef: beefBytes,
+      topics: [topic]
+    })
+    const admitted = steakOutputsToAdmit(steak, topic)
+    if (admitted && admitted.length > 0) return { admitted, raw: steak }
+  } catch {
+    // Direct /submit is the path that admitted on local Docker.
+  }
+
+  try {
+    return await submitBeefFallback(host, topic, beefBytes)
+  } catch {
+    throw overlaySubmitError()
   }
 }
 

@@ -8,10 +8,10 @@ export const OVERLAY_STORAGE_KEY = 'invoices.overlayUrl'
 export const DESKTOP_INSTALL_URL = 'https://github.com/bsv-blockchain/bsv-desktop'
 
 export const LOCAL_OVERLAY_HINT =
-  'Optional local Docker override: cd invoices && docker compose up --build (overlay :8081, UI :5174), then set Overlay URL to http://localhost:8081 for tm_invoices / ls_invoices.'
+  'Optional local Docker override: cd invoices && docker compose up --build (overlay :8081, UI :5174), then set Overlay URL to http://localhost:8081.'
 
 export const PUBLIC_OVERLAY_HINT =
-  'Pages talks to the public overlay at overlay-us-1.bsvb.tech (tm_anytx / ls_anytx). No docker compose required.'
+  'This page talks to the public overlay. No docker compose required.'
 
 export function isLocalhostUrl(url: string): boolean {
   try {
@@ -72,6 +72,12 @@ export const DECLINED_APPROVAL_SEND =
 export const DECLINED_APPROVAL_PAY =
   'You declined the approval. Unlock Desktop and hit Pay again.'
 
+export const OVERLAY_SEND_FAILED =
+  'Couldn’t send this invoice. Try again in a moment.'
+
+export const OVERLAY_PAY_FAILED =
+  'Couldn’t pay this invoice. Try again in a moment.'
+
 function peelJsonMessage(text: string): string {
   const trimmed = text.trim()
   if (!trimmed.startsWith('{')) return trimmed
@@ -121,10 +127,31 @@ function looksLikeAlreadyPaid(text: string): boolean {
   return text.toLowerCase().includes('already paid')
 }
 
+function looksLikeOverlayFailure(text: string): boolean {
+  const lower = text.toLowerCase()
+  if (looksLikeAlreadyPaid(lower)) return false
+  return (
+    lower.includes('overlay broadcast') ||
+    lower.includes('overlay submit') ||
+    lower.includes('overlay rejected') ||
+    lower.includes('topical host') ||
+    lower.includes('topical-host') ||
+    lower.includes('tm_anytx') ||
+    lower.includes('ls_anytx') ||
+    lower.includes('hosts have rejected') ||
+    lower.includes('err_all_hosts_rejected') ||
+    lower.includes('overlay-us-1') ||
+    lower.includes('steak') ||
+    lower.includes('/submit') ||
+    lower.includes('no outputs admitted') ||
+    lower.includes('outputstoadmit')
+  )
+}
+
 function looksLikeRejected(text: string): boolean {
   const lower = text.toLowerCase()
   if (looksLikeAlreadyPaid(lower)) return false
-  if (lower.includes('overlay rejected')) return false
+  if (looksLikeOverlayFailure(lower)) return false
   return (
     lower.includes('permission denied') ||
     lower.includes('reject') ||
@@ -143,9 +170,14 @@ function looksLikeWalletCallJson(text: string): boolean {
   return /"call"\s*:/.test(text) || text.includes('"createAction"') || text.includes('"args"')
 }
 
+export function overlayFailureMessage(verb: 'send' | 'pay' = 'send'): string {
+  return verb === 'pay' ? OVERLAY_PAY_FAILED : OVERLAY_SEND_FAILED
+}
+
 export function errorMessage(error: unknown, verb: 'send' | 'pay' = 'send'): string {
   const raw = extractErrorText(error).trim()
   if (looksLikeAlreadyPaid(raw)) return raw
+  if (looksLikeOverlayFailure(raw)) return overlayFailureMessage(verb)
   if (looksLikeRejected(raw)) {
     return verb === 'pay' ? DECLINED_APPROVAL_PAY : DECLINED_APPROVAL_SEND
   }
