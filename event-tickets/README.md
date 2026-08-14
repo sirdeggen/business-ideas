@@ -42,12 +42,9 @@ Local Docker `tm_tickets` / `ls_tickets` is an optional override: set **Overlay 
 
 ## Transfer
 
-Transfer is a spend. The old UTXO dies; a new PushDrop UTXO is locked to the recipient identity key.
+The attendee tab is “Send to a friend” (email / phone). Delivery is not wired — the button stays disabled. There is no Accept-a-transfer JSON / `internalizeAction` UI.
 
-1. On **attendee**, paste the recipient’s 66-hex identity key (`getPublicKey({ identityKey: true })`).
-2. Approve the spend (`createAction` + `signAction` with `PushDrop.unlock`).
-3. Overlay admits the new output only if it preserves event id + serial.
-4. Give the recipient the JSON handoff package. They paste it into **Accept a transfer**, which calls `internalizeAction` with `basket insertion` so their wallet tracks the UTXO. Without that step the coins are on-chain at their key but not in their basket UI.
+Identity-key spend stays under Advanced, collapsed, and only after a ticket exists.
 
 ## Redeem (door)
 

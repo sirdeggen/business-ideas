@@ -62,7 +62,6 @@ export function Attendee() {
       <section className="panel">
         <h2>Your tickets</h2>
         <p className="hint">No ticket yet — get one from the organizer.</p>
-        {listError && <p className="status err">{listError}</p>}
       </section>
     )
   }
