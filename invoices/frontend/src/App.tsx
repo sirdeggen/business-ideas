@@ -330,7 +330,9 @@ function Create({
             {busy || connecting ? 'Approve in your wallet…' : 'Send'}
           </button>
         </div>
-        <p className="helper">We’ll ask you to approve this in a moment.</p>
+        {!(busy || connecting || showInstall) && (
+          <p className="helper">We’ll ask you to approve this in a moment.</p>
+        )}
         {(busy || connecting || showInstall) && <ChromeHint />}
         {showInstall && <InstallPrompt verb="send" onRetry={() => void send()} />}
         {error && <p className="status err">{error}</p>}
