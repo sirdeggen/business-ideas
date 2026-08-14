@@ -1,16 +1,12 @@
+import { PUBLIC_OVERLAY_URL, isLocalOverlayUrl } from '../../../protocol/invoice'
+
 export const OVERLAY_STORAGE_KEY = 'invoices.overlayUrl'
 export const DESKTOP_INSTALL_URL = 'https://github.com/bsv-blockchain/bsv-desktop'
+export { PUBLIC_OVERLAY_URL }
 
 const BAKED_OVERLAY_URL = (import.meta.env.VITE_OVERLAY_URL ?? '').trim()
 
-export function isLocalhostUrl(url: string): boolean {
-  try {
-    const hostname = new URL(url).hostname
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
-  } catch {
-    return /localhost|127\.0\.0\.1/i.test(url)
-  }
-}
+export const isLocalhostUrl = isLocalOverlayUrl
 
 export function isPublicPagesHost(): boolean {
   if (typeof window === 'undefined') return false
@@ -30,7 +26,7 @@ export function resolveOverlayUrl(): string {
   if (isPublicPagesHost()) {
     if (stored && !isLocalhostUrl(stored)) return stored
     if (BAKED_OVERLAY_URL && !isLocalhostUrl(BAKED_OVERLAY_URL)) return BAKED_OVERLAY_URL
-    return ''
+    return PUBLIC_OVERLAY_URL
   }
 
   return stored || BAKED_OVERLAY_URL || 'http://localhost:8081'

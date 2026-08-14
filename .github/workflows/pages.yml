@@ -49,7 +49,7 @@ jobs:
         working-directory: invoices/frontend
         env:
           VITE_BASE: /business-ideas/invoices/
-          VITE_OVERLAY_URL: ${{ secrets.INVOICES_OVERLAY_URL }}
+          VITE_OVERLAY_URL: ${{ secrets.INVOICES_OVERLAY_URL || 'https://overlay-us-1.bsvb.tech' }}
         run: |
           npm ci
           npm run build

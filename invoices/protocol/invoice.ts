@@ -11,6 +11,10 @@ export const PROTOCOL_ID: [0, string] = [0, 'invoices']
 export const BASKET = 'invoices'
 export const TOPIC = 'tm_invoices'
 export const LOOKUP_SERVICE = 'ls_invoices'
+/** Public overlay-us-1 catch-all. Local Docker keeps TOPIC / LOOKUP_SERVICE. */
+export const PUBLIC_TOPIC = 'tm_anytx'
+export const PUBLIC_LOOKUP = 'ls_anytx'
+export const PUBLIC_OVERLAY_URL = 'https://overlay-us-1.bsvb.tech'
 export const MAGIC = 'bsvinvoice'
 export const PAID_MAGIC = 'bsvinvoice-paid'
 export const BRC29_PROTOCOL_ID: [2, string] = [2, '3241645161d8']
@@ -244,6 +248,131 @@ export function assertPayable(invoice: { status: InvoiceStatus } | null | undefi
   if (!invoice) throw new Error('Unknown invoice')
   if (invoice.status === 'paid') throw new Error('Invoice already paid')
   if (invoice.status !== 'open') throw new Error(`Invoice is ${invoice.status}`)
+}
+
+export function isLocalOverlayUrl(url: string): boolean {
+  if (!url) return false
+  try {
+    const hostname = new URL(url).hostname
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
+  } catch {
+    return /localhost|127\.0\.0\.1/i.test(url)
+  }
+}
+
+export function overlayServicesFor(base: string): {
+  url: string
+  local: boolean
+  topic: string
+  lookup: string
+} {
+  const url = base.replace(/\/$/, '')
+  const local = isLocalOverlayUrl(url)
+  return {
+    url,
+    local,
+    topic: local ? TOPIC : PUBLIC_TOPIC,
+    lookup: local ? LOOKUP_SERVICE : PUBLIC_LOOKUP
+  }
+}
+
+export interface IndexedInvoice {
+  invoice: InvoicePayload
+  txid: string
+  outputIndex: number
+}
+
+export interface IndexedReceipt {
+  receipt: ReceiptPayload
+  txid: string
+  outputIndex: number
+  paidAt?: string
+}
+
+export interface JoinedInvoice extends InvoicePayload {
+  status: InvoiceStatus
+  txid: string
+  outputIndex: number
+  paymentTxid?: string
+  paymentOutputIndex?: number
+  receiptTxid?: string
+  receiptOutputIndex?: number
+  payerIdentity?: string
+  paidAt?: string
+}
+
+/**
+ * Client-side join for ls_anytx: invoice PushDrop + receipt PushDrop → paid.
+ * Local ls_invoices does this in storage; the public catch-all does not.
+ */
+export function joinInvoiceRecords(
+  invoices: IndexedInvoice[],
+  receipts: IndexedReceipt[]
+): JoinedInvoice[] {
+  const receiptById = new Map<string, IndexedReceipt>()
+  for (const row of receipts) {
+    if (!receiptById.has(row.receipt.invoiceId)) {
+      receiptById.set(row.receipt.invoiceId, row)
+    }
+  }
+
+  const seen = new Set<string>()
+  const joined: JoinedInvoice[] = []
+  for (const row of invoices) {
+    if (seen.has(row.invoice.invoiceId)) continue
+    seen.add(row.invoice.invoiceId)
+    joined.push(applyReceipt(row, receiptById.get(row.invoice.invoiceId)))
+  }
+
+  for (const [invoiceId, paid] of receiptById) {
+    if (seen.has(invoiceId)) continue
+    seen.add(invoiceId)
+    const [createTxid, createVout] = paid.receipt.invoiceOutpoint.split('.')
+    joined.push(applyReceipt(
+      {
+        invoice: {
+          magic: MAGIC,
+          invoiceId,
+          payeeIdentity: paid.receipt.payeeIdentity,
+          amountSats: paid.receipt.amountSats,
+          memo: '',
+          dueDate: '',
+          createdAt: '',
+          orgName: '',
+          billedTo: '',
+          amountUsd: ''
+        },
+        txid: createTxid,
+        outputIndex: Number(createVout ?? 0)
+      },
+      paid
+    ))
+  }
+
+  return joined
+}
+
+function applyReceipt(row: IndexedInvoice, paid?: IndexedReceipt): JoinedInvoice {
+  if (!paid) {
+    return {
+      ...row.invoice,
+      status: 'open',
+      txid: row.txid,
+      outputIndex: row.outputIndex
+    }
+  }
+  return {
+    ...row.invoice,
+    status: 'paid',
+    txid: row.txid,
+    outputIndex: row.outputIndex,
+    paymentTxid: paid.txid,
+    paymentOutputIndex: paid.receipt.remittance.paymentOutputIndex,
+    receiptTxid: paid.txid,
+    receiptOutputIndex: paid.outputIndex,
+    payerIdentity: paid.receipt.payerIdentity,
+    paidAt: paid.paidAt
+  }
 }
 
 export function bindReceiptToInvoice(

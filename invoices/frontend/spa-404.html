@@ -7,7 +7,10 @@
       (function () {
         var match = location.pathname.match(/\/invoices\/i\/([0-9a-f]{32})\/?$/i)
         if (match) {
-          location.replace('/business-ideas/invoices/#/i/' + match[1].toLowerCase())
+          var tx = new URLSearchParams(location.search).get('tx')
+          var hash = '/business-ideas/invoices/#/i/' + match[1].toLowerCase()
+          if (tx && /^[0-9a-f]{64}$/i.test(tx)) hash += '?tx=' + tx.toLowerCase()
+          location.replace(hash)
           return
         }
         location.replace('/business-ideas/')

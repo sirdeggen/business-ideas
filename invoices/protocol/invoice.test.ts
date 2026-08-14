@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import {
+  LOOKUP_SERVICE,
   MAGIC,
   PAID_MAGIC,
+  PUBLIC_LOOKUP,
+  PUBLIC_OVERLAY_URL,
+  PUBLIC_TOPIC,
+  TOPIC,
   assertPayable,
   bindReceiptToInvoice,
   classifyInvoiceTransaction,
   encodeInvoiceFields,
   encodeReceiptFields,
   isIdentityKey,
+  joinInvoiceRecords,
+  overlayServicesFor,
   parseInvoiceFields,
   parseReceiptFields,
   type InvoicePayload,
@@ -163,5 +170,83 @@ describe('invoice protocol', () => {
   it('accepts compressed identity keys only', () => {
     expect(isIdentityKey(PAYEE)).toBe(true)
     expect(isIdentityKey('not-a-key')).toBe(false)
+  })
+})
+
+describe('public vs local overlay topic selection', () => {
+  it('keeps tm_invoices / ls_invoices on localhost Docker', () => {
+    expect(overlayServicesFor('http://localhost:8081')).toEqual({
+      url: 'http://localhost:8081',
+      local: true,
+      topic: TOPIC,
+      lookup: LOOKUP_SERVICE
+    })
+    expect(overlayServicesFor('http://127.0.0.1:8081/')).toMatchObject({
+      local: true,
+      topic: 'tm_invoices',
+      lookup: 'ls_invoices'
+    })
+  })
+
+  it('selects tm_anytx / ls_anytx on the public overlay host', () => {
+    expect(overlayServicesFor(PUBLIC_OVERLAY_URL)).toEqual({
+      url: PUBLIC_OVERLAY_URL,
+      local: false,
+      topic: PUBLIC_TOPIC,
+      lookup: PUBLIC_LOOKUP
+    })
+    expect(overlayServicesFor('https://overlay-us-1.bsvb.tech/')).toMatchObject({
+      local: false,
+      topic: 'tm_anytx',
+      lookup: 'ls_anytx'
+    })
+  })
+})
+
+describe('client-side invoice + receipt join', () => {
+  const createTxid = 'cd'.repeat(32)
+  const payTxid = 'ef'.repeat(32)
+
+  it('marks an invoice paid when a matching receipt exists', () => {
+    const invoice = demoInvoice()
+    const receipt = demoReceipt()
+    const [joined] = joinInvoiceRecords(
+      [{ invoice, txid: createTxid, outputIndex: 0 }],
+      [{ receipt, txid: payTxid, outputIndex: 1, paidAt: '2026-08-14T12:00:00.000Z' }]
+    )
+    expect(joined.status).toBe('paid')
+    expect(joined.invoiceId).toBe(invoice.invoiceId)
+    expect(joined.txid).toBe(createTxid)
+    expect(joined.paymentTxid).toBe(payTxid)
+    expect(joined.receiptTxid).toBe(payTxid)
+    expect(joined.receiptOutputIndex).toBe(1)
+    expect(joined.payerIdentity).toBe(PAYER)
+    expect(joined.paidAt).toBe('2026-08-14T12:00:00.000Z')
+    expect(joined.memo).toBe('Choir robes')
+    expect(() => assertPayable(joined)).toThrow(/already paid/)
+  })
+
+  it('leaves an invoice open when no receipt is indexed', () => {
+    const invoice = demoInvoice()
+    const [joined] = joinInvoiceRecords(
+      [{ invoice, txid: createTxid, outputIndex: 0 }],
+      []
+    )
+    expect(joined.status).toBe('open')
+    expect(joined.paymentTxid).toBeUndefined()
+    expect(() => assertPayable(joined)).not.toThrow()
+  })
+
+  it('still reports paid from a receipt if the create output was not in the page', () => {
+    const receipt = demoReceipt()
+    const [joined] = joinInvoiceRecords(
+      [],
+      [{ receipt, txid: payTxid, outputIndex: 1 }]
+    )
+    expect(joined.status).toBe('paid')
+    expect(joined.invoiceId).toBe(receipt.invoiceId)
+    expect(joined.paymentTxid).toBe(payTxid)
+    expect(joined.txid).toBe(createTxid)
+    expect(() => assertPayable(joined)).toThrow(/already paid/)
   })
 })

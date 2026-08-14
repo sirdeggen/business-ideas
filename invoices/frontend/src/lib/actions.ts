@@ -125,7 +125,11 @@ export async function payInvoice(
   overlayUrl: string,
   invoice: OverlayInvoice
 ): Promise<PaymentPackage> {
-  const live = await lookupInvoices(overlayUrl, { invoiceId: invoice.invoiceId, forPay: true })
+  const live = await lookupInvoices(overlayUrl, {
+    invoiceId: invoice.invoiceId,
+    txid: invoice.txid || undefined,
+    forPay: true
+  })
   const open = live[0]
   assertPayable(open)
 

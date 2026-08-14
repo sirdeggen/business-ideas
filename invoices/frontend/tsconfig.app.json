@@ -19,5 +19,6 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src", "../protocol/invoice.ts"]
+  "include": ["src", "../protocol/invoice.ts"],
+  "exclude": ["src/**/*.test.ts"]
 }

@@ -17,9 +17,9 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
 
   const setUrl = (next: string): void => {
     const trimmed = next.trim()
-    if (isPublicPagesHost() && isLocalhostUrl(trimmed)) {
-      setUrlState('')
+    if (isPublicPagesHost() && (!trimmed || isLocalhostUrl(trimmed))) {
       localStorage.removeItem(OVERLAY_STORAGE_KEY)
+      setUrlState(resolveOverlayUrl())
       return
     }
     setUrlState(trimmed)
