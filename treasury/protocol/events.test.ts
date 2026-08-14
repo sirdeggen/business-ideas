@@ -4,8 +4,10 @@ import { PrivateKey } from '@bsv/sdk'
 import {
   EVENT_TAG,
   encodeEventFields,
-  fundActionDisabled,
+  fundGate,
+  inviteHeadline,
   parseEventFields,
+  proposeGate,
   reconstructTreasury,
   type BoardEvent
 } from './events.ts'
@@ -188,10 +190,12 @@ describe('board event tokens', () => {
     assert.match(new TextDecoder('latin1').decode(pdf), /Demo Club/)
   })
 
-  it('reconstructs a lock after create + treasurer join so Fund works on an empty vault', () => {
+  it('keeps Fund disabled after create until every seat has joined, and says invite first', () => {
     const treasurer = key()
-    const derived = key()
-    const treasury = reconstructTreasury([
+    const chair = key()
+    const bookkeeper = key()
+    const derived = [key(), key(), key()]
+    const created = reconstructTreasury([
       event({
         treasuryId: 'fresh',
         kind: 'created',
@@ -210,18 +214,62 @@ describe('board event tokens', () => {
         treasuryId: 'fresh',
         kind: 'joined',
         at: '2026-08-14T03:00:01.000Z',
-        payload: { role: 'treasurer', identityKey: treasurer, derivedPubkey: derived }
+        payload: { role: 'treasurer', identityKey: treasurer, derivedPubkey: derived[0] }
       })
     ])
-    assert.ok(treasury)
-    assert.ok(treasury.lockingScriptHex)
-    assert.equal(treasury.threshold, 1)
-    assert.equal(treasury.vault.length, 0)
-    assert.equal(treasury.signers.filter((signer) => signer.derivedPubkey).length, 1)
-    assert.equal(fundActionDisabled({ wallet: {}, treasury, busy: false }), false)
-    assert.equal(fundActionDisabled({ wallet: {}, treasury: { ...treasury, vault: [] }, busy: false }), false)
-    assert.equal(fundActionDisabled({ wallet: null, treasury, busy: false }), true)
-    assert.equal(fundActionDisabled({ wallet: {}, treasury: null, busy: false }), true)
-    assert.equal(fundActionDisabled({ wallet: {}, treasury, busy: true }), true)
+    assert.ok(created)
+    assert.equal(created.lockingScriptHex, undefined)
+    assert.equal(created.vault.length, 0)
+    assert.equal(inviteHeadline(created), 'Invite chair and bookkeeper')
+    const blocked = fundGate({ wallet: {}, treasury: created, busy: false })
+    assert.equal(blocked.disabled, true)
+    assert.match(blocked.reason, /Invite chair and bookkeeper/)
+    assert.match(blocked.reason, /every seat has joined/)
+    assert.equal(fundGate({ wallet: null, treasury: created, busy: false }).disabled, true)
+    assert.equal(proposeGate({ wallet: {}, treasury: created, busy: false }).reason, 'Fund the vault before proposing a payment.')
+
+    const allJoined = reconstructTreasury([
+      event({
+        treasuryId: 'fresh',
+        kind: 'created',
+        at: '2026-08-14T03:00:00.000Z',
+        payload: {
+          name: 'Demo Club',
+          signerCount: 3,
+          signers: [
+            { role: 'treasurer', identityKey: treasurer },
+            { role: 'chair' },
+            { role: 'bookkeeper' }
+          ]
+        }
+      }),
+      event({
+        treasuryId: 'fresh',
+        kind: 'joined',
+        at: '2026-08-14T03:00:01.000Z',
+        payload: { role: 'treasurer', identityKey: treasurer, derivedPubkey: derived[0] }
+      }),
+      event({
+        treasuryId: 'fresh',
+        kind: 'joined',
+        at: '2026-08-14T03:00:02.000Z',
+        payload: { role: 'chair', identityKey: chair, derivedPubkey: derived[1] }
+      }),
+      event({
+        treasuryId: 'fresh',
+        kind: 'joined',
+        at: '2026-08-14T03:00:03.000Z',
+        payload: { role: 'bookkeeper', identityKey: bookkeeper, derivedPubkey: derived[2] }
+      })
+    ])
+    assert.ok(allJoined)
+    assert.ok(allJoined.lockingScriptHex)
+    assert.equal(allJoined.threshold, 2)
+    assert.equal(inviteHeadline(allJoined), null)
+    const open = fundGate({ wallet: {}, treasury: allJoined, busy: false })
+    assert.equal(open.disabled, false)
+    assert.equal(open.reason, '')
+    assert.equal(allJoined.vault.length, 0)
+    assert.equal(proposeGate({ wallet: {}, treasury: allJoined, busy: false }).disabled, true)
   })
 })

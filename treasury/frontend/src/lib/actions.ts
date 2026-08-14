@@ -65,7 +65,7 @@ export async function fundVault(
   satoshis: number
 ): Promise<{ txid: string; vout: number; beef: number[]; satoshis: number; lockingScriptHex: string }> {
   const lock = vaultLockFromJoined(treasury.signers)
-  if (!lock) throw new Error('A signer must join before the vault can be funded')
+  if (!lock) throw new Error('Invite the other signers first. Fund unlocks when every seat has joined.')
   if (satoshis < 1) throw new Error('Fund at least 1 sat')
   const response = await wallet.createAction({
     description: `Fund ${treasury.name}`.slice(0, 50),

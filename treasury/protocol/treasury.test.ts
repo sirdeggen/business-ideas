@@ -36,18 +36,9 @@ describe('policy treasury protocol', () => {
     assert.equal(script.chunks.at(-1)?.op, OP.OP_CHECKMULTISIG)
   })
 
-  it('builds a 1-of-1 locking script so the creator can fund before others join', () => {
+  it('rejects a 1-of-1 vault', () => {
     const pk = PrivateKey.fromRandom().toPublicKey().toString()
-    const script = p2msLock([pk], 1)
-    const asm = script.toASM()
-    assert.match(asm, /^OP_1 /)
-    assert.match(asm, / OP_1 OP_CHECKMULTISIG$/)
-  })
-
-  it('rejects a vault with no pubkeys or more than three', () => {
-    const pk = PrivateKey.fromRandom().toPublicKey().toString()
-    assert.throws(() => p2msLock([], 1), /1-of-1, 2-of-2, or 2-of-3/)
-    assert.throws(() => p2msLock([pk, pk, pk, pk], 2), /1-of-1, 2-of-2, or 2-of-3/)
+    assert.throws(() => p2msLock([pk], 1), /2-of-2 or 2-of-3/)
   })
 
   it('canonical proposal is stable and signed with BRC-100 createSignature({ data })', async () => {
