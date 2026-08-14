@@ -246,6 +246,105 @@ export function assertPayable(invoice: { status: InvoiceStatus } | null | undefi
   if (invoice.status !== 'open') throw new Error(`Invoice is ${invoice.status}`)
 }
 
+export interface IndexedInvoice {
+  invoice: InvoicePayload
+  txid: string
+  outputIndex: number
+}
+
+export interface IndexedReceipt {
+  receipt: ReceiptPayload
+  txid: string
+  outputIndex: number
+  paidAt?: string
+}
+
+export interface JoinedInvoice extends InvoicePayload {
+  status: InvoiceStatus
+  txid: string
+  outputIndex: number
+  paymentTxid?: string
+  paymentOutputIndex?: number
+  receiptTxid?: string
+  receiptOutputIndex?: number
+  payerIdentity?: string
+  paidAt?: string
+}
+
+/**
+ * Client-side join for ls_anytx: invoice PushDrop + receipt PushDrop → paid.
+ * Local ls_invoices does this in storage; the public catch-all does not.
+ */
+export function joinInvoiceRecords(
+  invoices: IndexedInvoice[],
+  receipts: IndexedReceipt[]
+): JoinedInvoice[] {
+  const receiptById = new Map<string, IndexedReceipt>()
+  for (const row of receipts) {
+    if (!receiptById.has(row.receipt.invoiceId)) {
+      receiptById.set(row.receipt.invoiceId, row)
+    }
+  }
+
+  const seen = new Set<string>()
+  const joined: JoinedInvoice[] = []
+  for (const row of invoices) {
+    if (seen.has(row.invoice.invoiceId)) continue
+    seen.add(row.invoice.invoiceId)
+    joined.push(applyReceipt(row, receiptById.get(row.invoice.invoiceId)))
+  }
+
+  for (const [invoiceId, paid] of receiptById) {
+    if (seen.has(invoiceId)) continue
+    seen.add(invoiceId)
+    const [createTxid, createVout] = paid.receipt.invoiceOutpoint.split('.')
+    joined.push(applyReceipt(
+      {
+        invoice: {
+          magic: MAGIC,
+          invoiceId,
+          payeeIdentity: paid.receipt.payeeIdentity,
+          amountSats: paid.receipt.amountSats,
+          memo: '',
+          dueDate: '',
+          createdAt: '',
+          orgName: '',
+          billedTo: '',
+          amountUsd: ''
+        },
+        txid: createTxid,
+        outputIndex: Number(createVout ?? 0)
+      },
+      paid
+    ))
+  }
+
+  return joined
+}
+
+function applyReceipt(row: IndexedInvoice, paid?: IndexedReceipt): JoinedInvoice {
+  if (!paid) {
+    return {
+      ...row.invoice,
+      status: 'open',
+      txid: row.txid,
+      outputIndex: row.outputIndex
+    }
+  }
+  return {
+    ...row.invoice,
+    status: 'paid',
+    txid: row.txid,
+    outputIndex: row.outputIndex,
+    paymentTxid: paid.txid,
+    paymentOutputIndex: paid.receipt.remittance.paymentOutputIndex,
+    receiptTxid: paid.txid,
+    receiptOutputIndex: paid.outputIndex,
+    payerIdentity: paid.receipt.payerIdentity,
+    paidAt: paid.paidAt
+  }
+}
+
 export function bindReceiptToInvoice(
   invoice: Pick<InvoicePayload, 'invoiceId' | 'payeeIdentity' | 'amountSats'>,
   receipt: ReceiptPayload

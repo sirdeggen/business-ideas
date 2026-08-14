@@ -1,7 +1,17 @@
+export const PUBLIC_OVERLAY_URL = 'https://overlay-us-1.bsvb.tech'
+export const PUBLIC_TOPIC = 'tm_anytx'
+export const PUBLIC_LOOKUP = 'ls_anytx'
+
+const BAKED_OVERLAY_URL = (import.meta.env.VITE_OVERLAY_URL as string | undefined)?.trim() ?? ''
+
 export const OVERLAY_STORAGE_KEY = 'invoices.overlayUrl'
 export const DESKTOP_INSTALL_URL = 'https://github.com/bsv-blockchain/bsv-desktop'
 
-const BAKED_OVERLAY_URL = (import.meta.env.VITE_OVERLAY_URL ?? '').trim()
+export const LOCAL_OVERLAY_HINT =
+  'Optional local Docker override: cd invoices && docker compose up --build (overlay :8081, UI :5174), then set Overlay URL to http://localhost:8081 for tm_invoices / ls_invoices.'
+
+export const PUBLIC_OVERLAY_HINT =
+  'Pages talks to the public overlay at overlay-us-1.bsvb.tech (tm_anytx / ls_anytx). No docker compose required.'
 
 export function isLocalhostUrl(url: string): boolean {
   try {
@@ -17,23 +27,24 @@ export function isPublicPagesHost(): boolean {
   return window.location.hostname.endsWith('github.io')
 }
 
+export const isGitHubPages = isPublicPagesHost
+
 /**
- * Public GitHub Pages never defaults to localhost. Local Vite/Docker may.
- * A baked VITE_OVERLAY_URL is used only when it is a reachable (non-localhost)
- * URL, or when we are not on the public host.
+ * Pages never defaults to localhost. Local Vite/Docker may still point at :8081
+ * via the in-UI overlay URL (custom tm_invoices).
  */
 export function resolveOverlayUrl(): string {
   const stored = typeof window === 'undefined'
     ? ''
     : (window.localStorage.getItem(OVERLAY_STORAGE_KEY) ?? '').trim()
 
-  if (isPublicPagesHost()) {
+  if (isGitHubPages()) {
     if (stored && !isLocalhostUrl(stored)) return stored
     if (BAKED_OVERLAY_URL && !isLocalhostUrl(BAKED_OVERLAY_URL)) return BAKED_OVERLAY_URL
-    return ''
+    return PUBLIC_OVERLAY_URL
   }
 
-  return stored || BAKED_OVERLAY_URL || 'http://localhost:8081'
+  return stored || BAKED_OVERLAY_URL || PUBLIC_OVERLAY_URL
 }
 
 export const DEFAULT_OVERLAY_URL = resolveOverlayUrl()
@@ -46,6 +57,10 @@ export function originator(): string {
 export function shortKey(key: string, size = 10): string {
   if (key.length <= size * 2) return key
   return `${key.slice(0, size)}…${key.slice(-6)}`
+}
+
+export function overlayHint(url = resolveOverlayUrl()): string {
+  return isLocalhostUrl(url) ? LOCAL_OVERLAY_HINT : PUBLIC_OVERLAY_HINT
 }
 
 export function errorMessage(error: unknown): string {

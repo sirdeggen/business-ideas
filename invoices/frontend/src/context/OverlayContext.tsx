@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { OVERLAY_STORAGE_KEY, isLocalhostUrl, isPublicPagesHost, resolveOverlayUrl } from '../lib/config'
+import { OVERLAY_STORAGE_KEY, resolveOverlayUrl } from '../lib/config'
 import { pingOverlay } from '../lib/overlay'
 
 interface OverlayState {
@@ -16,22 +16,11 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
   const [online, setOnline] = useState<boolean | null>(null)
 
   const setUrl = (next: string): void => {
-    const trimmed = next.trim()
-    if (isPublicPagesHost() && isLocalhostUrl(trimmed)) {
-      setUrlState('')
-      localStorage.removeItem(OVERLAY_STORAGE_KEY)
-      return
-    }
-    setUrlState(trimmed)
-    if (trimmed) localStorage.setItem(OVERLAY_STORAGE_KEY, trimmed)
-    else localStorage.removeItem(OVERLAY_STORAGE_KEY)
+    setUrlState(next)
+    localStorage.setItem(OVERLAY_STORAGE_KEY, next)
   }
 
   const refresh = async (): Promise<void> => {
-    if (!url) {
-      setOnline(false)
-      return
-    }
     setOnline(await pingOverlay(url))
   }
 

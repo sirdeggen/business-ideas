@@ -11,6 +11,7 @@ import {
   DESKTOP_INSTALL_URL,
   defaultDueDate,
   errorMessage,
+  overlayHint,
   shortKey
 } from './lib/config'
 import {
@@ -29,7 +30,7 @@ import {
   goHome,
   goToInvoice,
   invoicePublicUrl,
-  readInvoiceIdFromLocation
+  parseInvoiceLocation
 } from './lib/route'
 
 type View = 'home' | 'create' | 'invoice'
@@ -107,7 +108,7 @@ function Advanced() {
       />
       <p className="hint">
         {online === true ? 'Reachable.' : online === false ? 'Not reachable from this browser.' : 'Checking…'}
-        {' '}Status is served by overlay lookup. Local Docker is not the public path.
+        {' '}{overlayHint(url)}
       </p>
       {identityKey && (
         <p className="hint">
@@ -165,7 +166,7 @@ function Create({
   onSent,
   onBack
 }: {
-  onSent: (invoiceId: string) => void
+  onSent: (invoiceId: string, txid: string) => void
   onBack: () => void
 }) {
   const { url } = useOverlay()
@@ -251,7 +252,7 @@ function Create({
         billedTo: billedTo.trim(),
         amountUsd: formatUsdInput(usd)
       })
-      onSent(created.invoiceId)
+      onSent(created.invoiceId, created.txid)
     } catch (err) {
       setError(errorMessage(err))
     } finally {
@@ -340,7 +341,15 @@ function Create({
   )
 }
 
-function InvoicePage({ invoiceId, onHome }: { invoiceId: string, onHome: () => void }) {
+function InvoicePage({
+  invoiceId,
+  createTxid,
+  onHome
+}: {
+  invoiceId: string
+  createTxid: string | null
+  onHome: () => void
+}) {
   const { url } = useOverlay()
   const { connect, connecting } = useWallet()
   const [invoice, setInvoice] = useState<OverlayInvoice | null>(null)
@@ -361,7 +370,10 @@ function InvoicePage({ invoiceId, onHome }: { invoiceId: string, onHome: () => v
         return
       }
       try {
-        const rows = await lookupInvoices(url, { invoiceId })
+        const rows = await lookupInvoices(url, {
+          invoiceId,
+          txid: createTxid || undefined
+        })
         if (cancelled) return
         const row = rows[0] ?? null
         setInvoice(row)
@@ -380,10 +392,10 @@ function InvoicePage({ invoiceId, onHome }: { invoiceId: string, onHome: () => v
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', onVis)
     }
-  }, [url, invoiceId])
+  }, [url, invoiceId, createTxid])
 
   const copyLink = async (): Promise<void> => {
-    await navigator.clipboard.writeText(invoicePublicUrl(invoiceId))
+    await navigator.clipboard.writeText(invoicePublicUrl(invoiceId, invoice?.txid || createTxid))
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1600)
   }
@@ -406,7 +418,10 @@ function InvoicePage({ invoiceId, onHome }: { invoiceId: string, onHome: () => v
     }
     try {
       await payInvoice(client, url, invoice)
-      const rows = await lookupInvoices(url, { invoiceId })
+      const rows = await lookupInvoices(url, {
+        invoiceId,
+        txid: invoice.txid || createTxid || undefined
+      })
       setInvoice(rows[0] ?? invoice)
     } catch (err) {
       const message = errorMessage(err)
@@ -501,19 +516,28 @@ function InvoicePage({ invoiceId, onHome }: { invoiceId: string, onHome: () => v
   )
 }
 
+function readRoute(): { invoiceId: string | null, createTxid: string | null } {
+  if (typeof window === 'undefined') return { invoiceId: null, createTxid: null }
+  return parseInvoiceLocation(window.location.pathname, window.location.search, window.location.hash)
+}
+
 function Shell() {
-  const [view, setView] = useState<View>(() => (readInvoiceIdFromLocation() ? 'invoice' : 'home'))
-  const [invoiceId, setInvoiceId] = useState<string | null>(() => readInvoiceIdFromLocation())
+  const initial = readRoute()
+  const [view, setView] = useState<View>(() => (initial.invoiceId ? 'invoice' : 'home'))
+  const [invoiceId, setInvoiceId] = useState<string | null>(() => initial.invoiceId)
+  const [createTxid, setCreateTxid] = useState<string | null>(() => initial.createTxid)
 
   useEffect(() => {
     const sync = (): void => {
-      const id = readInvoiceIdFromLocation()
-      if (id) {
-        setInvoiceId(id)
+      const route = readRoute()
+      if (route.invoiceId) {
+        setInvoiceId(route.invoiceId)
+        setCreateTxid(route.createTxid)
         setView('invoice')
         return
       }
       setInvoiceId(null)
+      setCreateTxid(null)
       setView((current) => (current === 'create' ? 'create' : 'home'))
     }
     window.addEventListener('popstate', sync)
@@ -528,7 +552,12 @@ function Shell() {
     return (
       <Create
         onBack={() => { goHome(); setView('home') }}
-        onSent={(id) => { goToInvoice(id); setInvoiceId(id); setView('invoice') }}
+        onSent={(id, txid) => {
+          goToInvoice(id, txid)
+          setInvoiceId(id)
+          setCreateTxid(txid)
+          setView('invoice')
+        }}
       />
     )
   }
@@ -537,6 +566,7 @@ function Shell() {
     return (
       <InvoicePage
         invoiceId={invoiceId}
+        createTxid={createTxid}
         onHome={() => { goHome(); setView('home') }}
       />
     )
