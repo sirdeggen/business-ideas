@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react'
-import { agingLabel, daysLate, type ReceivablePayload } from '../../../protocol/receivable'
+import { agingLabel, daysLate, isIdentityKey, type ReceivablePayload } from '../../../protocol/receivable'
 import { samplePartyName } from '../../../protocol/samples'
 import { formatSats, shortKey } from '../lib/config'
 
-export function partyName(identityKey: string): string {
-  return samplePartyName(identityKey) ?? shortKey(identityKey, 8)
+export function partyName(value: string): string {
+  if (!isIdentityKey(value)) return value
+  return samplePartyName(value) ?? shortKey(value, 8)
 }
 
 export function InvoiceCard({

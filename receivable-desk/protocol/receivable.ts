@@ -41,6 +41,7 @@ export interface Classification {
 
 const IDENTITY_KEY = /^(02|03)[0-9a-fA-F]{64}$/
 const INVOICE_ID = /^[A-Za-z0-9._:-]{1,64}$/
+export const DISPLAY_NAME_MAX = 80
 
 export function isIsoDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
@@ -74,6 +75,38 @@ export function agingLabel(days: number): AgingLabel {
 
 export function isIdentityKey(value: string): boolean {
   return IDENTITY_KEY.test(value.trim())
+}
+
+/** Person or org name on the Record form. Trimmed, 1–80 characters. */
+export function isDisplayName(value: string): boolean {
+  const trimmed = value.trim()
+  return trimmed.length >= 1 && trimmed.length <= DISPLAY_NAME_MAX
+}
+
+/** On-chain party field: 66-hex identity key or a display name. */
+export function isPartyIdentity(value: string): boolean {
+  const trimmed = value.trim()
+  return isIdentityKey(trimmed) || isDisplayName(trimmed)
+}
+
+/**
+ * Resolve what to store for a party.
+ * Advanced hex wins when present (must be a valid 66-hex key).
+ * A 66-hex typed in the name field still records as hex.
+ * Otherwise the trimmed name is stored.
+ * If the name is empty, the connected wallet identity may fill it.
+ */
+export function resolvePartyIdentity(
+  name: string,
+  advancedHex = '',
+  walletKey?: string | null
+): string | null {
+  const hex = advancedHex.trim()
+  const label = name.trim()
+  if (hex) return isIdentityKey(hex) ? hex : null
+  if (isIdentityKey(label) || isDisplayName(label)) return label
+  const fallback = walletKey?.trim() ?? ''
+  return isIdentityKey(fallback) ? fallback : null
 }
 
 function utf8BytesToString(bytes: number[]): string {
@@ -135,9 +168,11 @@ export function parseReceivableFields(fields: Array<number[] | Uint8Array>): Rec
 export function validateReceivable(item: ReceivablePayload): string | null {
   if (item.magic !== MAGIC) return 'wrong magic'
   if (!INVOICE_ID.test(item.invoiceId)) return 'invalid invoice id'
-  if (!isIdentityKey(item.creditor)) return 'invalid creditor identity'
-  if (!isIdentityKey(item.debtor)) return 'invalid debtor identity'
-  if (item.creditor === item.debtor) return 'creditor and debtor must differ'
+  const creditor = item.creditor.trim()
+  const debtor = item.debtor.trim()
+  if (!isPartyIdentity(creditor)) return 'invalid creditor'
+  if (!isPartyIdentity(debtor)) return 'invalid debtor'
+  if (creditor === debtor) return 'creditor and debtor must differ'
   if (!Number.isInteger(item.amountSats) || item.amountSats < 1) return 'amount must be a positive integer of sats'
   if (!isIsoDate(item.dueDate)) return 'due date must be YYYY-MM-DD'
   if (!STATUSES.includes(item.status)) return 'status must be open, approved, or paid'
