@@ -162,19 +162,17 @@ export function Desk() {
           <h3 className="subhead">{label}</h3>
           {grouped[label].length === 0 && <p className="hint">None.</p>}
           {grouped[label].map((row) => {
-            const late = Math.max(0, daysLate(row.dueDate))
             const settleReady = canSettle && !!wallet && held.some(
               (entry) => entry.item.invoiceId === row.invoiceId && entry.item.status !== 'paid'
             )
             const markNeedsConnect = !wallet && canSettle
             return (
-              <article key={`${row.txid}.${row.outputIndex}`} className="work-row">
+              <article key={`${row.txid}.${row.outputIndex}`} className="work-row chase-row">
                 <div>
                   <strong>{workRowTitle(row.debtor, row.invoiceId)}</strong>
                   <span className="work-id">{row.invoiceId}</span>
                 </div>
                 <div className="work-amount">{amountLabel(row)}</div>
-                <div className="work-late">{late === 0 ? '0' : String(late)}</div>
                 <div className="row work-actions">
                   <button className="btn" onClick={() => void sendReminder(row)}>
                     {copied === row.invoiceId ? 'Copied' : 'Send reminder'}
