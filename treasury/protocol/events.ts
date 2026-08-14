@@ -7,6 +7,7 @@
  */
 
 import { Utils } from '@bsv/sdk'
+import { displayUsd } from './money.js'
 import {
   PROTOCOL_ID,
   ROLE_LABEL,
@@ -26,7 +27,7 @@ export const OVERLAY_HOST = 'https://overlay-us-1.bsvb.tech'
 export const MESSAGE_BOX_HOST = 'https://gmb.bsvblockchain.tech'
 export const MESSAGE_BOX = 'policy treasury'
 
-export const EVENT_KINDS = ['created', 'joined', 'funded', 'proposed', 'approved', 'paid'] as const
+export const EVENT_KINDS = ['created', 'joined', 'funded', 'proposed', 'approved', 'declined', 'paid'] as const
 export type EventKind = (typeof EVENT_KINDS)[number]
 
 export interface BoardEvent {
@@ -69,7 +70,9 @@ export interface P2msSig {
 export interface Proposal {
   id: string
   amountSats: number
+  amountUsd?: string
   payeeIdentityKey: string
+  payeeName?: string
   memo: string
   payeeLockingScriptHex: string
   vaultTxid: string
@@ -81,7 +84,7 @@ export interface Proposal {
   createdBy: string
   approvals: Approval[]
   p2msSigs: P2msSig[]
-  status: 'open' | 'approved' | 'paid'
+  status: 'open' | 'approved' | 'declined' | 'paid'
   txid?: string
 }
 
@@ -165,6 +168,20 @@ export function parseEventFields(fields: Array<number[] | Uint8Array>): BoardEve
   }
 }
 
+function payeeLabel(event: BoardEvent): string {
+  const name = asString(event.payload.payeeName).trim()
+  if (name) return name
+  const key = asString(event.payload.payeeIdentityKey)
+  return key ? shortKey(key, 10) : 'a payee'
+}
+
+function amountLabel(event: BoardEvent): string {
+  return displayUsd(
+    asString(event.payload.amountUsd) || undefined,
+    asNumber(event.payload.amountSats || event.payload.satoshis) || undefined
+  )
+}
+
 function feedLine(event: BoardEvent): string {
   const role = asRole(event.payload.role)
   const who = role ? ROLE_LABEL[role] : 'Someone'
@@ -172,18 +189,20 @@ function feedLine(event: BoardEvent): string {
     case 'created':
       return `${asString(event.payload.name) || 'Treasury'} opened as a 2-of-${asNumber(event.payload.signerCount) || 3} board.`
     case 'joined':
-      return `${who} joined (${shortKey(asString(event.payload.identityKey), 10)}).`
+      return `${who} joined.`
     case 'funded':
-      return `Treasury received ${asNumber(event.payload.satoshis).toLocaleString()} sats.`
+      return `Treasury received ${amountLabel(event)}.`
     case 'proposed':
-      return `${who} proposed ${asNumber(event.payload.amountSats).toLocaleString()} sats to ${shortKey(asString(event.payload.payeeIdentityKey), 10)} — ${asString(event.payload.memo)}`
+      return `${who} proposed ${amountLabel(event)} to ${payeeLabel(event)} — ${asString(event.payload.memo)}`
     case 'approved':
       if (event.payload.p2msSignature) {
         return `${who} signed the vault spend for “${asString(event.payload.memo) || 'a payment'}”.`
       }
       return `${who} approved “${asString(event.payload.memo) || 'a payment'}”.`
+    case 'declined':
+      return `${who} declined “${asString(event.payload.memo) || 'a payment'}”.`
     case 'paid':
-      return `Paid ${asNumber(event.payload.amountSats).toLocaleString()} sats for “${asString(event.payload.memo)}”. txid ${asString(event.payload.txid).slice(0, 12)}…`
+      return `Paid ${amountLabel(event)} for “${asString(event.payload.memo)}”.`
     default:
       return event.kind
   }
@@ -332,7 +351,9 @@ export function reconstructTreasury(events: BoardEvent[]): Treasury | null {
         const proposal: Proposal = {
           id,
           amountSats: asNumber(event.payload.amountSats),
+          amountUsd: asString(event.payload.amountUsd) || undefined,
           payeeIdentityKey: asString(event.payload.payeeIdentityKey).toLowerCase(),
+          payeeName: asString(event.payload.payeeName) || undefined,
           memo: asString(event.payload.memo),
           payeeLockingScriptHex: asString(event.payload.payeeLockingScriptHex).toLowerCase(),
           vaultTxid: asString(event.payload.vaultTxid).toLowerCase(),
@@ -392,6 +413,13 @@ export function reconstructTreasury(events: BoardEvent[]): Treasury | null {
         if (proposal.status !== 'paid' && thresholdMet(uniqueApprovers(proposal.approvals).length, treasury.threshold)) {
           proposal.status = 'approved'
         }
+      }
+    }
+
+    if (event.kind === 'declined') {
+      const proposal = findProposal(treasury, asString(event.payload.proposalId))
+      if (proposal && proposal.status !== 'paid') {
+        proposal.status = 'declined'
       }
     }
 
