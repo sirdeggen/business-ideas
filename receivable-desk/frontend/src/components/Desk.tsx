@@ -13,7 +13,7 @@ import {
   settleReceivable,
   type HeldReceivable
 } from '../lib/actions'
-import { errorMessage, formatSats, overlayCheckFailed, overlayHint, walletHint } from '../lib/config'
+import { errorMessage, formatSats, overlayCheckFailed, walletHint } from '../lib/config'
 import { lookupReceivables, usesPublicAnytx, type OverlayReceivable } from '../lib/overlay'
 import { partyName } from './InvoiceCard'
 
@@ -26,6 +26,28 @@ function previewRows(): OverlayReceivable[] {
 function reminderText(row: OverlayReceivable, late: number, aging: AgingLabel): string {
   const lateBit = late > 0 ? `${late} days late (${aging})` : aging
   return `Reminder: ${partyName(row.debtor)} still owes ${formatSats(row.amountSats)} on ${row.invoiceId}, due ${row.dueDate} — ${lateBit}.`
+}
+
+function heldToRow(held: HeldReceivable): OverlayReceivable {
+  const [txid, index] = held.outpoint.split('.')
+  return {
+    ...held.item,
+    txid: txid || 'wallet',
+    outputIndex: Number(index ?? 0)
+  }
+}
+
+function unionChaseRows(overlay: OverlayReceivable[], held: HeldReceivable[]): OverlayReceivable[] {
+  const byId = new Map<string, OverlayReceivable>()
+  for (const row of overlay) {
+    if (row.status === 'paid') continue
+    byId.set(row.invoiceId, row)
+  }
+  for (const item of held) {
+    if (item.item.status === 'paid') continue
+    if (!byId.has(item.item.invoiceId)) byId.set(item.item.invoiceId, heldToRow(item))
+  }
+  return [...byId.values()]
 }
 
 export function Desk() {
@@ -42,20 +64,25 @@ export function Desk() {
   const canSettle = online === true
 
   const refresh = async (): Promise<void> => {
-    if (wallet) setHeld(await listHeldReceivables(wallet))
+    const nextHeld = wallet ? await listHeldReceivables(wallet) : []
+    setHeld(nextHeld)
+    let overlay: OverlayReceivable[] = []
     try {
-      const unpaid = await lookupReceivables(url, { status: 'unpaid' })
-      setRows(unpaid)
-      setPreview(false)
+      overlay = await lookupReceivables(url, { status: 'unpaid' })
       setError(null)
-      return
     } catch (err) {
       console.error('Desk lookup failed', err)
       setError(errorMessage(err))
     } finally {
       setLoaded(true)
     }
-    if (usesPublicAnytx(url)) {
+    const union = unionChaseRows(overlay, nextHeld)
+    if (union.length > 0) {
+      setRows(union)
+      setPreview(false)
+      return
+    }
+    if (usesPublicAnytx(url) || overlay.length === 0) {
       setRows([])
       setPreview(false)
       return
@@ -129,10 +156,7 @@ export function Desk() {
         registry — not a second product.
       </p>
       {preview && (
-        <p className="hint">
-          Showing sample invoices because the local index is not running.
-          {` ${overlayHint(url)}`}
-        </p>
+        <p className="hint">Showing sample invoices because the local index is not running.</p>
       )}
       <button className="btn" onClick={() => void refresh()}>Refresh list</button>
       {status && <p className="status ok">{status}</p>}
