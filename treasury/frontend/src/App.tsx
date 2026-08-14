@@ -5,14 +5,13 @@ import {
   shortKey,
   type Role
 } from '../../protocol/treasury'
+import { downloadCsv, downloadPdf } from '../../protocol/export'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import {
   createTreasury,
-  exportCsvUrl,
-  exportPdfUrl,
   getTreasury,
   joinTreasury,
-  pingFeed,
+  pingOverlay,
   postApproval,
   postP2msSig,
   postPaid,
@@ -30,9 +29,9 @@ import {
   signVaultSpend,
   broadcastVaultSpend
 } from './lib/actions'
+import { pullSignerMessages } from './lib/messagebox'
+import { rememberEvents } from './lib/overlay'
 import {
-  DEFAULT_FEED_URL,
-  FEED_STORAGE_KEY,
   TREASURY_STORAGE_KEY,
   errorMessage,
   newId
@@ -66,7 +65,6 @@ function openSeat(treasury: Treasury, identityKey: string | null) {
 
 function Shell() {
   const { wallet, identityKey, connecting, error, connect } = useWallet()
-  const [feedUrl, setFeedUrl] = useState(() => stored(FEED_STORAGE_KEY, DEFAULT_FEED_URL))
   const [online, setOnline] = useState<boolean | null>(null)
   const [treasuryId, setTreasuryId] = useState(() => {
     const fromUrl = new URLSearchParams(window.location.search).get('treasury')
@@ -98,21 +96,33 @@ function Shell() {
 
   const refresh = async (id = treasuryId): Promise<void> => {
     if (!id) return
-    const next = await getTreasury(feedUrl, id)
+    const next = await getTreasury(id)
+    if (!next) {
+      setTreasury(null)
+      throw new Error('No policy-treasury tokens for that id on ls_anytx yet')
+    }
     setTreasury(next)
     setTreasuryId(next.id)
     localStorage.setItem(TREASURY_STORAGE_KEY, next.id)
   }
 
   useEffect(() => {
-    localStorage.setItem(FEED_STORAGE_KEY, feedUrl)
-    void pingFeed(feedUrl).then(setOnline)
-  }, [feedUrl])
+    void pingOverlay().then(setOnline)
+  }, [])
 
   useEffect(() => {
     if (!treasuryId) return
     void refresh(treasuryId).catch((err) => setFail(errorMessage(err)))
-  }, [treasuryId, feedUrl])
+  }, [treasuryId])
+
+  useEffect(() => {
+    if (!wallet || !treasuryId) return
+    void pullSignerMessages(wallet).then((events) => {
+      if (events.length === 0) return
+      rememberEvents(treasuryId, events)
+      return refresh(treasuryId)
+    }).catch((err) => setFail(errorMessage(err)))
+  }, [wallet, treasuryId])
 
   const run = async (label: string, work: () => Promise<void>): Promise<void> => {
     setBusy(label)
@@ -150,6 +160,7 @@ function Shell() {
           <p className="lede">
             Not one person’s wallet. Treasurer, chair, and bookkeeper hold a
             2-of-3 BSV vault. The app proposes; keys stay in BSV Desktop or BSV Browser.
+            Board minutes are public on overlay — a wallet is only needed to act.
           </p>
         </div>
         <div className="identity">
@@ -176,7 +187,8 @@ function Shell() {
       </header>
 
       <p className="banner">
-        Board feed {online ? 'online' : online === false ? 'offline — start docker compose' : 'checking'} · {feedUrl}
+        {online ? 'overlay-us-1 online' : online === false ? 'overlay-us-1 unreachable — cached minutes still show' : 'checking overlay-us-1'}
+        {' · tm_anytx / ls_anytx · Message Box gmb.bsvblockchain.tech'}
         {seat ? ` · you are ${ROLE_LABEL[seat.role]}` : ''}
       </p>
 
@@ -188,7 +200,7 @@ function Shell() {
         <div>
           <section className="panel">
             <h2>1. Create a treasury</h2>
-            <p>Name the board and invite two other signers. 2-of-2 is allowed if you skip the bookkeeper.</p>
+            <p>Name the board and invite two other signers. 2-of-2 is allowed if you skip the bookkeeper. Creating publishes a 1-sat PushDrop on tm_anytx.</p>
             <label>Name</label>
             <input value={name} onChange={(event) => setName(event.target.value)} />
             <label>Signers</label>
@@ -200,7 +212,7 @@ function Shell() {
               <option value={2}>2-of-2 (treasurer, chair)</option>
             </select>
             <label>Treasurer identity key (optional)</label>
-            <input value={inviteTreasurer} onChange={(event) => setInviteTreasurer(event.target.value)} placeholder="leave blank to fill on join" />
+            <input value={inviteTreasurer} onChange={(event) => setInviteTreasurer(event.target.value)} placeholder="leave blank to use the connected wallet" />
             <label>Chair identity key (optional)</label>
             <input value={inviteChair} onChange={(event) => setInviteChair(event.target.value)} />
             {signerCount === 3 && (
@@ -212,13 +224,15 @@ function Shell() {
             <div className="row">
               <button
                 className="btn primary"
-                disabled={Boolean(busy)}
+                disabled={!wallet || !identityKey || Boolean(busy)}
                 onClick={() => void run('Creating treasury…', async () => {
-                  const created = await createTreasury(feedUrl, {
+                  if (!wallet || !identityKey) throw new Error('Connect a BSV wallet to create a treasury')
+                  const created = await createTreasury(wallet, {
                     name,
                     signerCount,
+                    treasurerIdentityKey: inviteTreasurer || identityKey,
                     signers: [
-                      { role: 'treasurer', identityKey: inviteTreasurer || identityKey || undefined },
+                      { role: 'treasurer', identityKey: inviteTreasurer || identityKey },
                       { role: 'chair', identityKey: inviteChair || undefined },
                       ...(signerCount === 3
                         ? [{ role: 'bookkeeper' as Role, identityKey: inviteBookkeeper || undefined }]
@@ -243,7 +257,7 @@ function Shell() {
 
           <section className="panel">
             <h2>2. Join as a signer</h2>
-            <p>Each seat connects their own wallet. The app asks for a derived vault pubkey; it never sees a private key.</p>
+            <p>Each seat connects their own wallet. The app asks for a derived vault pubkey; it never sees a private key. Anyone can load `?treasury=` without connecting.</p>
             <label>Treasury id</label>
             <input value={treasuryId} onChange={(event) => setTreasuryId(event.target.value.trim())} />
             <div className="row">
@@ -254,9 +268,9 @@ function Shell() {
                 className="btn primary"
                 disabled={!wallet || !identityKey || !joinable || Boolean(busy)}
                 onClick={() => void run('Joining…', async () => {
-                  if (!wallet || !identityKey || !joinable) return
-                  const derived = await derivedVaultKey(wallet, treasuryId)
-                  const next = await joinTreasury(feedUrl, treasuryId, {
+                  if (!wallet || !identityKey || !joinable || !treasury) return
+                  const derived = await derivedVaultKey(wallet, treasury.id)
+                  const next = await joinTreasury(wallet, treasury, {
                     role: joinable.role,
                     identityKey,
                     derivedPubkey: derived
@@ -296,7 +310,13 @@ function Shell() {
                 onClick={() => void run('Funding vault…', async () => {
                   if (!wallet || !treasury) return
                   const funded = await fundVault(wallet, treasury, Number(fundSats))
-                  const next = await recordFund(feedUrl, treasury.id, funded)
+                  const next = await recordFund(wallet, treasury, {
+                    satoshis: funded.satoshis,
+                    txid: funded.txid,
+                    vout: funded.vout,
+                    beef: funded.beef,
+                    lockingScriptHex: treasury.lockingScriptHex as string
+                  })
                   setTreasury(next)
                   setNotice(`Funded ${funded.satoshis.toLocaleString()} sats.`)
                 })}
@@ -335,7 +355,7 @@ function Shell() {
                     memo,
                     payeeLockingScriptHex
                   })
-                  const next = await postProposal(feedUrl, treasury.id, {
+                  const next = await postProposal(wallet, treasury, {
                     proposalId,
                     identityKey,
                     derivedPubkey,
@@ -358,7 +378,11 @@ function Shell() {
         <div>
           <section className="panel">
             <h2>Board feed</h2>
-            <p>Plain-language log of proposals, approvals, and payments. This is a local feed server, not overlay-express.</p>
+            <p>
+              Reconstructed from 1-sat PushDrop announcements on overlay-us-1
+              (`tm_anytx` / `ls_anytx`). The P2MS vault UTXO itself is not a PushDrop,
+              so it does not appear in the lookup — only these event tokens do.
+            </p>
             {treasury?.feed.length ? (
               <ol className="feed">
                 {treasury.feed.map((event) => (
@@ -369,7 +393,7 @@ function Shell() {
                 ))}
               </ol>
             ) : (
-              <p className="hint">Nothing yet. Create a treasury to start the minute book.</p>
+              <p className="hint">Nothing yet. Create a treasury to start the minute book, or open an invite link.</p>
             )}
           </section>
 
@@ -394,26 +418,31 @@ function Shell() {
                     memo: proposal.memo,
                     payeeLockingScriptHex: proposal.payeeLockingScriptHex
                   })
-                  setTreasury(await postApproval(feedUrl, treasury.id, proposal.id, {
+                  setTreasury(await postApproval(wallet, treasury, {
+                    proposalId: proposal.id,
                     identityKey,
                     derivedPubkey,
-                    signature
+                    signature,
+                    memo: proposal.memo
                   }))
                 })}
                 onVaultSign={() => void run('Signing vault…', async () => {
                   if (!wallet || !identityKey || !treasury) return
                   const derivedPubkey = await derivedVaultKey(wallet, treasury.id)
                   const signature = await signVaultSpend(wallet, treasury, proposal)
-                  setTreasury(await postP2msSig(feedUrl, treasury.id, proposal.id, {
+                  setTreasury(await postP2msSig(wallet, treasury, {
+                    proposalId: proposal.id,
                     identityKey,
                     derivedPubkey,
-                    signature
+                    signature,
+                    memo: proposal.memo
                   }))
                 })}
                 onPay={() => void run('Broadcasting payment…', async () => {
                   if (!wallet || !treasury) return
                   const paid = await broadcastVaultSpend(wallet, treasury, proposal)
-                  setTreasury(await postPaid(feedUrl, treasury.id, proposal.id, {
+                  setTreasury(await postPaid(wallet, treasury, {
+                    proposalId: proposal.id,
                     txid: paid.txid,
                     changeVout: paid.changeVout,
                     beef: paid.tx
@@ -427,35 +456,32 @@ function Shell() {
 
           <section className="panel">
             <h2>6. Export the month</h2>
+            <p>CSV and PDF are built in this browser from the reconstructed board. No Express export route.</p>
             <label>Month</label>
             <input value={month} onChange={(event) => setMonth(event.target.value)} placeholder="YYYY-MM" />
             <div className="row">
-              <a
+              <button
                 className="btn"
-                href={treasury ? exportCsvUrl(feedUrl, treasury.id, month) : '#'}
+                disabled={!treasury}
+                onClick={() => treasury && downloadCsv(treasury, month)}
               >
                 CSV
-              </a>
-              <a
+              </button>
+              <button
                 className="btn primary"
-                href={treasury ? exportPdfUrl(feedUrl, treasury.id, month) : '#'}
+                disabled={!treasury}
+                onClick={() => treasury && downloadPdf(treasury, month)}
               >
                 PDF
-              </a>
+              </button>
             </div>
-          </section>
-
-          <section className="panel">
-            <h2>Feed URL</h2>
-            <p>Point this UI at the Dockerized board server (default localhost:8080).</p>
-            <input value={feedUrl} onChange={(event) => setFeedUrl(event.target.value)} />
           </section>
         </div>
       </div>
 
       <footer>
-        Needs BSV Desktop or BSV Browser. The app calls waitForAuthentication,
-        getPublicKey, createSignature, and createAction. Private keys never leave the wallet.
+        Needs BSV Desktop or BSV Browser to create, join, fund, propose, approve, or pay.
+        Reading `?treasury=` minutes uses ls_anytx only. Private keys never leave the wallet.
       </footer>
     </div>
   )

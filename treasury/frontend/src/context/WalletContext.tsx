@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useContext, useState, type ReactNode } from 'react'
 import type { WalletClient } from '@bsv/sdk'
 import { errorMessage } from '../lib/config'
 import { connectWallet } from '../lib/wallet'
@@ -34,10 +34,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       setConnecting(false)
     }
   }
-
-  useEffect(() => {
-    void connect()
-  }, [])
 
   return (
     <WalletContext.Provider value={{ wallet, identityKey, connecting, error, connect }}>

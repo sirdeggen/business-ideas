@@ -8,8 +8,8 @@
  * `createSignature`. It is not an EVM Safe account and not FROST/MuSig.
  *
  * Board policy: BRC-100 `createSignature` over a canonical proposal
- * (amount, payee identity key, memo). The server stores signatures; it does
- * not custody keys.
+ * (amount, payee identity key, memo). Announcements live on tm_anytx;
+ * this module does not custody keys.
  *
  * Spend: once two signers have approved, they each sign the same vault spend
  * sighash. The last signer (or any signer after two P2MS signatures) submits

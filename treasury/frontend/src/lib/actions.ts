@@ -13,8 +13,8 @@ import {
   p2msSignData,
   vaultInstructions
 } from '../../../protocol/treasury'
+import type { Proposal, Treasury } from '../../../protocol/events'
 import { originator } from './config'
-import type { Proposal, Treasury } from './api'
 
 export async function derivedVaultKey(wallet: WalletClient, treasuryId: string): Promise<string> {
   const { publicKey } = await wallet.getPublicKey({

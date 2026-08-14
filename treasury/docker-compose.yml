@@ -16,12 +16,9 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        VITE_FEED_URL: http://localhost:8080
-        VITE_BASE: /
+        VITE_BASE: ./
     ports:
       - "5173:80"
-    depends_on:
-      - feed
 
 volumes:
   treasury-data:

@@ -1,3 +1,4 @@
+/** Optional local minutes store. The public UI talks to overlay-us-1 + Message Box. */
 import { randomUUID } from 'node:crypto'
 import cors from 'cors'
 import express, { type Request, type Response } from 'express'

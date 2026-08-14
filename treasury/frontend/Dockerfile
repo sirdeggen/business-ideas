@@ -5,9 +5,7 @@ COPY frontend/package.json frontend/package-lock.json ./frontend/
 WORKDIR /repo/frontend
 RUN npm ci
 COPY frontend ./
-ARG VITE_FEED_URL=http://localhost:8080
-ARG VITE_BASE=/
-ENV VITE_FEED_URL=$VITE_FEED_URL
+ARG VITE_BASE=./
 ENV VITE_BASE=$VITE_BASE
 RUN npm run build
 

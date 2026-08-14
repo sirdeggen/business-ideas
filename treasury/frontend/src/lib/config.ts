@@ -1,7 +1,3 @@
-export const DEFAULT_FEED_URL =
-  (import.meta.env.VITE_FEED_URL as string | undefined) || 'http://localhost:8080'
-
-export const FEED_STORAGE_KEY = 'policy-treasury.feedUrl'
 export const TREASURY_STORAGE_KEY = 'policy-treasury.id'
 
 export function originator(): string {

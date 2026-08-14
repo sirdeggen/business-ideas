@@ -1,202 +1,210 @@
-import type { Role } from '../../../protocol/treasury'
+/**
+ * Public board API. Shared state is overlay-us-1 (tm_anytx / ls_anytx).
+ * Propose / approve also go through Message Box at gmb.bsvblockchain.tech.
+ * Express is not on this path.
+ */
+import { Utils, type WalletClient } from '@bsv/sdk'
+import {
+  makeEvent,
+  reconstructTreasury,
+  type Approval,
+  type BoardEvent,
+  type FeedEvent,
+  type P2msSig,
+  type Proposal,
+  type Treasury
+} from '../../../protocol/events'
+import { FEE_SATS, PROTOCOL_ID, planSpend, type Role } from '../../../protocol/treasury'
+import { notifySigners } from './messagebox'
+import { loadTreasury, pingOverlay as pingOverlayHost, publishBoardEvent, rememberEvents } from './overlay'
 
-export interface Signer {
-  role: Role
-  identityKey: string
-  derivedPubkey?: string
-  joinedAt?: string
+export type { Approval, FeedEvent, P2msSig, Proposal, Treasury }
+export { pingOverlayHost as pingOverlay }
+
+function beefHex(bytes: number[]): string {
+  return Utils.toHex(bytes)
 }
 
-export interface VaultUtxo {
-  txid: string
-  vout: number
-  satoshis: number
-  beef: number[]
+function signerRole(treasury: Treasury, identityKey: string): Role {
+  const seat = treasury.signers.find(
+    (signer) => signer.identityKey && signer.identityKey.toLowerCase() === identityKey.toLowerCase()
+  )
+  if (!seat) throw new Error('Only a joined signer can do that')
+  return seat.role
 }
 
-export interface Approval {
-  identityKey: string
-  role: Role
-  derivedPubkey: string
-  signature: number[]
-  at: string
-}
-
-export interface P2msSig {
-  identityKey: string
-  role: Role
-  derivedPubkey: string
-  signature: number[]
-  at: string
-}
-
-export interface Proposal {
-  id: string
-  amountSats: number
-  payeeIdentityKey: string
-  memo: string
-  payeeLockingScriptHex: string
-  vaultTxid: string
-  vaultVout: number
-  vaultSatoshis: number
-  feeSats: number
-  changeSats: number
-  createdAt: string
-  createdBy: string
-  approvals: Approval[]
-  p2msSigs: P2msSig[]
-  status: 'open' | 'approved' | 'paid'
-  txid?: string
-}
-
-export interface FeedEvent {
-  id: string
-  at: string
-  kind: string
-  text: string
-}
-
-export interface Treasury {
-  id: string
-  name: string
-  threshold: number
-  signers: Signer[]
-  lockingScriptHex?: string
-  vault: VaultUtxo[]
-  proposals: Proposal[]
-  feed: FeedEvent[]
-  createdAt: string
-  protocolID: [1, string]
-}
-
-function feedUrl(base: string): string {
-  return base.replace(/\/$/, '')
-}
-
-async function parse<T>(response: Response): Promise<T> {
-  const raw: unknown = await response.json().catch(() => undefined)
-  if (!response.ok) {
-    const message = (raw as { error?: string } | undefined)?.error
-    throw new Error(message || `Feed request failed (${response.status})`)
+function pickVault(treasury: Treasury, amountSats: number) {
+  const need = amountSats + FEE_SATS
+  const utxo = [...treasury.vault].reverse().find((item) => item.satoshis >= need)
+  if (!utxo) {
+    throw new Error(
+      treasury.vault.length === 0
+        ? 'Fund the vault before proposing a payment'
+        : `No vault UTXO covers ${need.toLocaleString()} sats (amount + ${FEE_SATS} fee)`
+    )
   }
-  return raw as T
+  return utxo
 }
 
-export async function pingFeed(base: string): Promise<boolean> {
-  try {
-    const response = await fetch(`${feedUrl(base)}/health`)
-    return response.ok
-  } catch {
-    return false
+async function applyEvent(
+  wallet: WalletClient,
+  treasury: Treasury,
+  event: BoardEvent,
+  notify: boolean
+): Promise<Treasury> {
+  await publishBoardEvent(wallet, event)
+  const events = rememberEvents(treasury.id, [event])
+  if (notify) {
+    const self = typeof event.payload.identityKey === 'string' ? event.payload.identityKey : ''
+    if (self) await notifySigners(wallet, treasury, self, event)
   }
+  const next = reconstructTreasury(events)
+  if (!next) throw new Error('failed to reconstruct treasury after overlay event')
+  return next
+}
+
+export async function getTreasury(id: string): Promise<Treasury | null> {
+  return loadTreasury(id)
 }
 
 export async function createTreasury(
-  base: string,
+  wallet: WalletClient,
   body: {
     name: string
     signerCount: 2 | 3
+    treasurerIdentityKey: string
     signers: Array<{ role: Role; identityKey?: string }>
   }
 ): Promise<Treasury> {
-  const response = await fetch(`${feedUrl(base)}/treasuries`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
+  const treasuryId = crypto.randomUUID()
+  const { publicKey } = await wallet.getPublicKey({
+    protocolID: PROTOCOL_ID,
+    keyID: treasuryId,
+    counterparty: 'self'
   })
-  return parse<Treasury>(response)
-}
-
-export async function getTreasury(base: string, id: string): Promise<Treasury> {
-  const response = await fetch(`${feedUrl(base)}/treasuries/${id}`)
-  return parse<Treasury>(response)
+  const created = makeEvent(treasuryId, 'created', {
+    name: body.name,
+    threshold: 2,
+    signerCount: body.signerCount,
+    identityKey: body.treasurerIdentityKey,
+    derivedPubkey: publicKey,
+    signers: body.signers
+  })
+  const joined = makeEvent(treasuryId, 'joined', {
+    role: 'treasurer',
+    identityKey: body.treasurerIdentityKey,
+    derivedPubkey: publicKey
+  })
+  await publishBoardEvent(wallet, created)
+  await publishBoardEvent(wallet, joined)
+  const next = reconstructTreasury(rememberEvents(treasuryId, [created, joined]))
+  if (!next) throw new Error('failed to reconstruct treasury after create')
+  return next
 }
 
 export async function joinTreasury(
-  base: string,
-  id: string,
+  wallet: WalletClient,
+  treasury: Treasury,
   body: { role: Role; identityKey: string; derivedPubkey: string }
 ): Promise<Treasury> {
-  const response = await fetch(`${feedUrl(base)}/treasuries/${id}/join`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
-  })
-  return parse<Treasury>(response)
+  return applyEvent(wallet, treasury, makeEvent(treasury.id, 'joined', { ...body }), false)
 }
 
 export async function recordFund(
-  base: string,
-  id: string,
-  body: { txid: string; vout: number; satoshis: number; beef: number[] }
+  wallet: WalletClient,
+  treasury: Treasury,
+  funded: { satoshis: number; txid: string; vout: number; beef: number[]; lockingScriptHex: string }
 ): Promise<Treasury> {
-  const response = await fetch(`${feedUrl(base)}/treasuries/${id}/fund`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
-  })
-  return parse<Treasury>(response)
+  return applyEvent(wallet, treasury, makeEvent(treasury.id, 'funded', {
+    satoshis: funded.satoshis,
+    amountSats: funded.satoshis,
+    txid: funded.txid,
+    vout: funded.vout,
+    lockingScriptHex: funded.lockingScriptHex,
+    beefHex: beefHex(funded.beef)
+  }), false)
 }
 
 export async function postProposal(
-  base: string,
-  id: string,
-  body: Record<string, unknown>
+  wallet: WalletClient,
+  treasury: Treasury,
+  body: {
+    proposalId: string
+    amountSats: number
+    payeeIdentityKey: string
+    memo: string
+    payeeLockingScriptHex: string
+    identityKey: string
+    derivedPubkey: string
+    signature: number[]
+  }
 ): Promise<Treasury> {
-  const response = await fetch(`${feedUrl(base)}/treasuries/${id}/proposals`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
-  })
-  return parse<Treasury>(response)
+  const role = signerRole(treasury, body.identityKey)
+  const utxo = pickVault(treasury, body.amountSats)
+  const planned = planSpend({ vaultSatoshis: utxo.satoshis, amountSats: body.amountSats })
+  return applyEvent(wallet, treasury, makeEvent(treasury.id, 'proposed', {
+    ...body,
+    role,
+    vaultTxid: utxo.txid,
+    vaultVout: utxo.vout,
+    vaultSatoshis: utxo.satoshis,
+    feeSats: planned.feeSats,
+    changeSats: planned.changeSats
+  }), true)
 }
 
 export async function postApproval(
-  base: string,
-  id: string,
-  proposalId: string,
-  body: { identityKey: string; derivedPubkey: string; signature: number[] }
+  wallet: WalletClient,
+  treasury: Treasury,
+  body: {
+    proposalId: string
+    identityKey: string
+    derivedPubkey: string
+    signature: number[]
+    memo?: string
+  }
 ): Promise<Treasury> {
-  const response = await fetch(`${feedUrl(base)}/treasuries/${id}/proposals/${proposalId}/approve`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
-  })
-  return parse<Treasury>(response)
+  return applyEvent(wallet, treasury, makeEvent(treasury.id, 'approved', {
+    ...body,
+    role: signerRole(treasury, body.identityKey)
+  }), true)
 }
 
 export async function postP2msSig(
-  base: string,
-  id: string,
-  proposalId: string,
-  body: { identityKey: string; derivedPubkey: string; signature: number[] }
+  wallet: WalletClient,
+  treasury: Treasury,
+  body: {
+    proposalId: string
+    identityKey: string
+    derivedPubkey: string
+    signature: number[]
+    memo?: string
+  }
 ): Promise<Treasury> {
-  const response = await fetch(`${feedUrl(base)}/treasuries/${id}/proposals/${proposalId}/p2ms-sig`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
-  })
-  return parse<Treasury>(response)
+  return applyEvent(wallet, treasury, makeEvent(treasury.id, 'approved', {
+    proposalId: body.proposalId,
+    identityKey: body.identityKey,
+    derivedPubkey: body.derivedPubkey,
+    role: signerRole(treasury, body.identityKey),
+    p2msSignature: body.signature,
+    memo: body.memo
+  }), true)
 }
 
 export async function postPaid(
-  base: string,
-  id: string,
-  proposalId: string,
-  body: { txid: string; changeVout?: number; beef?: number[] }
+  wallet: WalletClient,
+  treasury: Treasury,
+  body: { proposalId: string; txid: string; changeVout?: number; beef: number[] }
 ): Promise<Treasury> {
-  const response = await fetch(`${feedUrl(base)}/treasuries/${id}/proposals/${proposalId}/paid`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
-  })
-  return parse<Treasury>(response)
-}
-
-export function exportCsvUrl(base: string, id: string, month: string): string {
-  return `${feedUrl(base)}/treasuries/${id}/export.csv?month=${month}`
-}
-
-export function exportPdfUrl(base: string, id: string, month: string): string {
-  return `${feedUrl(base)}/treasuries/${id}/export.pdf?month=${month}`
+  const proposal = treasury.proposals.find((item) => item.id === body.proposalId)
+  return applyEvent(wallet, treasury, makeEvent(treasury.id, 'paid', {
+    proposalId: body.proposalId,
+    txid: body.txid,
+    amountSats: proposal?.amountSats,
+    memo: proposal?.memo,
+    changeVout: body.changeVout,
+    changeSatoshis: proposal?.changeSats,
+    changeSats: proposal?.changeSats,
+    beefHex: beefHex(body.beef)
+  }), false)
 }
