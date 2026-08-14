@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CHROME_ALLOW_HINT, DECLINED_APPROVAL_MINT, errorMessage } from './config'
+import { DECLINED_APPROVAL_MINT, UNLOCK_RETRY, errorMessage } from './config'
 import {
   CONNECT_MS,
   CONNECT_TIMEOUT_MESSAGE,
@@ -7,12 +7,12 @@ import {
   withTimeout
 } from './wallet'
 
-vi.mock('@bsv/simple/browser', () => ({
-  createWallet: () => new Promise(() => {})
-}))
-
 vi.mock('@bsv/sdk', () => ({
-  WalletClient: class WalletClient {}
+  WalletClient: class WalletClient {
+    getPublicKey() {
+      return new Promise(() => {})
+    }
+  }
 }))
 
 describe('wallet connect timeout', () => {
@@ -77,8 +77,14 @@ describe('errorMessage wallet failures', () => {
     expect(mapped).not.toContain('{')
   })
 
-  it('maps a hang timeout to the Chrome allow hint', () => {
-    expect(errorMessage(new Error(CHROME_ALLOW_HINT))).toBe(CHROME_ALLOW_HINT)
-    expect(errorMessage(new Error('Wallet request timed out'))).toBe(CHROME_ALLOW_HINT)
+  it('maps a hang timeout to Unlock Desktop and try again', () => {
+    expect(errorMessage(new Error(UNLOCK_RETRY))).toBe(UNLOCK_RETRY)
+    expect(errorMessage(new Error('Wallet request timed out'))).toBe(UNLOCK_RETRY)
+  })
+
+  it('never surfaces Spending Request jargon', () => {
+    const mapped = errorMessage(new Error('Wallet rejected the Spending Request. Approve it in BSV Desktop, or you cancelled.'))
+    expect(mapped).toBe(DECLINED_APPROVAL_MINT)
+    expect(mapped).not.toContain('Spending Request')
   })
 })

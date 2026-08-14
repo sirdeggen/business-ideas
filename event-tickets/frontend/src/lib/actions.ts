@@ -112,8 +112,15 @@ export async function mintTickets(
   overlayUrl: string,
   count: number
 ): Promise<MintResult> {
-  if (count < 1 || count > 20) throw new Error('Mint between 1 and 20 tickets')
+  if (count < 1 || count > 20) throw new Error('Make between 1 and 20 tickets')
+  return withTimeout(mintTicketsInner(wallet, overlayUrl, count), CONNECT_MS, CONNECT_TIMEOUT_MESSAGE)
+}
 
+async function mintTicketsInner(
+  wallet: WalletClient,
+  overlayUrl: string,
+  count: number
+): Promise<MintResult> {
   const token = pushdrop(wallet)
   const outputs = []
   for (let serial = 1; serial <= count; serial++) {
@@ -142,30 +149,20 @@ export async function mintTickets(
 
   let response
   try {
-    response = await withTimeout(
-      wallet.createAction({
-        description: `Mint ${count} Demo Night tickets`,
-        outputs,
-        labels: [BASKET, 'mint'],
-        options: { randomizeOutputs: false }
-      }),
-      CONNECT_MS,
-      CONNECT_TIMEOUT_MESSAGE
-    )
+    response = await wallet.createAction({
+      description: `Make ${count} Demo Night tickets`,
+      outputs,
+      labels: [BASKET, 'mint'],
+      options: { randomizeOutputs: false }
+    })
   } catch (err) {
     if (err instanceof Error && err.message === CONNECT_TIMEOUT_MESSAGE) throw err
     const detail = err instanceof Error && err.message.trim() ? err.message : String(err ?? '')
-    throw new Error(
-      detail.trim()
-        ? `createAction failed: ${detail}`
-        : 'createAction failed with no message. Spending Request timed out, was rejected, overlay is offline, or Desktop is locked.'
-    )
+    throw new Error(detail.trim() || CONNECT_TIMEOUT_MESSAGE)
   }
 
   if (!response.txid || !response.tx) {
-    throw new Error(
-      'Wallet did not return a minted transaction. Spending Request timed out, was rejected, or Desktop is locked.'
-    )
+    throw new Error(CONNECT_TIMEOUT_MESSAGE)
   }
 
   // Spend is the mint. Overlay submit is a separate step and must not hide the txid.
@@ -227,7 +224,7 @@ async function spendTicket(
     throw new Error(
       detail.trim()
         ? `createAction failed: ${detail}`
-        : 'createAction failed with no message. Spending Request timed out, was rejected, overlay is offline, or Desktop is locked.'
+        : CONNECT_TIMEOUT_MESSAGE
     )
   }
 

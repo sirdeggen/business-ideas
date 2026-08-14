@@ -1,9 +1,9 @@
 import { WalletClient } from '@bsv/sdk'
-import { CHROME_ALLOW_HINT, originator } from './config'
+import { UNLOCK_RETRY, originator } from './config'
 
 export const CONNECT_MS = 8000
 
-export const CONNECT_TIMEOUT_MESSAGE = CHROME_ALLOW_HINT
+export const CONNECT_TIMEOUT_MESSAGE = UNLOCK_RETRY
 
 export function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined

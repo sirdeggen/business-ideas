@@ -4,23 +4,14 @@ import { Door } from './components/Door'
 import { Organizer } from './components/Organizer'
 import { BasketProvider } from './context/BasketContext'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
-import { WalletProvider, useWallet } from './context/WalletContext'
-import { overlayCheckFailed, shortKey } from './lib/config'
+import { WalletProvider } from './context/WalletContext'
+import { overlayCheckFailed } from './lib/config'
 
 type Role = 'organizer' | 'attendee' | 'door'
 
 function Shell() {
-  const { identityKey } = useWallet()
   const { url, setUrl, online, probeError } = useOverlay()
   const [role, setRole] = useState<Role>('organizer')
-  const [copied, setCopied] = useState(false)
-
-  const copyIdentity = async (): Promise<void> => {
-    if (!identityKey) return
-    await navigator.clipboard.writeText(identityKey)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1500)
-  }
 
   return (
     <div className="app">
@@ -58,15 +49,6 @@ function Shell() {
         <summary>Overlay URL</summary>
         <p>Operators can point this at a local indexer.</p>
         <input value={url} onChange={(event) => setUrl(event.target.value)} />
-        {identityKey && (
-          <div className="identity-ask">
-            <p>Identity key</p>
-            <code>{shortKey(identityKey, 12)}</code>
-            <button className="btn" style={{ marginTop: 8 }} onClick={() => void copyIdentity()}>
-              {copied ? 'Copied' : 'Copy identity key'}
-            </button>
-          </div>
-        )}
       </details>
 
       <footer>

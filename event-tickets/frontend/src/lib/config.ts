@@ -60,6 +60,8 @@ export function overlayCheckFailed(probeError?: string | null, url = resolveOver
 export const CHROME_ALLOW_HINT =
   'Chrome may ask to allow this site to talk to apps on this device. Allow, then Retry, with Desktop unlocked.'
 
+export const UNLOCK_RETRY = 'Unlock Desktop and try again.'
+
 export const DECLINED_APPROVAL_MINT =
   'You declined the approval. Unlock Desktop and try again.'
 
@@ -115,7 +117,8 @@ function looksLikeRejected(text: string): boolean {
     lower.includes('reject') ||
     lower.includes('denied') ||
     lower.includes('cancelled') ||
-    lower.includes('canceled')
+    lower.includes('canceled') ||
+    lower.includes('spending request')
   )
 }
 
@@ -131,7 +134,8 @@ function looksLikeWalletCallJson(text: string): boolean {
 export function errorMessage(error: unknown): string {
   const raw = extractErrorText(error).trim()
   if (looksLikeRejected(raw)) return DECLINED_APPROVAL_MINT
-  if (looksLikeWalletFailure(raw) || looksLikeTimeout(raw)) return CHROME_ALLOW_HINT
-  if (!raw || looksLikeWalletCallJson(raw) || raw.startsWith('{')) return CHROME_ALLOW_HINT
+  if (looksLikeWalletFailure(raw) || looksLikeTimeout(raw)) return UNLOCK_RETRY
+  if (!raw || looksLikeWalletCallJson(raw) || raw.startsWith('{')) return UNLOCK_RETRY
+  if (raw.toLowerCase().includes('spending request')) return UNLOCK_RETRY
   return raw
 }

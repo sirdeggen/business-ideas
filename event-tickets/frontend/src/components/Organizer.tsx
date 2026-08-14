@@ -7,12 +7,14 @@ import { mintTickets } from '../lib/actions'
 import {
   CHROME_ALLOW_HINT,
   DESKTOP_INSTALL_URL,
+  UNLOCK_RETRY,
   errorMessage,
   overlayCheckFailed
 } from '../lib/config'
+import { CONNECT_MS, CONNECT_TIMEOUT_MESSAGE, withTimeout } from '../lib/wallet'
 
 export function Organizer() {
-  const { wallet, connecting, connect } = useWallet()
+  const { wallet, connect } = useWallet()
   const { refresh } = useBasket()
   const { url, online, probeError } = useOverlay()
   const [count, setCount] = useState(5)
@@ -30,8 +32,10 @@ export function Organizer() {
       if (online === false) {
         throw new Error(overlayCheckFailed(probeError, url))
       }
-      const client = wallet ?? await connect()
-      const result = await mintTickets(client, url, count)
+      const result = await withTimeout((async () => {
+        const client = wallet ?? await connect()
+        return mintTickets(client, url, count)
+      })(), CONNECT_MS, CONNECT_TIMEOUT_MESSAGE)
       setStatus(`Made ${result.count} tickets.`)
       if (result.overlayError) {
         setError(`Made tickets (txid ${result.txid}). Overlay submit failed: ${result.overlayError}`)
@@ -47,7 +51,7 @@ export function Organizer() {
   }
 
   const overlayDown = online === false
-  const mintDisabled = busy || connecting || overlayDown
+  const mintDisabled = busy || overlayDown
   const mintTitle = overlayDown
     ? overlayCheckFailed(probeError, url)
     : 'Make tickets you can send, show on a phone, and spend at the door'
@@ -75,17 +79,17 @@ export function Organizer() {
           title={mintTitle}
           onClick={() => void mint()}
         >
-          {busy || connecting ? 'Making tickets…' : 'Make tickets'}
+          {busy ? 'Making tickets…' : 'Make tickets'}
         </button>
       </div>
       {overlayDown && <p className="status err">{overlayCheckFailed(probeError, url)}</p>}
-      {!(busy || connecting || showInstall) && (
+      {!(busy || showInstall) && (
         <p className="hint">We’ll ask you to approve this in a moment.</p>
       )}
-      {(busy || connecting || showInstall) && <p className="hint">{CHROME_ALLOW_HINT}</p>}
+      {(busy || showInstall) && <p className="hint">{CHROME_ALLOW_HINT}</p>}
       {showInstall && (
         <div className="install">
-          <p>Unlock Desktop and try again. Or install BSV Desktop, then Retry.</p>
+          <p>{UNLOCK_RETRY}</p>
           <div className="row">
             <button className="btn primary" onClick={() => void mint()}>Retry</button>
             <a className="btn" href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">
