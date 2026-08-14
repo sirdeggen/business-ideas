@@ -63,14 +63,10 @@ export function shortPageIsEof(_outputCount: number, _limit: number): boolean {
   return false
 }
 
-export function overlayBanner(status: OverlayLookupStatus, usedCache = false): string {
-  if (status === 'checking') return 'checking overlay-us-1'
-  if (status === 'failed') {
-    return usedCache
-      ? 'lookup failed — minutes may be cached'
-      : 'lookup failed'
-  }
-  return usedCache ? 'overlay-us-1 online · showing cached minutes' : 'overlay-us-1 online'
+export function overlayBanner(status: OverlayLookupStatus, _usedCache = false): string {
+  if (status === 'checking') return 'Looking up minutes…'
+  if (status === 'failed') return 'Couldn’t refresh minutes'
+  return 'Minutes up to date'
 }
 
 export function minutesEmptyCopy(input: {

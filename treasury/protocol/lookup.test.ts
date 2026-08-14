@@ -86,7 +86,7 @@ describe('flaky overlay lookup + empty-state copy', () => {
     assert.equal(failed.status, 'failed')
     assert.ok(failed.board)
     assert.equal(failed.emptyCopy, null)
-    assert.match(overlayBanner(failed.status, true), /minutes may be cached/)
+    assert.equal(overlayBanner(failed.status, true), 'Couldn’t refresh minutes')
 
     const reconstructed = reconstructPreferringCache([], cached, true)
     assert.ok(reconstructed)
@@ -108,9 +108,10 @@ describe('flaky overlay lookup + empty-state copy', () => {
       MINUTES_COPY.empty
     )
     assert.equal(minutesEmptyCopy({ status: 'online', hasMinutes: true }), null)
-    assert.equal(overlayBanner('checking'), 'checking overlay-us-1')
-    assert.equal(overlayBanner('online'), 'overlay-us-1 online')
-    assert.equal(overlayBanner('failed'), 'lookup failed')
+    assert.equal(overlayBanner('checking'), 'Looking up minutes…')
+    assert.equal(overlayBanner('online'), 'Minutes up to date')
+    assert.equal(overlayBanner('online', true), 'Minutes up to date')
+    assert.equal(overlayBanner('failed'), 'Couldn’t refresh minutes')
 
     const inFlight = resolveMinutesView({
       inFlight: true,
