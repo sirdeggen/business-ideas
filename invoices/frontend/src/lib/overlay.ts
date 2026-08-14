@@ -1,19 +1,30 @@
-import { Overlay } from '@bsv/simple/browser'
-import { LookupResolver, PushDrop, Transaction } from '@bsv/sdk'
+import {
+  HTTPSOverlayBroadcastFacilitator,
+  LookupResolver,
+  PushDrop,
+  TopicBroadcaster,
+  Transaction,
+  type LookupAnswer,
+  type OverlayBroadcastFacilitator,
+  type STEAK,
+  type TaggedBEEF
+} from '@bsv/sdk'
 import {
   LOOKUP_SERVICE,
   MAGIC,
-  PUBLIC_LOOKUP,
-  PUBLIC_TOPIC,
   TOPIC,
   assertPayable,
   joinInvoiceRecords,
-  overlayServicesFor,
   parseInvoiceFields,
   parseReceiptFields,
   type InvoiceStatus,
   type JoinedInvoice
 } from '../../../protocol/invoice'
+import {
+  PUBLIC_LOOKUP,
+  PUBLIC_TOPIC,
+  isLocalhostUrl
+} from './config'
 
 export interface OverlayInvoice {
   magic: typeof MAGIC
@@ -51,47 +62,53 @@ export interface InvoiceLookupQuery {
   txid?: string
 }
 
-interface AnyQuery {
-  txid?: string
-  limit?: number
-  skip?: number
-  sortOrder?: 'asc' | 'desc'
-}
-
-interface BeefOutput {
-  beef: number[]
-  outputIndex: number
-  txid?: string
-  context?: number[]
-}
-
-const PUBLIC_PAGE_SIZE = 50
-const PUBLIC_MAX_PAGES = 20
-const LOOKUP_TIMEOUT_MS = 10_000
-
 function overlayUrl(base: string): string {
   return base.replace(/\/$/, '')
 }
 
-async function overlayClient(url: string, topic: string, lookup: string): Promise<Overlay> {
-  return Overlay.create({
-    topics: [topic],
-    network: 'mainnet',
-    hostOverrides: {
-      [topic]: [url],
-      [lookup]: [url],
-      // SHIP discovery for TopicBroadcaster — query this host instead of public trackers.
-      ls_ship: [url]
-    }
+export function usesPublicAnytx(base: string): boolean {
+  return !isLocalhostUrl(base)
+}
+
+export function overlayTopic(base: string): string {
+  return usesPublicAnytx(base) ? PUBLIC_TOPIC : TOPIC
+}
+
+export function overlayLookupService(base: string): string {
+  return usesPublicAnytx(base) ? PUBLIC_LOOKUP : LOOKUP_SERVICE
+}
+
+class HostPinnedFacilitator implements OverlayBroadcastFacilitator {
+  readonly host: string
+  readonly allowHTTP: boolean
+
+  constructor(host: string, allowHTTP: boolean) {
+    this.host = host
+    this.allowHTTP = allowHTTP
+  }
+
+  async send(_url: string, taggedBEEF: TaggedBEEF): Promise<STEAK> {
+    return new HTTPSOverlayBroadcastFacilitator(undefined, this.allowHTTP).send(this.host, taggedBEEF)
+  }
+}
+
+function createBroadcaster(host: string, topic: string): TopicBroadcaster {
+  const allowHTTP = host.startsWith('http://')
+  return new TopicBroadcaster([topic], {
+    // Skip SHIP discovery; the facilitator always posts to `host`.
+    networkPreset: 'local',
+    facilitator: new HostPinnedFacilitator(host, allowHTTP),
+    requireAcknowledgmentFromAllHostsForTopics: [],
+    requireAcknowledgmentFromAnyHostForTopics: 'any'
   })
 }
 
-function txFromBeef(beef: number[]): Transaction {
-  try {
-    return Transaction.fromBEEF(beef)
-  } catch {
-    return Transaction.fromAtomicBEEF(beef)
-  }
+function createResolver(host: string, service: string): LookupResolver {
+  const allowHTTP = host.startsWith('http://')
+  return new LookupResolver({
+    networkPreset: allowHTTP ? 'local' : 'mainnet',
+    hostOverrides: { [service]: [host] }
+  })
 }
 
 function protocolOutputIndexes(tx: Transaction): number[] {
@@ -108,141 +125,111 @@ function protocolOutputIndexes(tx: Transaction): number[] {
 }
 
 export async function submitInvoiceTx(base: string, beef: number[]): Promise<SubmitResult> {
-  const { url, topic, lookup, local } = overlayServicesFor(base)
-  if (!local) {
-    try {
-      const overlay = await overlayClient(url, topic, lookup)
-      const tx = txFromBeef(beef)
-      const result = await overlay.broadcast(tx)
-      if (result.success) {
-        const admitted = protocolOutputIndexes(tx)
-        return { admitted: admitted.length > 0 ? admitted : [0], raw: result }
-      }
-    } catch {
-      // SHIP discovery can fail; fall through to a direct /submit.
-    }
+  const host = overlayUrl(base)
+  const topic = overlayTopic(host)
+  const tx = Transaction.fromBEEF(beef)
+  const overlay = createBroadcaster(host, topic)
+  const result = await tx.broadcast(overlay)
+  if (result.status !== 'success') {
+    const description = 'description' in result ? result.description : ''
+    throw new Error(
+      description
+        ? `Overlay broadcast to ${topic} at ${host} failed: ${description}`
+        : `Overlay broadcast to ${topic} at ${host} failed`
+    )
   }
-  return submitDirect(url, topic, beef)
-}
-
-async function submitDirect(url: string, topic: string, beef: number[]): Promise<SubmitResult> {
-  const response = await fetch(`${overlayUrl(url)}/submit`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-topics': topic
-    },
-    body: JSON.stringify(beef)
-  })
-  const raw: unknown = await response.json().catch(() => undefined)
-  if (!response.ok) {
-    const message = (raw as { message?: string } | undefined)?.message
-    throw new Error(message || `Overlay /submit failed (${response.status})`)
+  return {
+    admitted: protocolOutputIndexes(tx),
+    raw: result
   }
-  const topicResult = (raw as Record<string, { outputsToAdmit?: number[] }>)?.[topic]
-  const admitted = topicResult?.outputsToAdmit ?? []
-  if (admitted.length > 0) return { admitted, raw }
-  // tm_anytx admits any valid PushDrop; some hosts omit STEAK indexes on 200.
-  if (topic === PUBLIC_TOPIC) {
-    try {
-      const indexes = protocolOutputIndexes(txFromBeef(beef))
-      if (indexes.length > 0) return { admitted: indexes, raw }
-    } catch {
-      return { admitted: [0], raw }
-    }
-  }
-  return { admitted, raw }
 }
 
 export async function lookupInvoices(
   base: string,
-  query: InvoiceLookupQuery
+  query: InvoiceLookupQuery = {}
 ): Promise<OverlayInvoice[]> {
-  const { url, local } = overlayServicesFor(base)
-  if (local) {
-    const records = await lookupLocal(url, query)
-    if (query.forPay) assertPayable(records[0])
-    return records
-  }
+  const host = overlayUrl(base)
+  const service = overlayLookupService(host)
+  const resolver = createResolver(host, service)
+  const rows = usesPublicAnytx(host)
+    ? await lookupPublic(resolver, service, query)
+    : invoicesFromAnswer(await resolver.query({ service, query }, 15000))
 
-  const records = await lookupPublic(url, query)
-  if (query.forPay) assertPayable(records[0])
-  return records
-}
-
-async function lookupLocal(
-  url: string,
-  query: InvoiceLookupQuery
-): Promise<OverlayInvoice[]> {
-  if (query.forPay) {
-    return lookupDirect(url, query)
-  }
-
-  try {
-    const overlay = await overlayClient(url, TOPIC, LOOKUP_SERVICE)
-    const outputs = await overlay.lookupOutputs(LOOKUP_SERVICE, query)
-    if (outputs.length > 0) {
-      const parsed = outputs.map((output) =>
-        fromContext(output.context, output.outputIndex)
-      ).filter((row): row is OverlayInvoice => row !== null)
-      if (parsed.length > 0) return parsed
-    }
-  } catch {
-    // Fall through to direct /lookup against the configured node.
-  }
-
-  return lookupDirect(url, query)
-}
-
-async function lookupDirect(
-  url: string,
-  query: InvoiceLookupQuery
-): Promise<OverlayInvoice[]> {
-  const response = await fetch(`${overlayUrl(url)}/lookup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      service: LOOKUP_SERVICE,
-      query
-    })
-  })
-  const raw: unknown = await response.json().catch(() => undefined)
-  if (!response.ok) {
-    const message = (raw as { message?: string, error?: string } | undefined)?.message
-      || (raw as { error?: string } | undefined)?.error
-    throw new Error(message || `Overlay /lookup failed (${response.status})`)
-  }
-  return unwrapLookup(raw)
+  const filtered = rows.filter((row) => matchesInvoiceQuery(row, query))
+  if (query.forPay) assertPayable(filtered[0])
+  return filtered
 }
 
 async function lookupPublic(
-  url: string,
+  resolver: LookupResolver,
+  service: string,
   query: InvoiceLookupQuery
 ): Promise<OverlayInvoice[]> {
-  const host = overlayUrl(url)
-  const createTxid = query.txid
-    || (query.outpoint ? query.outpoint.split('.')[0] : undefined)
+  const answers = await queryAnytx(resolver, service, query)
+  let [invoices, receipts] = collectIndexed(answers)
+  if (query.invoiceId) {
+    const receipt = receipts.find((row) => row.receipt.invoiceId === query.invoiceId)
+    const invoice = invoices.find((row) => row.invoice.invoiceId === query.invoiceId)
+    if (receipt && !invoice) {
+      const createTxid = receipt.receipt.invoiceOutpoint.split('.')[0]
+      if (createTxid) {
+        const extra = await resolver.query({ service, query: { txid: createTxid } }, 20000)
+        ;[invoices, receipts] = collectIndexed([...answers, extra])
+      }
+    }
+  }
+  return joinInvoiceRecords(invoices, receipts).map(fromJoined)
+}
 
+async function queryAnytx(
+  resolver: LookupResolver,
+  service: string,
+  query: InvoiceLookupQuery
+): Promise<LookupAnswer[]> {
+  const answers: LookupAnswer[] = []
+  const txid = query.txid || (query.outpoint ? query.outpoint.split('.')[0] : undefined)
+  if (txid) {
+    answers.push(await resolver.query({ service, query: { txid } }, 20000))
+  }
+
+  const pageSize = 100
+  for (let page = 0; page < 5; page++) {
+    const answer = await resolver.query({
+      service,
+      query: { limit: pageSize, skip: page * pageSize, sortOrder: 'desc' }
+    }, 20000)
+    answers.push(answer)
+    const count = answer.type === 'output-list' ? answer.outputs.length : 0
+    if (count < pageSize) break
+  }
+  return answers
+}
+
+function collectIndexed(answers: LookupAnswer[]): [
+  Parameters<typeof joinInvoiceRecords>[0],
+  Parameters<typeof joinInvoiceRecords>[1]
+] {
+  const invoices: Parameters<typeof joinInvoiceRecords>[0] = []
+  const receipts: Parameters<typeof joinInvoiceRecords>[1] = []
   const seen = new Set<string>()
-  const indexedInvoices: Parameters<typeof joinInvoiceRecords>[0] = []
-  const indexedReceipts: Parameters<typeof joinInvoiceRecords>[1] = []
 
-  const ingest = (outputs: BeefOutput[]): void => {
-    for (const output of outputs) {
-      const decoded = decodeBeefOutput(output)
+  for (const answer of answers) {
+    if (answer.type !== 'output-list' || !Array.isArray(answer.outputs)) continue
+    for (const output of answer.outputs) {
+      const decoded = decodeBeefOutput(output.beef, output.outputIndex, output.txid)
       if (!decoded) continue
       const key = `${decoded.txid}.${decoded.outputIndex}`
       if (seen.has(key)) continue
       seen.add(key)
       if (decoded.invoice) {
-        indexedInvoices.push({
+        invoices.push({
           invoice: decoded.invoice,
           txid: decoded.txid,
           outputIndex: decoded.outputIndex
         })
       }
       if (decoded.receipt) {
-        indexedReceipts.push({
+        receipts.push({
           receipt: decoded.receipt,
           txid: decoded.txid,
           outputIndex: decoded.outputIndex
@@ -251,102 +238,28 @@ async function lookupPublic(
     }
   }
 
-  if (createTxid) {
-    ingest(await queryAnytx(host, { txid: createTxid }))
-  }
-
-  for (let page = 0; page < PUBLIC_MAX_PAGES; page++) {
-    const rows = await queryAnytx(host, {
-      limit: PUBLIC_PAGE_SIZE,
-      skip: page * PUBLIC_PAGE_SIZE,
-      sortOrder: 'desc'
-    })
-    ingest(rows)
-
-    const wantedReceipt = query.invoiceId
-      ? indexedReceipts.find((row) => row.receipt.invoiceId === query.invoiceId)
-      : undefined
-    const wantedInvoice = query.invoiceId
-      ? indexedInvoices.find((row) => row.invoice.invoiceId === query.invoiceId)
-      : undefined
-    if (wantedReceipt && !wantedInvoice) {
-      const referenced = wantedReceipt.receipt.invoiceOutpoint.split('.')[0]
-      if (referenced && referenced !== createTxid) {
-        ingest(await queryAnytx(host, { txid: referenced }))
-      }
-    }
-
-    const haveInvoice = !query.invoiceId || indexedInvoices.some((row) => row.invoice.invoiceId === query.invoiceId)
-    const haveReceipt = !query.invoiceId || indexedReceipts.some((row) => row.receipt.invoiceId === query.invoiceId)
-    if (query.invoiceId && haveInvoice && haveReceipt) break
-    if (rows.length < PUBLIC_PAGE_SIZE) break
-  }
-
-  let joined = joinInvoiceRecords(indexedInvoices, indexedReceipts).map(fromJoined)
-  if (query.invoiceId) joined = joined.filter((row) => row.invoiceId === query.invoiceId)
-  if (query.payeeIdentity) joined = joined.filter((row) => row.payeeIdentity === query.payeeIdentity)
-  if (query.status) joined = joined.filter((row) => row.status === query.status)
-  if (query.outpoint) {
-    joined = joined.filter((row) => `${row.txid}.${row.outputIndex}` === query.outpoint)
-  }
-  return joined
+  return [invoices, receipts]
 }
 
-async function queryAnytx(url: string, query: AnyQuery): Promise<BeefOutput[]> {
-  try {
-    const resolver = new LookupResolver({
-      networkPreset: 'mainnet',
-      hostOverrides: { [PUBLIC_LOOKUP]: [url] }
-    })
-    const answer = await resolver.query({ service: PUBLIC_LOOKUP, query }, LOOKUP_TIMEOUT_MS)
-    if (answer.type === 'output-list') return answer.outputs
-  } catch {
-    // Fall through to Overlay, then direct /lookup.
-  }
-
-  try {
-    const overlay = await overlayClient(url, PUBLIC_TOPIC, PUBLIC_LOOKUP)
-    return await overlay.lookupOutputs(PUBLIC_LOOKUP, query)
-  } catch {
-    // Fall through to direct /lookup against the configured node.
-  }
-
-  return lookupAnytxDirect(url, query)
-}
-
-async function lookupAnytxDirect(url: string, query: AnyQuery): Promise<BeefOutput[]> {
-  const response = await fetch(`${overlayUrl(url)}/lookup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      service: PUBLIC_LOOKUP,
-      query
-    })
-  })
-  const raw: unknown = await response.json().catch(() => undefined)
-  if (!response.ok) {
-    const message = (raw as { message?: string, error?: string } | undefined)?.message
-      || (raw as { error?: string } | undefined)?.error
-    throw new Error(message || `Overlay /lookup failed (${response.status})`)
-  }
-  return outputsFromLookupAnswer(raw)
-}
-
-function decodeBeefOutput(output: BeefOutput): {
+function decodeBeefOutput(
+  beef: number[] | undefined,
+  outputIndex: number,
+  txidHint?: string
+): {
   txid: string
   outputIndex: number
   invoice: ReturnType<typeof parseInvoiceFields>
   receipt: ReturnType<typeof parseReceiptFields>
 } | null {
-  if (!Array.isArray(output.beef) || output.beef.length === 0) return null
+  if (!beef || beef.length === 0) return null
   try {
-    const tx = txFromBeef(output.beef)
-    const lockingScript = tx.outputs[output.outputIndex]?.lockingScript
-    if (!lockingScript) return null
-    const fields = PushDrop.decode(lockingScript).fields
+    const tx = Transaction.fromBEEF(beef)
+    const output = tx.outputs[outputIndex]
+    if (!output) return null
+    const fields = PushDrop.decode(output.lockingScript).fields
     return {
-      txid: output.txid || tx.id('hex'),
-      outputIndex: output.outputIndex,
+      txid: txidHint || tx.id('hex'),
+      outputIndex,
       invoice: parseInvoiceFields(fields),
       receipt: parseReceiptFields(fields)
     }
@@ -355,27 +268,33 @@ function decodeBeefOutput(output: BeefOutput): {
   }
 }
 
-function outputsFromLookupAnswer(body: unknown): BeefOutput[] {
-  if (body && typeof body === 'object') {
-    const typed = body as {
-      type?: string
-      outputs?: BeefOutput[]
-      result?: unknown
-      message?: string
-      error?: string
+function invoicesFromAnswer(answer: LookupAnswer): OverlayInvoice[] {
+  if (answer.type !== 'output-list' || !Array.isArray(answer.outputs)) return []
+  return answer.outputs.flatMap((output) => {
+    const fromCtx = fromContext(output.context, output.outputIndex)
+    if (fromCtx) return [fromCtx]
+    const decoded = decodeBeefOutput(output.beef, output.outputIndex, output.txid)
+    if (decoded?.invoice) {
+      return [fromJoined({
+        ...decoded.invoice,
+        status: 'open',
+        txid: decoded.txid,
+        outputIndex: decoded.outputIndex
+      })]
     }
-    if (typeof typed.message === 'string' && typed.message.length > 0) {
-      throw new Error(typed.message)
-    }
-    if (typeof typed.error === 'string' && typed.error.length > 0) {
-      throw new Error(typed.error)
-    }
-    if (typed.type === 'output-list' && Array.isArray(typed.outputs)) {
-      return typed.outputs.filter((output) => Array.isArray(output.beef))
-    }
-    if (Array.isArray(typed.result)) return outputsFromLookupAnswer(typed.result)
+    return []
+  })
+}
+
+function matchesInvoiceQuery(row: OverlayInvoice, query: InvoiceLookupQuery): boolean {
+  if (query.outpoint) {
+    const [txid, vout] = query.outpoint.split('.')
+    if (row.txid !== txid || row.outputIndex !== Number(vout)) return false
   }
-  return []
+  if (query.invoiceId && row.invoiceId !== query.invoiceId) return false
+  if (query.payeeIdentity && row.payeeIdentity !== query.payeeIdentity) return false
+  if (query.status && row.status !== query.status) return false
+  return true
 }
 
 function invoiceStub(partial: Partial<OverlayInvoice> & { outputIndex: number }): OverlayInvoice {
@@ -414,40 +333,6 @@ function fromContext(context: number[] | undefined, outputIndex: number): Overla
   } catch {
     return null
   }
-}
-
-function unwrapLookup(body: unknown): OverlayInvoice[] {
-  if (Array.isArray(body)) {
-    return body.flatMap((item) => {
-      if (item && typeof item === 'object' && 'txid' in item && 'outputIndex' in item) {
-        const row = item as OverlayInvoice & { context?: number[] }
-        return [fromContext(row.context, row.outputIndex) ?? invoiceStub(row)]
-      }
-      return []
-    })
-  }
-  if (body && typeof body === 'object') {
-    const typed = body as {
-      type?: string
-      result?: unknown
-      outputs?: Array<{ outputIndex: number, context?: number[] }>
-      message?: string
-      error?: string
-    }
-    if (typeof typed.message === 'string' && typed.message.length > 0) {
-      throw new Error(typed.message)
-    }
-    if (typeof typed.error === 'string' && typed.error.length > 0) {
-      throw new Error(typed.error)
-    }
-    if (typed.type === 'output-list' && Array.isArray(typed.outputs)) {
-      return typed.outputs.map((output) =>
-        fromContext(output.context, output.outputIndex) ?? invoiceStub({ outputIndex: output.outputIndex })
-      )
-    }
-    if (Array.isArray(typed.result)) return unwrapLookup(typed.result)
-  }
-  return []
 }
 
 export async function pingOverlay(base: string): Promise<boolean> {

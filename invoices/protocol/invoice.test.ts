@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  LOOKUP_SERVICE,
   MAGIC,
   PAID_MAGIC,
-  PUBLIC_LOOKUP,
-  PUBLIC_OVERLAY_URL,
-  PUBLIC_TOPIC,
-  TOPIC,
   assertPayable,
   bindReceiptToInvoice,
   classifyInvoiceTransaction,
@@ -14,7 +9,6 @@ import {
   encodeReceiptFields,
   isIdentityKey,
   joinInvoiceRecords,
-  overlayServicesFor,
   parseInvoiceFields,
   parseReceiptFields,
   type InvoicePayload,
@@ -170,36 +164,6 @@ describe('invoice protocol', () => {
   it('accepts compressed identity keys only', () => {
     expect(isIdentityKey(PAYEE)).toBe(true)
     expect(isIdentityKey('not-a-key')).toBe(false)
-  })
-})
-
-describe('public vs local overlay topic selection', () => {
-  it('keeps tm_invoices / ls_invoices on localhost Docker', () => {
-    expect(overlayServicesFor('http://localhost:8081')).toEqual({
-      url: 'http://localhost:8081',
-      local: true,
-      topic: TOPIC,
-      lookup: LOOKUP_SERVICE
-    })
-    expect(overlayServicesFor('http://127.0.0.1:8081/')).toMatchObject({
-      local: true,
-      topic: 'tm_invoices',
-      lookup: 'ls_invoices'
-    })
-  })
-
-  it('selects tm_anytx / ls_anytx on the public overlay host', () => {
-    expect(overlayServicesFor(PUBLIC_OVERLAY_URL)).toEqual({
-      url: PUBLIC_OVERLAY_URL,
-      local: false,
-      topic: PUBLIC_TOPIC,
-      lookup: PUBLIC_LOOKUP
-    })
-    expect(overlayServicesFor('https://overlay-us-1.bsvb.tech/')).toMatchObject({
-      local: false,
-      topic: 'tm_anytx',
-      lookup: 'ls_anytx'
-    })
   })
 })
 

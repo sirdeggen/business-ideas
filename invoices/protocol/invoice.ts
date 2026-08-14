@@ -11,10 +11,6 @@ export const PROTOCOL_ID: [0, string] = [0, 'invoices']
 export const BASKET = 'invoices'
 export const TOPIC = 'tm_invoices'
 export const LOOKUP_SERVICE = 'ls_invoices'
-/** Public overlay-us-1 catch-all. Local Docker keeps TOPIC / LOOKUP_SERVICE. */
-export const PUBLIC_TOPIC = 'tm_anytx'
-export const PUBLIC_LOOKUP = 'ls_anytx'
-export const PUBLIC_OVERLAY_URL = 'https://overlay-us-1.bsvb.tech'
 export const MAGIC = 'bsvinvoice'
 export const PAID_MAGIC = 'bsvinvoice-paid'
 export const BRC29_PROTOCOL_ID: [2, string] = [2, '3241645161d8']
@@ -248,32 +244,6 @@ export function assertPayable(invoice: { status: InvoiceStatus } | null | undefi
   if (!invoice) throw new Error('Unknown invoice')
   if (invoice.status === 'paid') throw new Error('Invoice already paid')
   if (invoice.status !== 'open') throw new Error(`Invoice is ${invoice.status}`)
-}
-
-export function isLocalOverlayUrl(url: string): boolean {
-  if (!url) return false
-  try {
-    const hostname = new URL(url).hostname
-    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
-  } catch {
-    return /localhost|127\.0\.0\.1/i.test(url)
-  }
-}
-
-export function overlayServicesFor(base: string): {
-  url: string
-  local: boolean
-  topic: string
-  lookup: string
-} {
-  const url = base.replace(/\/$/, '')
-  const local = isLocalOverlayUrl(url)
-  return {
-    url,
-    local,
-    topic: local ? TOPIC : PUBLIC_TOPIC,
-    lookup: local ? LOOKUP_SERVICE : PUBLIC_LOOKUP
-  }
 }
 
 export interface IndexedInvoice {

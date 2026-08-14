@@ -11,6 +11,7 @@ import {
   DESKTOP_INSTALL_URL,
   defaultDueDate,
   errorMessage,
+  overlayHint,
   shortKey
 } from './lib/config'
 import {
@@ -107,7 +108,7 @@ function Advanced() {
       />
       <p className="hint">
         {online === true ? 'Reachable.' : online === false ? 'Not reachable from this browser.' : 'Checking…'}
-        {' '}Public path uses tm_anytx / ls_anytx. Localhost Docker still uses tm_invoices / ls_invoices.
+        {' '}{overlayHint(url)}
       </p>
       {identityKey && (
         <p className="hint">
