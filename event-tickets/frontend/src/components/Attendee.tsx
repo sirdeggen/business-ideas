@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
-import { BASKET, qrPayload } from '../../../protocol/ticket'
+import { qrPayload } from '../../../protocol/ticket'
 import { useBasket } from '../context/BasketContext'
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
@@ -17,7 +17,7 @@ import { errorMessage, shortKey } from '../lib/config'
 export function Attendee() {
   const { wallet, identityKey } = useWallet()
   const { url } = useOverlay()
-  const { tickets, inspection, diagnostic, error: basketError, refresh: refreshBasket } = useBasket()
+  const { tickets, error: basketError, refresh: refreshBasket } = useBasket()
   const [qrs, setQrs] = useState<Record<string, string>>({})
   const [recipients, setRecipients] = useState<Record<string, string>>({})
   const [incoming, setIncoming] = useState('')
@@ -79,6 +79,8 @@ export function Attendee() {
     }
   }
 
+  const listError = error || basketError
+
   return (
     <>
       <section className="panel">
@@ -90,25 +92,7 @@ export function Attendee() {
         <div className="row">
           <button className="btn" onClick={() => void refresh()}>Refresh basket</button>
         </div>
-        {tickets.length === 0 && !basketError && diagnostic && (
-          <p className={inspection && inspection.primary.listed > 0 ? 'status err' : 'hint'}>{diagnostic}</p>
-        )}
-        {tickets.length === 0 && !basketError && !diagnostic && (
-          <p className="hint">listOutputs('{BASKET}') has not run yet.</p>
-        )}
-        {diagnostic && tickets.length > 0 && <p className="hint">{diagnostic}</p>}
-        {basketError && <p className="status err">{basketError}</p>}
-        {tickets.length === 0 && inspection && inspection.primary.unparsed.length > 0 && (
-          <ul className="hint">
-            {inspection.primary.unparsed
-              .filter((item) => item.spendable !== false && (item.scriptBytes ?? 0) >= 50)
-              .map((item) => (
-                <li key={item.outpoint}>
-                  {item.outpoint}: {item.scriptBytes}B script did not parse — {item.reason}
-                </li>
-              ))}
-          </ul>
-        )}
+        {tickets.length === 0 && <p className="hint">No tickets in the eventtickets basket yet.</p>}
         {tickets.map((held) => {
           const recipient = recipients[held.outpoint] ?? ''
           return (
@@ -177,7 +161,7 @@ export function Attendee() {
       )}
 
       {status && <p className="status ok">{status}</p>}
-      {error && <p className="status err">{error}</p>}
+      {listError && <p className="status err">{listError}</p>}
     </>
   )
 }
