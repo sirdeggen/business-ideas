@@ -1,11 +1,10 @@
 import { WalletClient } from '@bsv/sdk'
 import { createWallet } from '@bsv/simple/browser'
-import { originator } from './config'
+import { CHROME_ALLOW_HINT, originator } from './config'
 
 export const CONNECT_MS = 8000
 
-export const CONNECT_TIMEOUT_MESSAGE =
-  'Chrome may ask to allow this site to talk to apps on this device. Allow, then Retry, with Desktop unlocked.'
+export const CONNECT_TIMEOUT_MESSAGE = CHROME_ALLOW_HINT
 
 export function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
