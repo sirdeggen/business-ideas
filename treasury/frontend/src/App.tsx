@@ -261,7 +261,7 @@ function Shell() {
 
           <section className="panel">
             <h2>2. Join as a signer</h2>
-            <p>Each seat connects their own wallet. The app asks for a derived vault pubkey; it never sees a private key. Anyone can load `?treasury=` without connecting.</p>
+            <p>Connect a wallet and join an open seat. One wallet may hold more than one remaining seat. The app asks for a derived vault pubkey; it never sees a private key. Anyone can load `?treasury=` without connecting.</p>
             <label>Treasury id</label>
             <input value={treasuryId} onChange={(event) => setTreasuryId(event.target.value.trim())} />
             <div className="row">
@@ -375,7 +375,7 @@ function Shell() {
                     signature
                   })
                   setTreasury(next)
-                  setNotice('Proposal posted. The other signer approves next.')
+                  setNotice('Proposal posted. A remaining role still needs to approve.')
                 })}
               >
                 Propose
