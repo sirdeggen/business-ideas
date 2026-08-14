@@ -439,18 +439,17 @@ export function heldToOverlayRow(held: HeldReceivable): ChaseRow {
 
 export function unionChaseRows(
   overlayRows: ChaseRow[],
-  held: HeldReceivable[]
+  held: HeldReceivable[],
+  remembered: ChaseRow[] = []
 ): ChaseRow[] {
   const byKey = new Map<string, ChaseRow>()
-  for (const row of overlayRows) {
-    if (row.status === 'paid') continue
-    byKey.set(`${row.txid}.${row.outputIndex}`, row)
-  }
-  for (const item of held) {
-    if (item.item.status === 'paid') continue
-    const row = heldToOverlayRow(item)
+  const add = (row: ChaseRow): void => {
+    if (row.status === 'paid') return
     const key = `${row.txid}.${row.outputIndex}`
     if (!byKey.has(key)) byKey.set(key, row)
   }
+  for (const row of overlayRows) add(row)
+  for (const item of held) add(heldToOverlayRow(item))
+  for (const row of remembered) add(row)
   return [...byKey.values()]
 }

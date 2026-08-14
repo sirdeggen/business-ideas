@@ -14,7 +14,15 @@ import {
   type HeldReceivable
 } from '../lib/actions'
 import { formatBasketDiagnostic, unionChaseRows } from '../lib/basket'
-import { errorMessage, formatSats, overlayCheckFailed, overlayHint, walletHint } from '../lib/config'
+import {
+  CHROME_ALLOW_HINT,
+  DESKTOP_INSTALL_URL,
+  errorMessage,
+  formatSats,
+  overlayCheckFailed,
+  overlayHint
+} from '../lib/config'
+import { loadChaseRows, saveChaseRows } from '../lib/persist'
 import {
   formatLookupDiagnostic,
   inspectLookupReceivables,
@@ -48,6 +56,7 @@ export function Desk() {
 
   const refresh = async (connectIfNeeded = false): Promise<void> => {
     const notes: string[] = []
+    const remembered = loadChaseRows()
     let activeWallet = wallet
     if (!activeWallet && connectIfNeeded) {
       const result = await connect()
@@ -63,29 +72,35 @@ export function Desk() {
         if (basketNote) notes.push(basketNote)
       } catch (err) {
         console.error('Desk basket list failed', err)
-        notes.push(errorMessage(err))
+        notes.push(errorMessage(err, 'refresh'))
         setHeld([])
       }
     } else {
       setHeld([])
     }
 
+    const showCombined = (overlayRows: OverlayReceivable[], previewMode: boolean): void => {
+      const combined = unionChaseRows(overlayRows, heldItems, remembered)
+      if (combined.length > 0) saveChaseRows(combined)
+      setRows(combined)
+      setPreview(previewMode)
+      setError(notes.length > 0 ? notes.join(' ') : null)
+    }
+
     try {
       const lookup = await inspectLookupReceivables(url, { status: 'unpaid' })
       const lookupNote = formatLookupDiagnostic(lookup, usesPublicAnytx(url))
       if (lookupNote) notes.push(lookupNote)
-      const combined = unionChaseRows(lookup.rows, heldItems)
-      setRows(combined)
-      setPreview(false)
-      setError(notes.length > 0 ? notes.join(' ') : null)
+      showCombined(lookup.rows, false)
       return
     } catch (err) {
       console.error('Desk lookup failed', err)
-      notes.push(errorMessage(err))
+      notes.push(errorMessage(err, 'refresh'))
     }
 
-    const fromBasket = unionChaseRows([], heldItems)
+    const fromBasket = unionChaseRows([], heldItems, remembered)
     if (fromBasket.length > 0) {
+      saveChaseRows(fromBasket)
       setRows(fromBasket)
       setPreview(false)
       setError(notes.length > 0 ? notes.join(' ') : null)
@@ -93,14 +108,12 @@ export function Desk() {
     }
 
     if (usesPublicAnytx(url)) {
-      setRows([])
+      setRows(remembered)
       setPreview(false)
       setError(notes.length > 0 ? notes.join(' ') : null)
       return
     }
-    setRows(previewRows())
-    setPreview(true)
-    setError(notes.length > 0 ? notes.join(' ') : null)
+    showCombined(previewRows(), true)
   }
 
   useEffect(() => {
@@ -177,10 +190,16 @@ export function Desk() {
       )}
       <button className="btn" onClick={() => void refresh(true)}>Refresh list</button>
       {status && <p className="status ok">{status}</p>}
-      {walletError && !walletError.includes('Access other apps') && (
-        <p className="hint">{walletHint()}</p>
-      )}
       {(error || walletError) && <p className="status err">{error || walletError}</p>}
+      {(error || walletError) && (
+        <div className="row" style={{ marginTop: 8 }}>
+          <button className="btn primary" onClick={() => void refresh(true)}>Retry</button>
+          <a className="btn" href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">
+            Install BSV Desktop
+          </a>
+        </div>
+      )}
+      {(error || walletError) && <p className="hint">{CHROME_ALLOW_HINT}</p>}
 
       {allEmpty && !preview && (
         <p className="hint">

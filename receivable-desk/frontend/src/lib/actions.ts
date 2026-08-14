@@ -29,6 +29,8 @@ import {
 } from './basket'
 import { originator } from './config'
 import { lookupReceivables, submitReceivableTx } from './overlay'
+import { chaseRowFromRegister, rememberChaseRow } from './persist'
+import { CONNECT_MS, CONNECT_TIMEOUT_MESSAGE, withTimeout } from './wallet'
 
 export type { BasketInspection, HeldReceivable } from './basket'
 
@@ -65,12 +67,16 @@ function pushdrop(wallet: WalletClient): PushDrop {
 }
 
 export async function inspectHeldReceivables(wallet: WalletClient): Promise<BasketInspection> {
-  const listers = [(args: { basket: string, include?: 'entire transactions' | 'locking scripts', includeCustomInstructions?: boolean, limit: number }) => wallet.listOutputs(args)]
+  const timed = (
+    client: WalletClient
+  ) => (args: { basket: string, include?: 'entire transactions' | 'locking scripts', includeCustomInstructions?: boolean, limit: number }) =>
+    withTimeout(client.listOutputs(args), CONNECT_MS, CONNECT_TIMEOUT_MESSAGE)
+  const listers = [timed(wallet)]
   const bound = (wallet as WalletClient & { originator?: string }).originator
   const extras = ['simple', originator()].filter((item, index, all) => item && item !== bound && all.indexOf(item) === index)
   for (const extra of extras) {
     const other = new WalletClient('auto', extra)
-    listers.push((args) => other.listOutputs(args))
+    listers.push(timed(other))
   }
   return inspectBaskets(listers)
 }
@@ -136,16 +142,29 @@ export async function registerReceivable(
     }
     throw new Error(invalid)
   }
-  const duplicates = await lookupReceivables(overlayUrl, { invoiceId: item.invoiceId })
-  if (duplicates.length > 0) {
-    throw new Error(`Invoice ${input.invoiceId} is already registered`)
+  try {
+    const duplicates = await withTimeout(
+      lookupReceivables(overlayUrl, { invoiceId: item.invoiceId }),
+      CONNECT_MS,
+      CONNECT_TIMEOUT_MESSAGE
+    )
+    if (duplicates.length > 0) {
+      throw new Error(`Invoice ${input.invoiceId} is already registered`)
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Invoice ')) throw error
+    // Overlay lookup failed or timed out — still allow createAction.
   }
 
-  const locked = await lockReceivable(wallet, item, 'self', true)
+  const locked = await withTimeout(
+    lockReceivable(wallet, item, 'self', true),
+    CONNECT_MS,
+    CONNECT_TIMEOUT_MESSAGE
+  )
 
   let response
   try {
-    response = await wallet.createAction({
+    response = await withTimeout(wallet.createAction({
       description: `Register receivable ${input.invoiceId}`,
       outputs: [{
         satoshis: 1,
@@ -157,21 +176,16 @@ export async function registerReceivable(
       }],
       labels: [BASKET, 'register'],
       options: { randomizeOutputs: false }
-    })
+    }), CONNECT_MS, CONNECT_TIMEOUT_MESSAGE)
   } catch (err) {
-    const detail = err instanceof Error && err.message.trim() ? err.message : String(err ?? '')
-    throw new Error(
-      detail.trim()
-        ? `createAction failed: ${detail}`
-        : 'createAction failed with no message. Spending Request timed out, was rejected, overlay is offline, or Desktop is locked.'
-    )
+    throw err instanceof Error ? err : new Error(CONNECT_TIMEOUT_MESSAGE)
   }
 
   if (!response.txid || !response.tx) {
-    throw new Error(
-      'Wallet did not return a register transaction. Spending Request timed out, was rejected, or Desktop is locked.'
-    )
+    throw new Error(CONNECT_TIMEOUT_MESSAGE)
   }
+
+  rememberChaseRow(chaseRowFromRegister({ magic: MAGIC, ...item }, response.txid))
 
   // Spend is the register. Overlay submit is a separate step and must not hide the txid.
   try {
@@ -210,7 +224,7 @@ async function spendReceivable(
   const instructions = parseInstructions(held.customInstructions)
   let response
   try {
-    response = await wallet.createAction({
+    response = await withTimeout(wallet.createAction({
       description,
       inputBEEF: held.beef,
       inputs: [{
@@ -221,14 +235,9 @@ async function spendReceivable(
       outputs: newOutputs,
       labels: [BASKET],
       options: { randomizeOutputs: false }
-    })
+    }), CONNECT_MS, CONNECT_TIMEOUT_MESSAGE)
   } catch (err) {
-    const detail = err instanceof Error && err.message.trim() ? err.message : String(err ?? '')
-    throw new Error(
-      detail.trim()
-        ? `createAction failed: ${detail}`
-        : 'createAction failed with no message. Spending Request timed out, was rejected, overlay is offline, or Desktop is locked.'
-    )
+    throw err instanceof Error ? err : new Error(CONNECT_TIMEOUT_MESSAGE)
   }
 
   if (!response.signableTransaction) {

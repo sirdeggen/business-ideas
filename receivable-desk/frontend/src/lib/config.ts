@@ -45,6 +45,17 @@ export function shortKey(key: string, size = 10): string {
   return `${key.slice(0, size)}…${key.slice(-6)}`
 }
 
+export const DESKTOP_INSTALL_URL = 'https://github.com/bsv-blockchain/bsv-desktop'
+
+export const CHROME_ALLOW_HINT =
+  'Unlock Desktop and try again. Chrome may ask to allow this site to talk to apps on this device. Allow, then Retry.'
+
+export const DECLINED_APPROVAL_RECORD =
+  'You declined the approval. Unlock Desktop and hit Record again.'
+
+export const DECLINED_APPROVAL_REFRESH =
+  'Unlock Desktop and hit Refresh again.'
+
 export function walletHint(): string {
   const host = typeof window === 'undefined' ? 'sirdeggen.github.io' : window.location.hostname
   return `Chrome hides BSV Desktop until you Allow “${host} wants to Access other apps and services on this device,” then Retry with Desktop unlocked.`
@@ -101,22 +112,38 @@ export function overlayCheckFailed(probeError?: string | null, url = resolveOver
   return detail ? `Overlay check failed: ${detail}` : `Overlay check failed at ${url}`
 }
 
+function peelJsonMessage(text: string): string {
+  const trimmed = text.trim()
+  if (!trimmed.startsWith('{')) return trimmed
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>
+    const parts = [parsed.message, parsed.description, parsed.error]
+      .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+    if (parts.length > 0) return parts.join(' — ')
+  } catch {
+    // Not JSON — keep the original text.
+  }
+  return trimmed
+}
+
 function extractErrorText(error: unknown): string {
   if (error == null) return ''
-  if (typeof error === 'string') return error
+  if (typeof error === 'string') return peelJsonMessage(error)
   if (error instanceof Error) {
     const extra = error as Error & { code?: string, description?: string, cause?: unknown }
     return [extra.message, extra.description, extra.code, extractErrorText(extra.cause)]
-      .filter((part) => typeof part === 'string' && part.trim())
+      .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+      .map(peelJsonMessage)
       .join(' — ')
   }
   if (typeof error === 'object') {
     const record = error as Record<string, unknown>
     return [record.message, record.description, record.error, record.code, record.status]
       .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+      .map(peelJsonMessage)
       .join(' — ')
   }
-  return String(error)
+  return peelJsonMessage(String(error))
 }
 
 function looksLikeWalletFailure(text: string): boolean {
@@ -132,7 +159,9 @@ function looksLikeWalletFailure(text: string): boolean {
 
 function looksLikeRejected(text: string): boolean {
   const lower = text.toLowerCase()
+  if (lower.includes('overlay rejected')) return false
   return (
+    lower.includes('permission denied') ||
     lower.includes('reject') ||
     lower.includes('denied') ||
     lower.includes('cancelled') ||
@@ -145,18 +174,18 @@ function looksLikeTimeout(text: string): boolean {
   return lower.includes('timeout') || lower.includes('timed out') || lower.includes('deadline')
 }
 
-export function errorMessage(error: unknown): string {
+function looksLikeWalletCallJson(text: string): boolean {
+  return /"call"\s*:/.test(text) || text.includes('"createAction"') || text.includes('"args"')
+}
+
+export function errorMessage(error: unknown, verb: 'record' | 'refresh' = 'record'): string {
   const raw = extractErrorText(error).trim()
-  if (looksLikeWalletFailure(raw)) return walletHint()
+  if (/spending request/i.test(raw)) return CHROME_ALLOW_HINT
   if (looksLikeRejected(raw)) {
-    return 'Wallet rejected the Spending Request. Approve it in BSV Desktop, or you cancelled.'
+    return verb === 'refresh' ? DECLINED_APPROVAL_REFRESH : DECLINED_APPROVAL_RECORD
   }
-  if (looksLikeTimeout(raw)) {
-    return `Wallet request timed out. ${walletHint()}`
-  }
-  if (!raw) {
-    return `Something failed with no message from the wallet or overlay. ${walletHint()}`
-  }
+  if (looksLikeWalletFailure(raw) || looksLikeTimeout(raw)) return CHROME_ALLOW_HINT
+  if (!raw || looksLikeWalletCallJson(raw) || raw.startsWith('{')) return CHROME_ALLOW_HINT
   return raw
 }
 
