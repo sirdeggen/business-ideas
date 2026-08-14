@@ -65,6 +65,12 @@ export function overlayHint(url = resolveOverlayUrl()): string {
   return isLocalhostUrl(url) ? LOCAL_OVERLAY_HINT : PUBLIC_OVERLAY_HINT
 }
 
+/** Failed ping copy. Never substitute PUBLIC_OVERLAY_HINT for the probe error. */
+export function overlayCheckFailed(probeError?: string | null, url = resolveOverlayUrl()): string {
+  const detail = probeError?.trim()
+  return detail ? `Overlay check failed: ${detail}` : `Overlay check failed at ${url}`
+}
+
 function extractErrorText(error: unknown): string {
   if (error == null) return ''
   if (typeof error === 'string') return error
@@ -94,31 +100,6 @@ function looksLikeWalletFailure(text: string): boolean {
   )
 }
 
-function looksLikeOverlayFailure(text: string): boolean {
-  const lower = text.toLowerCase()
-  return (
-    lower.includes('failed to fetch') ||
-    lower.includes('networkerror') ||
-    lower.includes('load failed') ||
-    lower.includes('econnrefused') ||
-    lower.includes('net::err_') ||
-    lower.includes('overlay /submit') ||
-    lower.includes('overlay /lookup') ||
-    lower.includes('overlay broadcast') ||
-    lower.includes('no competent') ||
-    lower.includes('all hosts')
-  )
-}
-
-function looksLikePublicOverlay(text: string): boolean {
-  return (
-    text.includes('overlay-us-1') ||
-    text.includes('tm_anytx') ||
-    text.includes('ls_anytx') ||
-    !/localhost|127\.0\.0\.1/.test(text)
-  )
-}
-
 function looksLikeRejected(text: string): boolean {
   const lower = text.toLowerCase()
   return (
@@ -137,12 +118,6 @@ function looksLikeTimeout(text: string): boolean {
 export function errorMessage(error: unknown): string {
   const raw = extractErrorText(error).trim()
   if (looksLikeWalletFailure(raw)) return walletHint()
-  if (looksLikeOverlayFailure(raw)) {
-    if (looksLikePublicOverlay(raw)) {
-      return raw || PUBLIC_OVERLAY_HINT
-    }
-    return LOCAL_OVERLAY_HINT
-  }
   if (looksLikeRejected(raw)) {
     return 'Wallet rejected the Spending Request. Approve it in BSV Desktop, or you cancelled.'
   }
@@ -150,7 +125,7 @@ export function errorMessage(error: unknown): string {
     return `Wallet request timed out. ${walletHint()}`
   }
   if (!raw) {
-    return `Something failed with no message from the wallet or overlay. ${walletHint()} ${PUBLIC_OVERLAY_HINT}`
+    return `Something failed with no message from the wallet or overlay. ${walletHint()}`
   }
   return raw
 }

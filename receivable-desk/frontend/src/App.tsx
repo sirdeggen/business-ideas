@@ -5,13 +5,13 @@ import { Partner } from './components/Partner'
 import { Register } from './components/Register'
 import { Registry } from './components/Registry'
 import { WalletProvider } from './context/WalletContext'
-import { overlayHint, walletHint } from './lib/config'
+import { overlayCheckFailed, overlayHint, walletHint } from './lib/config'
 import { overlayLookupService, overlayTopic, usesPublicAnytx } from './lib/overlay'
 
 type Tab = 'desk' | 'owe' | 'register' | 'partner'
 
 function Shell() {
-  const { url, setUrl, online } = useOverlay()
+  const { url, setUrl, online, probeError } = useOverlay()
   const [tab, setTab] = useState<Tab>('desk')
 
   return (
@@ -31,7 +31,7 @@ function Shell() {
 
       <p className="banner">
         {online === false
-          ? `${overlayHint(url)} This page is pointed at ${url}.`
+          ? `${overlayCheckFailed(probeError, url)} This page is pointed at ${url}.`
           : `Overlay ${online ? 'online' : 'checking'} · ${url} · ${overlayTopic(url)} / ${overlayLookupService(url)}.`}
         {' '}Not a bank. Not a lender. Wallet is not required to read the list.
         {' '}{walletHint()}
@@ -62,6 +62,7 @@ function Shell() {
             ? 'Default is the public overlay (overlay-us-1). Broadcasts go to tm_anytx; lookups query ls_anytx and keep this desk’s receivable fields only.'
             : 'Using local Docker custom topics (tm_receivables / ls_receivables).'}
           {' '}Point this at http://localhost:8082 to use the optional local indexer.
+          {' '}{overlayHint(url)}
         </p>
         <input value={url} onChange={(event) => setUrl(event.target.value)} />
       </section>

@@ -3,12 +3,12 @@ import { DEMO_EVENT, parseQrPayload } from '../../../protocol/ticket'
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
 import { listHeldTickets, redeemTicket } from '../lib/actions'
-import { errorMessage, overlayHint, shortKey } from '../lib/config'
+import { errorMessage, overlayCheckFailed, shortKey } from '../lib/config'
 import { lookupTickets, overlayLookupService } from '../lib/overlay'
 
 export function Door() {
   const { wallet } = useWallet()
-  const { url, online } = useOverlay()
+  const { url, online, probeError } = useOverlay()
   const [scan, setScan] = useState('')
   const [busy, setBusy] = useState(false)
   const [valid, setValid] = useState<boolean | null>(null)
@@ -19,7 +19,7 @@ export function Door() {
   const overlayDown = online === false
   const lookupDisabled = busy || !scan.trim() || overlayDown
   const lookupTitle = overlayDown
-    ? overlayHint(url)
+    ? overlayCheckFailed(probeError, url)
     : !scan.trim()
       ? 'Paste a QR payload or outpoint first'
       : `Lookup this ticket on ${overlayLookupService(url)}`
@@ -30,7 +30,7 @@ export function Door() {
     setCanRedeem(false)
     setOutpoint(null)
     try {
-      if (overlayDown) throw new Error(overlayHint(url))
+      if (overlayDown) throw new Error(overlayCheckFailed(probeError, url))
       const parsed = parseQrPayload(scan)
       if (!parsed) throw new Error('QR must be ticket JSON or txid.vout')
       const live = await lookupTickets(url, { outpoint: parsed.outpoint })
@@ -109,7 +109,7 @@ export function Door() {
           </button>
         )}
       </div>
-      {overlayDown && <p className="status err">{overlayHint(url)}</p>}
+      {overlayDown && <p className="status err">{overlayCheckFailed(probeError, url)}</p>}
       {lookupDisabled && !overlayDown && !scan.trim() && (
         <p className="hint">Paste a QR payload or outpoint to enable lookup.</p>
       )}

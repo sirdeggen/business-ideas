@@ -13,7 +13,7 @@ import {
   settleReceivable,
   type HeldReceivable
 } from '../lib/actions'
-import { errorMessage, formatSats, overlayHint, walletHint } from '../lib/config'
+import { errorMessage, formatSats, overlayCheckFailed, overlayHint, walletHint } from '../lib/config'
 import { lookupReceivables, usesPublicAnytx, type OverlayReceivable } from '../lib/overlay'
 import { partyName } from './InvoiceCard'
 
@@ -30,7 +30,7 @@ function reminderText(row: OverlayReceivable, late: number, aging: AgingLabel): 
 
 export function Desk() {
   const { wallet, connecting, error: walletError, connect } = useWallet()
-  const { url, online } = useOverlay()
+  const { url, online, probeError } = useOverlay()
   const [held, setHeld] = useState<HeldReceivable[]>([])
   const [rows, setRows] = useState<OverlayReceivable[]>([])
   const [preview, setPreview] = useState(false)
@@ -95,7 +95,7 @@ export function Desk() {
       return
     }
     if (!canSettle) {
-      setError(overlayHint(url))
+      setError(overlayCheckFailed(probeError, url))
       return
     }
     const item = held.find((entry) => entry.item.invoiceId === row.invoiceId && entry.item.status !== 'paid')

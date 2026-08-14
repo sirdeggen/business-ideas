@@ -5,14 +5,14 @@ import { Door } from './components/Door'
 import { Organizer } from './components/Organizer'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
-import { overlayHint, shortKey, walletHint } from './lib/config'
+import { overlayCheckFailed, overlayHint, shortKey, walletHint } from './lib/config'
 import { overlayLookupService, overlayTopic, usesPublicAnytx } from './lib/overlay'
 
 type Role = 'organizer' | 'attendee' | 'door'
 
 function Shell() {
   const { identityKey, connecting, error, connect } = useWallet()
-  const { url, setUrl, online } = useOverlay()
+  const { url, setUrl, online, probeError } = useOverlay()
   const [role, setRole] = useState<Role>('organizer')
   const [copied, setCopied] = useState(false)
 
@@ -61,7 +61,7 @@ function Shell() {
 
       <p className="banner">
         {online === false
-          ? `${overlayHint(url)} This page is pointed at ${url}.`
+          ? `${overlayCheckFailed(probeError, url)} This page is pointed at ${url}.`
           : `Overlay ${online ? 'online' : 'checking'} · ${url} · ${overlayTopic(url)} / ${overlayLookupService(url)}`}
       </p>
 
@@ -84,6 +84,7 @@ function Shell() {
             ? 'Default is the public overlay (overlay-us-1). Broadcasts go to tm_anytx; lookups query ls_anytx and keep Demo Night tickets only.'
             : 'Using local Docker custom topics (tm_tickets / ls_tickets).'}
           {' '}Point this at http://localhost:8080 to use the optional local indexer.
+          {' '}{overlayHint(url)}
         </p>
         <input value={url} onChange={(event) => setUrl(event.target.value)} />
       </section>
