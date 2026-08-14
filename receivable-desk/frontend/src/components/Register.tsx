@@ -3,11 +3,11 @@ import { isIdentityKey } from '../../../protocol/receivable'
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
 import { registerReceivable } from '../lib/actions'
-import { errorMessage, overlayHint, walletHint } from '../lib/config'
+import { errorMessage, overlayCheckFailed, walletHint } from '../lib/config'
 
 export function Register() {
   const { wallet, identityKey, connecting, error: walletError, connect } = useWallet()
-  const { url, online } = useOverlay()
+  const { url, online, probeError } = useOverlay()
   const [invoiceId, setInvoiceId] = useState('INV-2026-')
   const [creditor, setCreditor] = useState('')
   const [debtor, setDebtor] = useState('')
@@ -26,7 +26,7 @@ export function Register() {
   const debtorMissing = !debtor.trim()
   const registerDisabled = busy || connecting || overlayDown || debtorMissing
   const registerTitle = overlayDown
-    ? overlayHint(url)
+    ? overlayCheckFailed(probeError, url)
     : debtorMissing
       ? 'Who owes us is required before Record is enabled'
       : connecting
@@ -35,7 +35,7 @@ export function Register() {
 
   const submit = async (): Promise<void> => {
     if (overlayDown) {
-      setError(overlayHint(url))
+      setError(overlayCheckFailed(probeError, url))
       return
     }
     if (debtorMissing) {
@@ -116,7 +116,7 @@ export function Register() {
           {busy ? 'Recording…' : connecting ? 'Connecting…' : 'Record'}
         </button>
       </div>
-      {overlayDown && <p className="status err">{overlayHint(url)}</p>}
+      {overlayDown && <p className="status err">{overlayCheckFailed(probeError, url)}</p>}
       {walletError && !walletError.includes('Access other apps') && (
         <p className="hint">{walletHint()}</p>
       )}

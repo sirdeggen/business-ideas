@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { sampleReceivables } from '../../../protocol/samples'
 import { useOverlay } from '../context/OverlayContext'
-import { errorMessage, formatSats, overlayHint } from '../lib/config'
+import { errorMessage, formatSats, overlayCheckFailed, overlayHint } from '../lib/config'
 import { lookupReceivables, usesPublicAnytx, type OverlayReceivable } from '../lib/overlay'
 import { partyName } from './InvoiceCard'
 
@@ -12,7 +12,7 @@ function previewUnpaid(): OverlayReceivable[] {
 }
 
 export function Registry() {
-  const { url, online } = useOverlay()
+  const { url, online, probeError } = useOverlay()
   const [rows, setRows] = useState<OverlayReceivable[]>([])
   const [preview, setPreview] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -58,7 +58,7 @@ export function Registry() {
         {busy ? 'Refreshing…' : 'Refresh'}
       </button>
       {overlayDown && (
-        <p className="status err">{error || overlayHint(url)}</p>
+        <p className="status err">{error || overlayCheckFailed(probeError, url)}</p>
       )}
       {preview && (
         <p className="hint">

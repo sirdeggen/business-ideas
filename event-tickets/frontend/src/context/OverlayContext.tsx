@@ -6,6 +6,7 @@ interface OverlayState {
   url: string
   setUrl: (url: string) => void
   online: boolean | null
+  probeError: string | null
   refresh: () => Promise<void>
 }
 
@@ -14,6 +15,7 @@ const OverlayContext = createContext<OverlayState | undefined>(undefined)
 export function OverlayProvider({ children }: { children: ReactNode }) {
   const [url, setUrlState] = useState(() => resolveOverlayUrl())
   const [online, setOnline] = useState<boolean | null>(null)
+  const [probeError, setProbeError] = useState<string | null>(null)
 
   const setUrl = (next: string): void => {
     setUrlState(next)
@@ -21,7 +23,9 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
   }
 
   const refresh = async (): Promise<void> => {
-    setOnline(await pingOverlay(url))
+    const result = await pingOverlay(url)
+    setOnline(result.ok)
+    setProbeError(result.ok ? null : (result.error ?? 'Overlay check failed'))
   }
 
   useEffect(() => {
@@ -29,7 +33,7 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
   }, [url])
 
   return (
-    <OverlayContext.Provider value={{ url, setUrl, online, refresh }}>
+    <OverlayContext.Provider value={{ url, setUrl, online, probeError, refresh }}>
       {children}
     </OverlayContext.Provider>
   )

@@ -3,12 +3,12 @@ import { DEMO_EVENT } from '../../../protocol/ticket'
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
 import { mintTickets } from '../lib/actions'
-import { errorMessage, overlayHint, walletHint } from '../lib/config'
+import { errorMessage, overlayCheckFailed, walletHint } from '../lib/config'
 import { overlayTopic } from '../lib/overlay'
 
 export function Organizer() {
   const { wallet } = useWallet()
-  const { url, online } = useOverlay()
+  const { url, online, probeError } = useOverlay()
   const [count, setCount] = useState(5)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
@@ -23,7 +23,7 @@ export function Organizer() {
         throw new Error(walletHint())
       }
       if (online === false) {
-        throw new Error(overlayHint(url))
+        throw new Error(overlayCheckFailed(probeError, url))
       }
       const result = await mintTickets(wallet, url, count)
       setStatus(`Minted ${result.count} tickets in ${result.txid}`)
@@ -40,7 +40,7 @@ export function Organizer() {
   const mintTitle = !wallet
     ? walletHint()
     : overlayDown
-      ? overlayHint(url)
+      ? overlayCheckFailed(probeError, url)
       : 'Mint tickets into the wallet basket, then broadcast to the overlay'
 
   return (
@@ -71,7 +71,7 @@ export function Organizer() {
           {busy ? 'Minting…' : 'Mint tickets'}
         </button>
       </div>
-      {overlayDown && <p className="status err">{overlayHint(url)}</p>}
+      {overlayDown && <p className="status err">{overlayCheckFailed(probeError, url)}</p>}
       {!wallet && (
         <p className="hint">Connect BSV Desktop before mint. {walletHint()}</p>
       )}

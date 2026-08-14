@@ -227,13 +227,64 @@ function fromContext(context: number[] | undefined, outputIndex: number): Overla
   }
 }
 
-export async function pingOverlay(base: string): Promise<boolean> {
-  try {
-    const response = await fetch(`${overlayUrl(base)}/version`)
-    if (response.ok) return true
-    const health = await fetch(`${overlayUrl(base)}/health/live`)
-    return health.ok
-  } catch {
-    return false
+export interface OverlayPing {
+  ok: boolean
+  error?: string
+}
+
+function fetchFailure(path: string, error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (!message.trim() || /failed to fetch/i.test(message)) {
+    return `Failed to fetch ${path}`
   }
+  return `Failed to fetch ${path}: ${message}`
+}
+
+async function probeGet(host: string, path: string): Promise<OverlayPing> {
+  try {
+    const response = await fetch(`${host}${path}`)
+    if (response.ok) return { ok: true }
+    return { ok: false, error: `GET ${path} failed: ${response.status}` }
+  } catch (error) {
+    return { ok: false, error: fetchFailure(path, error) }
+  }
+}
+
+function isLiveHealthBody(body: unknown): boolean {
+  if (!body || typeof body !== 'object') return false
+  const record = body as { status?: unknown, live?: unknown }
+  return record.status === 'ok' && record.live === true
+}
+
+/**
+ * Pages: /version has no CORS and throws "Failed to fetch". Probe /health/live
+ * first so that throw is not treated as overlay-offline. /version stays a
+ * last-resort fallback for local Docker, isolated so a CORS failure continues.
+ */
+export async function pingOverlay(base: string): Promise<OverlayPing> {
+  const host = overlayUrl(base)
+  const errors: string[] = []
+
+  const live = await probeGet(host, '/health/live')
+  if (live.ok) return { ok: true }
+  if (live.error) errors.push(live.error)
+
+  try {
+    const response = await fetch(`${host}/health`)
+    if (response.ok) {
+      const body = await response.json().catch(() => null)
+      if (isLiveHealthBody(body)) return { ok: true }
+      errors.push('GET /health did not report { status: ok, live: true }')
+    } else {
+      errors.push(`GET /health failed: ${response.status}`)
+    }
+  } catch (error) {
+    errors.push(fetchFailure('/health', error))
+  }
+
+  const version = await probeGet(host, '/version')
+  if (version.ok) return { ok: true }
+  if (version.error) errors.push(version.error)
+
+  return { ok: false, error: errors[0] ?? 'Overlay check failed' }
 }
