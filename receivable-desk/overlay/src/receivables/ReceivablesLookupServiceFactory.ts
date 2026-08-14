@@ -24,8 +24,15 @@ export class ReceivablesLookupService implements LookupService {
     if (payload.mode !== 'locking-script') return
     const { topic, lockingScript, txid, outputIndex } = payload
     if (topic !== TOPIC) return
-    const decoded = PushDrop.decode(lockingScript)
-    const item = parseReceivableFields(decoded.fields)
+    let item = null
+    for (const position of ['before', 'after'] as const) {
+      try {
+        item = parseReceivableFields(PushDrop.decode(lockingScript, position).fields)
+        if (item) break
+      } catch {
+        // Try the other lock() position.
+      }
+    }
     if (!item) return
     try {
       await this.storage.storeRecord(txid, outputIndex, item)

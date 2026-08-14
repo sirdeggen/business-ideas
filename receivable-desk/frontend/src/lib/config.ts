@@ -45,6 +45,11 @@ export function shortKey(key: string, size = 10): string {
   return `${key.slice(0, size)}…${key.slice(-6)}`
 }
 
+export const DESKTOP_INSTALL_URL = 'https://github.com/bsv-blockchain/bsv-desktop'
+
+export const CHROME_ALLOW_HINT =
+  'Unlock Desktop and try again. Chrome may ask to allow this site to talk to apps on this device. Allow, then Retry.'
+
 export function walletHint(): string {
   const host = typeof window === 'undefined' ? 'sirdeggen.github.io' : window.location.hostname
   return `Chrome hides BSV Desktop until you Allow “${host} wants to Access other apps and services on this device,” then Retry with Desktop unlocked.`
@@ -101,22 +106,38 @@ export function overlayCheckFailed(probeError?: string | null, url = resolveOver
   return detail ? `Overlay check failed: ${detail}` : `Overlay check failed at ${url}`
 }
 
+function peelJsonMessage(text: string): string {
+  const trimmed = text.trim()
+  if (!trimmed.startsWith('{')) return trimmed
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>
+    const parts = [parsed.message, parsed.description, parsed.error]
+      .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+    if (parts.length > 0) return parts.join(' — ')
+  } catch {
+    // Not JSON — keep the original text.
+  }
+  return trimmed
+}
+
 function extractErrorText(error: unknown): string {
   if (error == null) return ''
-  if (typeof error === 'string') return error
+  if (typeof error === 'string') return peelJsonMessage(error)
   if (error instanceof Error) {
     const extra = error as Error & { code?: string, description?: string, cause?: unknown }
     return [extra.message, extra.description, extra.code, extractErrorText(extra.cause)]
-      .filter((part) => typeof part === 'string' && part.trim())
+      .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+      .map(peelJsonMessage)
       .join(' — ')
   }
   if (typeof error === 'object') {
     const record = error as Record<string, unknown>
     return [record.message, record.description, record.error, record.code, record.status]
       .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
+      .map(peelJsonMessage)
       .join(' — ')
   }
-  return String(error)
+  return peelJsonMessage(String(error))
 }
 
 function looksLikeWalletFailure(text: string): boolean {
@@ -130,33 +151,74 @@ function looksLikeWalletFailure(text: string): boolean {
   )
 }
 
-function looksLikeRejected(text: string): boolean {
-  const lower = text.toLowerCase()
-  return (
-    lower.includes('reject') ||
-    lower.includes('denied') ||
-    lower.includes('cancelled') ||
-    lower.includes('canceled')
-  )
-}
-
 function looksLikeTimeout(text: string): boolean {
   const lower = text.toLowerCase()
   return lower.includes('timeout') || lower.includes('timed out') || lower.includes('deadline')
 }
 
-export function errorMessage(error: unknown): string {
+function fieldString(value: unknown): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : ''
+}
+
+/** Raw createAction / signAction fields — never remap to “Wallet rejected.” */
+export function formatWalletError(error: unknown): string {
+  const parts: string[] = []
+  const seen = new Set<string>()
+  const push = (value: unknown): void => {
+    const text = fieldString(value)
+    if (!text || seen.has(text)) return
+    seen.add(text)
+    parts.push(text)
+  }
+
+  const walk = (value: unknown, depth = 0): void => {
+    if (value == null || depth > 3) return
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed.startsWith('{')) {
+        try {
+          walk(JSON.parse(trimmed), depth + 1)
+          return
+        } catch {
+          // Fall through to peeled text.
+        }
+      }
+      push(peelJsonMessage(trimmed))
+      return
+    }
+    if (value instanceof Error) {
+      const extra = value as Error & { code?: unknown, description?: unknown, cause?: unknown }
+      walk(extra.message, depth + 1)
+      push(extra.code)
+      push(extra.description)
+      walk(extra.cause, depth + 1)
+      return
+    }
+    if (typeof value === 'object') {
+      const record = value as Record<string, unknown>
+      push(record.call)
+      push(record.code)
+      push(record.description)
+      walk(record.message, depth + 1)
+      push(record.error)
+      walk(record.cause, depth + 1)
+    }
+  }
+
+  walk(error)
+  return parts.join(' — ')
+}
+
+export function errorMessage(error: unknown, verb: 'record' | 'refresh' = 'record'): string {
+  void verb
+  const formatted = formatWalletError(error)
   const raw = extractErrorText(error).trim()
-  if (looksLikeWalletFailure(raw)) return walletHint()
-  if (looksLikeRejected(raw)) {
-    return 'Wallet rejected the Spending Request. Approve it in BSV Desktop, or you cancelled.'
+  if (looksLikeTimeout(formatted) || looksLikeTimeout(raw) || raw === CHROME_ALLOW_HINT) {
+    return CHROME_ALLOW_HINT
   }
-  if (looksLikeTimeout(raw)) {
-    return `Wallet request timed out. ${walletHint()}`
-  }
-  if (!raw) {
-    return `Something failed with no message from the wallet or overlay. ${walletHint()}`
-  }
+  if (looksLikeWalletFailure(formatted) || looksLikeWalletFailure(raw)) return CHROME_ALLOW_HINT
+  if (formatted) return formatted
+  if (!raw) return CHROME_ALLOW_HINT
   return raw
 }
 

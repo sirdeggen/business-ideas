@@ -1,5 +1,4 @@
 import {
-  Beef,
   LockingScript,
   P2PKH,
   PublicKey,
@@ -23,16 +22,18 @@ import {
   type ReceivablePayload,
   type ReceivableStatus
 } from '../../../protocol/receivable'
+import {
+  inspectBaskets,
+  type BasketInspection,
+  type HeldReceivable,
+  type ListOutputsFn
+} from './basket'
 import { originator } from './config'
 import { lookupReceivables, submitReceivableTx } from './overlay'
+import { chaseRowFromRegister, loadChaseRows, rememberChaseRow } from './persist'
+import { CONNECT_MS, CONNECT_TIMEOUT_MESSAGE, withTimeout } from './wallet'
 
-export interface HeldReceivable {
-  outpoint: string
-  satoshis: number
-  item: ReceivablePayload
-  customInstructions: string
-  beef?: number[]
-}
+export type { BasketInspection, HeldReceivable } from './basket'
 
 export interface CustomInstructions {
   protocolID: [0 | 1 | 2, string]
@@ -66,42 +67,30 @@ function pushdrop(wallet: WalletClient): PushDrop {
   return new PushDrop(wallet, originator())
 }
 
-function beefForOutpoint(listedBeef: number[] | undefined, outpoint: string): number[] | undefined {
-  if (!listedBeef || listedBeef.length === 0) return listedBeef
-  const [txid] = outpoint.split('.')
-  const beef = new Beef()
-  beef.mergeBeef(listedBeef)
-  if (beef.findTxid(txid)) return beef.toBinaryAtomic(txid)
-  return listedBeef
+function timedLister(client: WalletClient) {
+  return (args: { basket: string, include?: 'entire transactions' | 'locking scripts', includeCustomInstructions?: boolean, limit: number }) =>
+    withTimeout(client.listOutputs(args), CONNECT_MS, CONNECT_TIMEOUT_MESSAGE)
+}
+
+/** List basket `receivables` under the page host and `"simple"` — no mint under `"simple"`. */
+export async function inspectHeldReceivables(wallet?: WalletClient | null): Promise<BasketInspection> {
+  const listers: ListOutputsFn[] = []
+  const seen = new Set<string>()
+  const add = (client: WalletClient, label: string): void => {
+    if (!label || seen.has(label)) return
+    seen.add(label)
+    listers.push(timedLister(client))
+  }
+  if (wallet) {
+    add(wallet, (wallet as WalletClient & { originator?: string }).originator || 'bound')
+  }
+  add(new WalletClient('auto', originator()), originator())
+  add(new WalletClient('auto', 'simple'), 'simple')
+  return inspectBaskets(listers)
 }
 
 export async function listHeldReceivables(wallet: WalletClient): Promise<HeldReceivable[]> {
-  const listed = await wallet.listOutputs({
-    basket: BASKET,
-    include: 'entire transactions',
-    includeCustomInstructions: true,
-    limit: 1000
-  })
-
-  const held: HeldReceivable[] = []
-  for (const output of listed.outputs) {
-    try {
-      if (!output.lockingScript) continue
-      const decoded = PushDrop.decode(LockingScript.fromHex(output.lockingScript))
-      const item = parseReceivableFields(decoded.fields)
-      if (!item) continue
-      held.push({
-        outpoint: output.outpoint,
-        satoshis: Number(output.satoshis ?? 1),
-        item,
-        customInstructions: output.customInstructions ?? '',
-        beef: beefForOutpoint(listed.BEEF as number[] | undefined, output.outpoint)
-      })
-    } catch {
-      // Skip non-receivable basket items.
-    }
-  }
-  return held
+  return (await inspectHeldReceivables(wallet)).held
 }
 
 async function lockReceivable(
@@ -130,11 +119,17 @@ async function lockReceivable(
   }
 }
 
+export interface RegisterResult {
+  txid: string
+  invoiceId: string
+  overlayError?: string
+}
+
 export async function registerReceivable(
   wallet: WalletClient,
   overlayUrl: string,
   input: RegisterInput
-): Promise<{ txid: string, invoiceId: string }> {
+): Promise<RegisterResult> {
   const item = {
     invoiceId: input.invoiceId.trim(),
     creditor: input.creditor.trim(),
@@ -155,48 +150,82 @@ export async function registerReceivable(
     }
     throw new Error(invalid)
   }
-  const duplicates = await lookupReceivables(overlayUrl, { invoiceId: item.invoiceId })
-  if (duplicates.length > 0) {
+  if (loadChaseRows().some((row) => row.invoiceId === item.invoiceId)) {
     throw new Error(`Invoice ${input.invoiceId} is already registered`)
   }
-
-  const locked = await lockReceivable(wallet, item, 'self', true)
-
-  let response
   try {
-    response = await wallet.createAction({
-      description: `Register receivable ${input.invoiceId}`,
-      outputs: [{
-        satoshis: 1,
-        lockingScript: locked.lockingScript.toHex(),
-        outputDescription: `Receivable ${input.invoiceId}`,
-        basket: BASKET,
-        customInstructions: locked.customInstructions,
-        tags: [BASKET, 'register', input.invoiceId]
-      }],
-      labels: [BASKET, 'register'],
-      options: { randomizeOutputs: false }
+    const duplicates = await withTimeout(
+      lookupReceivables(overlayUrl, { invoiceId: item.invoiceId }),
+      CONNECT_MS,
+      CONNECT_TIMEOUT_MESSAGE
+    )
+    if (duplicates.length > 0) {
+      throw new Error(`Invoice ${input.invoiceId} is already registered`)
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Invoice ')) throw error
+    // Overlay lookup failed or timed out — still allow createAction.
+  }
+
+  const locked = await withTimeout(
+    lockReceivable(wallet, item, 'self', true),
+    CONNECT_MS,
+    CONNECT_TIMEOUT_MESSAGE
+  )
+
+  // Do not 8s-abort createAction — that races the Authorize click and drops the spend.
+  const response = await wallet.createAction({
+    description: `Register receivable ${input.invoiceId}`,
+    outputs: [{
+      satoshis: 1,
+      lockingScript: locked.lockingScript.toHex(),
+      outputDescription: `Receivable ${input.invoiceId}`,
+      basket: BASKET,
+      customInstructions: locked.customInstructions,
+      tags: [BASKET, 'register', input.invoiceId]
+    }],
+    labels: [BASKET, 'register'],
+    options: { randomizeOutputs: false }
+  })
+
+  let txid = response.txid
+  let tx = response.tx as number[] | undefined
+  if ((!txid || !tx) && response.signableTransaction) {
+    const signed = await wallet.signAction({
+      reference: response.signableTransaction.reference,
+      spends: {}
     })
-  } catch (err) {
-    const detail = err instanceof Error && err.message.trim() ? err.message : String(err ?? '')
-    throw new Error(
-      detail.trim()
-        ? `createAction failed: ${detail}`
-        : 'createAction failed with no message. Spending Request timed out, was rejected, overlay is offline, or Desktop is locked.'
-    )
+    txid = signed.txid
+    tx = signed.tx as number[] | undefined
+    if (!txid || !tx) {
+      throw Object.assign(new Error('signAction returned no txid/tx'), { cause: signed })
+    }
+  }
+  if (!txid || !tx) {
+    throw Object.assign(new Error('createAction returned no txid/tx'), { cause: response })
   }
 
-  if (!response.txid || !response.tx) {
-    throw new Error(
-      'Wallet did not return a register transaction. Spending Request timed out, was rejected, or Desktop is locked.'
-    )
-  }
+  rememberChaseRow(chaseRowFromRegister({ magic: MAGIC, ...item }, txid))
 
-  const submitted = await submitReceivableTx(overlayUrl, response.tx as number[])
-  if (submitted.admitted.length === 0) {
-    throw new Error('Overlay rejected the register (no outputs admitted)')
+  // Spend is the register. Overlay submit is a separate step and must not hide the txid.
+  try {
+    const submitted = await submitReceivableTx(overlayUrl, tx)
+    if (submitted.admitted.length === 0) {
+      return {
+        txid,
+        invoiceId: input.invoiceId.trim(),
+        overlayError: `no invoice outputs parsed after submit to ${submitted.topic} at ${submitted.host}`
+      }
+    }
+    return { txid, invoiceId: input.invoiceId.trim() }
+  } catch (error) {
+    const detail = error instanceof Error && error.message.trim() ? error.message : String(error ?? '')
+    return {
+      txid,
+      invoiceId: input.invoiceId.trim(),
+      overlayError: detail.trim() || 'overlay submit failed with no message'
+    }
   }
-  return { txid: response.txid, invoiceId: input.invoiceId.trim() }
 }
 
 async function spendReceivable(
@@ -228,12 +257,7 @@ async function spendReceivable(
       options: { randomizeOutputs: false }
     })
   } catch (err) {
-    const detail = err instanceof Error && err.message.trim() ? err.message : String(err ?? '')
-    throw new Error(
-      detail.trim()
-        ? `createAction failed: ${detail}`
-        : 'createAction failed with no message. Spending Request timed out, was rejected, overlay is offline, or Desktop is locked.'
-    )
+    throw err instanceof Error ? err : new Error(String(err ?? 'createAction failed'))
   }
 
   if (!response.signableTransaction) {
@@ -438,7 +462,15 @@ function paymentOutputIndex(tx: Transaction, amountSats: number): number {
   let markerIndex = -1
   for (const [index, output] of tx.outputs.entries()) {
     try {
-      const item = parseReceivableFields(PushDrop.decode(output.lockingScript).fields)
+      let item = null
+      for (const position of ['before', 'after'] as const) {
+        try {
+          item = parseReceivableFields(PushDrop.decode(output.lockingScript, position).fields)
+          if (item) break
+        } catch {
+          // BRC-29 payment and change are not markers.
+        }
+      }
       if (item?.status === 'paid') {
         markerIndex = index
         break

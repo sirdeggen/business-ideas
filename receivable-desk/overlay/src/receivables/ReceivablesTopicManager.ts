@@ -8,12 +8,15 @@ import {
 import docs from './ReceivablesTopicDocs'
 
 function decodeReceivable(lockingScript: Parameters<typeof PushDrop.decode>[0]): ReceivablePayload | null {
-  try {
-    const decoded = PushDrop.decode(lockingScript)
-    return parseReceivableFields(decoded.fields)
-  } catch {
-    return null
+  for (const position of ['before', 'after'] as const) {
+    try {
+      const item = parseReceivableFields(PushDrop.decode(lockingScript, position).fields)
+      if (item) return item
+    } catch {
+      // Try the other lock() position.
+    }
   }
+  return null
 }
 
 export default class ReceivablesTopicManager implements TopicManager {
