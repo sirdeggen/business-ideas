@@ -288,8 +288,8 @@ function Shell() {
           <p className="eyebrow">{boardMode ? 'Board' : 'Policy treasury'}</p>
           <h1>{treasury?.name || (boardMode ? 'Board' : 'Policy treasury')}</h1>
           <p className="lede">
-            {treasury
-              ? `${treasury.name} is a 2-of-${treasury.signers.length} board. Reading minutes never needs a wallet.`
+            {boardMode
+              ? 'Two people have to say yes.'
               : 'A board anyone can read. Wallet only when you approve — or when you run treasurer tools.'}
           </p>
         </div>
@@ -302,7 +302,6 @@ function Shell() {
 
       <p className={`banner ${overlayStatus}`}>
         {overlayBanner(overlayStatus, usedCache)}
-        {' · overlay-us-1 · tm_anytx / ls_anytx'}
         {seats.length ? ` · you are ${seats.map((role) => ROLE_LABEL[role]).join(', ')}` : ''}
       </p>
 
@@ -655,7 +654,7 @@ function Shell() {
       </details>
 
       <footer>
-        Reading a board URL uses ls_anytx only. A wallet is requested after Approve (or Decline).
+        Reading minutes never needs a wallet. A wallet is requested after Approve (or Decline).
         Private keys never leave BSV Desktop or BSV Browser.
       </footer>
     </div>
