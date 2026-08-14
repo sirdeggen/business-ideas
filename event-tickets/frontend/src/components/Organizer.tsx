@@ -3,7 +3,8 @@ import { DEMO_EVENT } from '../../../protocol/ticket'
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
 import { mintTickets } from '../lib/actions'
-import { LOCAL_OVERLAY_HINT, errorMessage, walletHint } from '../lib/config'
+import { errorMessage, overlayHint, walletHint } from '../lib/config'
+import { overlayTopic } from '../lib/overlay'
 
 export function Organizer() {
   const { wallet } = useWallet()
@@ -22,7 +23,7 @@ export function Organizer() {
         throw new Error(walletHint())
       }
       if (online === false) {
-        throw new Error(LOCAL_OVERLAY_HINT)
+        throw new Error(overlayHint(url))
       }
       const result = await mintTickets(wallet, url, count)
       setStatus(`Minted ${result.count} tickets in ${result.txid}`)
@@ -39,16 +40,17 @@ export function Organizer() {
   const mintTitle = !wallet
     ? walletHint()
     : overlayDown
-      ? LOCAL_OVERLAY_HINT
-      : 'Mint tickets into the wallet basket, then submit to the local overlay'
+      ? overlayHint(url)
+      : 'Mint tickets into the wallet basket, then broadcast to the overlay'
 
   return (
     <section className="panel">
       <h2>Mint Demo Night</h2>
       <p>
         Creates {count} general-admission UTXOs for {DEMO_EVENT.name} into the
-        <code> eventtickets </code> basket, then submits them to <code>tm_tickets</code>
-        on BSV overlay-express.
+        <code> eventtickets </code> basket, then broadcasts them to
+        <code> {overlayTopic(url)} </code>
+        via TopicBroadcaster.
       </p>
       <label htmlFor="count">Ticket count</label>
       <div className="row">
@@ -69,7 +71,7 @@ export function Organizer() {
           {busy ? 'Minting…' : 'Mint tickets'}
         </button>
       </div>
-      {overlayDown && <p className="status err">{LOCAL_OVERLAY_HINT}</p>}
+      {overlayDown && <p className="status err">{overlayHint(url)}</p>}
       {!wallet && (
         <p className="hint">Connect BSV Desktop before mint. {walletHint()}</p>
       )}

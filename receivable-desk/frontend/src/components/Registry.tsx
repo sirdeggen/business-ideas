@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { sampleReceivables } from '../../../protocol/samples'
 import { useOverlay } from '../context/OverlayContext'
-import { LOCAL_OVERLAY_HINT, errorMessage, formatSats } from '../lib/config'
-import { lookupReceivables, type OverlayReceivable } from '../lib/overlay'
+import { errorMessage, formatSats, overlayHint } from '../lib/config'
+import { lookupReceivables, usesPublicAnytx, type OverlayReceivable } from '../lib/overlay'
 import { partyName } from './InvoiceCard'
 
 function previewUnpaid(): OverlayReceivable[] {
@@ -23,16 +23,19 @@ export function Registry() {
     setError(null)
     try {
       const unpaid = await lookupReceivables(url, { status: 'unpaid' })
-      if (unpaid.length > 0) {
-        setRows(unpaid)
-        setPreview(false)
-        return
-      }
+      setRows(unpaid)
+      setPreview(false)
+      return
     } catch (err) {
       console.error('Registry lookup failed', err)
       setError(errorMessage(err))
     } finally {
       setBusy(false)
+    }
+    if (usesPublicAnytx(url)) {
+      setRows([])
+      setPreview(false)
+      return
     }
     setRows(previewUnpaid())
     setPreview(true)
@@ -55,12 +58,12 @@ export function Registry() {
         {busy ? 'Refreshing…' : 'Refresh'}
       </button>
       {overlayDown && (
-        <p className="status err">{error || LOCAL_OVERLAY_HINT}</p>
+        <p className="status err">{error || overlayHint(url)}</p>
       )}
       {preview && (
         <p className="hint">
-          Sample invoices — overlay is local Docker, not GitHub Pages.
-          {` ${LOCAL_OVERLAY_HINT}`}
+          Sample invoices — local index is not running.
+          {` ${overlayHint(url)}`}
         </p>
       )}
       <p className="hint">{rows.length} open invoice{rows.length === 1 ? '' : 's'}.</p>

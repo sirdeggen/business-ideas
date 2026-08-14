@@ -3,8 +3,8 @@ import { DEMO_EVENT, parseQrPayload } from '../../../protocol/ticket'
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
 import { listHeldTickets, redeemTicket } from '../lib/actions'
-import { LOCAL_OVERLAY_HINT, errorMessage, shortKey } from '../lib/config'
-import { lookupTickets } from '../lib/overlay'
+import { errorMessage, overlayHint, shortKey } from '../lib/config'
+import { lookupTickets, overlayLookupService } from '../lib/overlay'
 
 export function Door() {
   const { wallet } = useWallet()
@@ -19,10 +19,10 @@ export function Door() {
   const overlayDown = online === false
   const lookupDisabled = busy || !scan.trim() || overlayDown
   const lookupTitle = overlayDown
-    ? LOCAL_OVERLAY_HINT
+    ? overlayHint(url)
     : !scan.trim()
       ? 'Paste a QR payload or outpoint first'
-      : 'Lookup this ticket on the local overlay'
+      : `Lookup this ticket on ${overlayLookupService(url)}`
 
   const check = async (): Promise<void> => {
     setBusy(true)
@@ -30,7 +30,7 @@ export function Door() {
     setCanRedeem(false)
     setOutpoint(null)
     try {
-      if (overlayDown) throw new Error(LOCAL_OVERLAY_HINT)
+      if (overlayDown) throw new Error(overlayHint(url))
       const parsed = parseQrPayload(scan)
       if (!parsed) throw new Error('QR must be ticket JSON or txid.vout')
       const live = await lookupTickets(url, { outpoint: parsed.outpoint })
@@ -88,8 +88,9 @@ export function Door() {
     <section className="panel">
       <h2>Door</h2>
       <p>
-        Paste the attendee QR payload. Lookup talks to overlay-express on BSV —
-        spent tickets are gone. Redeem spends the UTXO from the wallet that holds it.
+        Paste the attendee QR payload. Lookup queries {overlayLookupService(url)}
+        and keeps Demo Night tickets only — spent tickets are gone. Redeem spends
+        the UTXO from the wallet that holds it.
       </p>
       <label htmlFor="scan">QR payload or outpoint</label>
       <textarea id="scan" rows={4} value={scan} onChange={(event) => setScan(event.target.value)} />
@@ -108,7 +109,7 @@ export function Door() {
           </button>
         )}
       </div>
-      {overlayDown && <p className="status err">{LOCAL_OVERLAY_HINT}</p>}
+      {overlayDown && <p className="status err">{overlayHint(url)}</p>}
       {lookupDisabled && !overlayDown && !scan.trim() && (
         <p className="hint">Paste a QR payload or outpoint to enable lookup.</p>
       )}

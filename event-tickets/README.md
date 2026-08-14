@@ -7,16 +7,18 @@ This stack is BSV only: BRC-100 wallets, PushDrop ticket UTXOs, and overlay-expr
 Public UI (GitHub Pages): after merge, `https://sirdeggen.github.io/business-ideas/tickets/`
 Catalog: `https://sirdeggen.github.io/business-ideas/`
 
-Pages is the shell. There is no public overlay. Mint, lookup, and redeem need local Docker (`cd event-tickets && docker compose up --build`, overlay **:8080**). Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access other apps and services on this device,” then Retry with Desktop unlocked.
+Pages defaults to the public overlay: `https://overlay-us-1.bsvb.tech`, topic `tm_anytx`, lookup `ls_anytx`. After `createAction`, the app broadcasts with `@bsv/sdk` `TopicBroadcaster(['tm_anytx'])` pointed at that host. Door / list queries `ls_anytx` via `LookupResolver`, then keeps only Demo Night ticket PushDrop fields (magic / eventId / serial). A stranger can mint without docker compose.
+
+Local Docker `tm_tickets` / `ls_tickets` is an optional override: set **Overlay URL** to `http://localhost:8080` after `cd event-tickets && docker compose up --build`. Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access other apps and services on this device,” then Retry with Desktop unlocked.
 
 ## Stack
 
 - Wallet interface: BRC-100. The app never holds keys. It calls `createAction`, `getPublicKey`, `listOutputs`, `signAction`, and `internalizeAction`.
 - Identity: 66-hex compressed pubkey. Transfers lock a PushDrop output to that key (BRC-29 / BRC-42 derivation inside PushDrop), not a Bitcoin address.
-- Ticket state: wallet basket `eventtickets` (BRC-45/46) plus overlay topic `tm_tickets` / lookup `ls_tickets` (BRC-22/24).
+- Ticket state: wallet basket `eventtickets` (BRC-45/46). Public Pages uses overlay topic `tm_anytx` / lookup `ls_anytx` (client-filtered). Local Docker still hosts custom `tm_tickets` / `ls_tickets` (BRC-22/24).
 - Encoding: PushDrop (BRC-48) fields: magic, event id, serial, type, venue metadata.
-- Frontend: Vite + React. Wallet via `createWallet()` from `@bsv/simple/browser` (falls back to `WalletClient('auto', originator)` from `@bsv/sdk`). Overlay lookup via `@bsv/simple/browser` `Overlay` plus direct `POST /submit` and `POST /lookup`.
-- Overlay: `@bsv/overlay-express` + MongoDB + MySQL, `POST /submit` and `POST /lookup`.
+- Frontend: Vite + React. Wallet via `createWallet()` from `@bsv/simple/browser` (falls back to `WalletClient('auto', originator)` from `@bsv/sdk`). Overlay via `@bsv/sdk` `TopicBroadcaster` and `LookupResolver`.
+- Overlay (public): `https://overlay-us-1.bsvb.tech`. Overlay (local optional): `@bsv/overlay-express` + MongoDB + MySQL.
 
 ## Prerequisites
 
@@ -30,7 +32,7 @@ Pages is the shell. There is no public overlay. Mint, lookup, and redeem need lo
 2. Open **organizer**.
 3. Choose N (1–20) and click **Mint tickets**.
 4. Approve `createAction`. Each output is a PushDrop ticket in basket `eventtickets`.
-5. The app submits the Atomic BEEF to overlay topic `tm_tickets`. The topic manager admits mint outputs that decode as Demo Night tickets with unique serials.
+5. The app broadcasts the Atomic BEEF with `TopicBroadcaster(['tm_anytx'])` (or `tm_tickets` when the Overlay URL is localhost). Public `tm_anytx` stores all outputs; the UI keeps Demo Night tickets only.
 
 ## Hold / QR
 
@@ -51,7 +53,7 @@ Transfer is a spend. The old UTXO dies; a new PushDrop UTXO is locked to the rec
 
 1. Attendee shows the QR.
 2. Door tab: paste the QR JSON or `txid.vout`.
-3. **Lookup overlay** (`POST /lookup` on `ls_tickets`).
+3. **Lookup overlay** (`LookupResolver` on `ls_anytx`, or `ls_tickets` on local Docker). Public results are filtered to ticket magic / eventId / serial.
    - Live ticket → Admit.
    - Empty result → Reject (never admitted, invalid, or already spent).
 4. If the connected wallet holds that outpoint, **Redeem (spend)** consumes it with no replacement ticket output.
@@ -59,9 +61,16 @@ Transfer is a spend. The old UTXO dies; a new PushDrop UTXO is locked to the rec
 
 The topic manager also rejects transfers that change the serial and mints with duplicate serials in the same transaction.
 
-## Run the overlay locally
+## Public overlay vs local Docker
 
-Docker Compose is the default local indexer (overlay-express + MySQL + Mongo). LARS is optional.
+| Path | Host | Broadcast | Lookup |
+| --- | --- | --- | --- |
+| Pages / default | `https://overlay-us-1.bsvb.tech` | `tm_anytx` | `ls_anytx` + client filter |
+| Local Docker override | `http://localhost:8080` | `tm_tickets` | `ls_tickets` |
+
+## Run the overlay locally (optional)
+
+Docker Compose is the optional local indexer (overlay-express + MySQL + Mongo) for custom `tm_tickets`. LARS is optional. The Pages default does not need this.
 
 ```bash
 cd event-tickets
@@ -73,7 +82,7 @@ docker compose up --build
 - Frontend container: http://localhost:5173
 - MySQL: 3306 / MongoDB: 27017
 
-Point the Pages demo at a reachable overlay by setting **Overlay URL** in the UI (stored in localStorage). Default is `http://localhost:8080`.
+Point the UI at a local overlay-express node by setting **Overlay URL** to `http://localhost:8080` (stored in localStorage). Pages default is `https://overlay-us-1.bsvb.tech`.
 
 ### Frontend only (wallet against a running overlay)
 
@@ -117,8 +126,10 @@ Select the Local LARS config (backend + frontend). LARS brings up overlay-expres
 | --- | --- |
 | Basket | `eventtickets` |
 | Protocol ID | `[0, "tickets"]` |
-| Topic | `tm_tickets` |
-| Lookup | `ls_tickets` |
+| Topic (public / Pages) | `tm_anytx` |
+| Lookup (public / Pages) | `ls_anytx` (filter to ticket fields) |
+| Topic (local Docker) | `tm_tickets` |
+| Lookup (local Docker) | `ls_tickets` |
 | Event id | `demonight` |
 | Ticket type | `ga` |
 

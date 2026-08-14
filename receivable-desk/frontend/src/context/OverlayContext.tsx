@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
-import { OVERLAY_STORAGE_KEY, storedOverlayUrl } from '../lib/config'
+import { OVERLAY_STORAGE_KEY, resolveOverlayUrl } from '../lib/config'
 import { pingOverlay } from '../lib/overlay'
 
 interface OverlayState {
@@ -12,7 +12,7 @@ interface OverlayState {
 const OverlayContext = createContext<OverlayState | undefined>(undefined)
 
 export function OverlayProvider({ children }: { children: ReactNode }) {
-  const [url, setUrlState] = useState(() => storedOverlayUrl())
+  const [url, setUrlState] = useState(() => resolveOverlayUrl())
   const [online, setOnline] = useState<boolean | null>(null)
 
   const setUrl = (next: string): void => {

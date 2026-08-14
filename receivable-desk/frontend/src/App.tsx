@@ -5,14 +5,14 @@ import { Partner } from './components/Partner'
 import { Register } from './components/Register'
 import { Registry } from './components/Registry'
 import { WalletProvider } from './context/WalletContext'
-import { LOCAL_DESK_HINT, LOCAL_OVERLAY_HINT, isGitHubPages, walletHint } from './lib/config'
+import { overlayHint, walletHint } from './lib/config'
+import { overlayLookupService, overlayTopic, usesPublicAnytx } from './lib/overlay'
 
 type Tab = 'desk' | 'owe' | 'register' | 'partner'
 
 function Shell() {
   const { url, setUrl, online } = useOverlay()
   const [tab, setTab] = useState<Tab>('desk')
-  const pages = isGitHubPages()
 
   return (
     <div className="app">
@@ -22,20 +22,17 @@ function Shell() {
           <h1>Who do we chase today?</h1>
           <p className="lede">
             The paper that proves an invoice — same treasurer, after a few real
-            invoices exist. Not a second product. Not a bank. GitHub Pages is
-            the shell; overlay is localhost Docker (:8082).
+            invoices exist. Not a second product. Not a bank. Pages persists on
+            the public overlay (overlay-us-1 / tm_anytx). Local Docker
+            tm_receivables is optional.
           </p>
         </div>
       </header>
 
       <p className="banner">
-        {pages
-          ? `${LOCAL_DESK_HINT} This page is pointed at ${url}.`
-          : online
-            ? `Local index reachable at ${url}.`
-            : online === false
-              ? `Local index is not running. ${LOCAL_OVERLAY_HINT}`
-              : 'Checking the local index…'}
+        {online === false
+          ? `${overlayHint(url)} This page is pointed at ${url}.`
+          : `Overlay ${online ? 'online' : 'checking'} · ${url} · ${overlayTopic(url)} / ${overlayLookupService(url)}.`}
         {' '}Not a bank. Not a lender. Wallet is not required to read the list.
         {' '}{walletHint()}
       </p>
@@ -59,10 +56,12 @@ function Shell() {
       {tab === 'partner' && <Partner />}
 
       <section className="panel quiet-panel">
-        <h2>Local index URL</h2>
+        <h2>Overlay URL</h2>
         <p>
-          GitHub Pages cannot settle. Point this at the Docker index (default
-          http://localhost:8082). {LOCAL_OVERLAY_HINT}
+          {usesPublicAnytx(url)
+            ? 'Default is the public overlay (overlay-us-1). Broadcasts go to tm_anytx; lookups query ls_anytx and keep this desk’s receivable fields only.'
+            : 'Using local Docker custom topics (tm_receivables / ls_receivables).'}
+          {' '}Point this at http://localhost:8082 to use the optional local indexer.
         </p>
         <input value={url} onChange={(event) => setUrl(event.target.value)} />
       </section>

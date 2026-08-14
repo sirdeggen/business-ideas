@@ -31,7 +31,7 @@ jobs:
         working-directory: event-tickets/frontend
         env:
           VITE_BASE: /business-ideas/tickets/
-          VITE_OVERLAY_URL: http://localhost:8080
+          VITE_OVERLAY_URL: https://overlay-us-1.bsvb.tech
         run: |
           npm ci
           npm run build
@@ -40,7 +40,7 @@ jobs:
         working-directory: receivable-desk/frontend
         env:
           VITE_BASE: /business-ideas/receivables/
-          VITE_OVERLAY_URL: http://localhost:8082
+          VITE_OVERLAY_URL: https://overlay-us-1.bsvb.tech
         run: |
           npm ci
           npm run build

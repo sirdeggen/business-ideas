@@ -6,18 +6,22 @@ Aging is in English: **on time / a bit late / call them / board should know**. W
 
 **This desk does not originate loans, become a bank, lend, or custody funds.** Advance is not available (`Advance against this invoice — not available.`).
 
-The list is this folder’s own registry (sample invoices here). It does not read Peter’s `invoices/` objects. Overlay is localhost. **Settle does not work from GitHub Pages** — run Docker:
+The list is this folder’s own registry (sample invoices here). It does not read Peter’s `invoices/` objects.
+
+Pages defaults to the public overlay: `https://overlay-us-1.bsvb.tech`, topic `tm_anytx`, lookup `ls_anytx`. After `createAction`, the app broadcasts with `@bsv/sdk` `TopicBroadcaster(['tm_anytx'])` pointed at that host. List / settle lookup queries `ls_anytx` via `LookupResolver`, then keeps only this desk’s receivable PushDrop fields (invoice id, parties, amount, due, status). A stranger can register without docker compose.
+
+Local Docker `tm_receivables` / `ls_receivables` is an optional override:
 
 ```bash
 cd receivable-desk
 docker compose up --build
 ```
 
-Overlay **:8082**, UI **:5175**.
+Overlay **:8082**, UI **:5175**. Set **Overlay URL** to `http://localhost:8082`.
 
-Public UI (GitHub Pages, list only — no settle): `https://sirdeggen.github.io/business-ideas/receivables/`
+Public UI: `https://sirdeggen.github.io/business-ideas/receivables/`
 
-Pages is the shell. Overlay is localhost Docker on **:8082**. Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access other apps and services on this device,” then Retry with Desktop unlocked. Wallet is not required to read the list.
+Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access other apps and services on this device,” then Retry with Desktop unlocked. Wallet is not required to read the list.
 
 Sibling payable-invoice app lives in [`invoices/`](../invoices/). This desk does not modify that folder. Local compose ports here are offset so tickets (8080), invoices (8081), and this registry (8082) can run together.
 
@@ -25,10 +29,10 @@ Sibling payable-invoice app lives in [`invoices/`](../invoices/). This desk does
 
 - Wallet interface: BRC-100. The app never holds keys. It calls `createAction`, `getPublicKey`, `listOutputs`, `signAction`, and `internalizeAction`.
 - Identity: 66-hex compressed pubkey. Receivable UTXOs lock with PushDrop (BRC-48) using BRC-42 derivation inside the wallet. Settle pays the creditor with [BRC-29](https://bsv.brc.dev/payments/0029) P2PKH.
-- State: wallet basket `receivables` plus overlay topic `tm_receivables` / lookup `ls_receivables`.
+- State: wallet basket `receivables`. Public Pages uses overlay topic `tm_anytx` / lookup `ls_anytx` (client-filtered). Local Docker still hosts custom `tm_receivables` / `ls_receivables`.
 - Encoding: PushDrop fields — magic, invoice id, creditor, debtor, amount sats, due date, status (`open` / `approved` / `paid`), memo, advance-intent bps.
-- Frontend: Vite + React. Wallet via `createWallet()` from `@bsv/simple/browser` (falls back to `WalletClient('auto', originator)` from `@bsv/sdk`). Overlay via `@bsv/simple/browser` `Overlay` plus direct `POST /submit`, `POST /lookup`, and `POST /intent`.
-- Overlay: `@bsv/overlay-express` + MongoDB + MySQL.
+- Frontend: Vite + React. Wallet via `createWallet()` from `@bsv/simple/browser` (falls back to `WalletClient('auto', originator)` from `@bsv/sdk`). Overlay via `@bsv/sdk` `TopicBroadcaster` and `LookupResolver`.
+- Overlay (public): `https://overlay-us-1.bsvb.tech`. Overlay (local optional): `@bsv/overlay-express` + MongoDB + MySQL.
 
 Status changes are spends that create the next-state UTXO (or a paid marker). Duplicate invoice ids are rejected. Junk PushDrop data is not admitted.
 
@@ -55,12 +59,13 @@ Unpaid = `open` or `approved`. Paid markers stay in the index so the invoice id 
 
 ## Mark paid
 
-Mark paid is a settle of the live receipt. It does **not** run from GitHub Pages.
+Mark paid is a settle of the live receipt. On Pages it broadcasts to `tm_anytx` the same way register does.
 
-1. Run `docker compose` so the index is on **:8082** and the UI on **:5175**.
-2. On **Chase**, pick an unpaid invoice this wallet recorded.
-3. **Mark paid** spends it to a `paid` marker and pays the billed amount to whoever is owed.
-4. Overlay admits the paid marker only if that payment is present. Lookup of that invoice as unpaid is empty.
+1. On **Chase**, pick an unpaid invoice this wallet recorded.
+2. **Mark paid** spends it to a `paid` marker and pays the billed amount to whoever is owed.
+3. Overlay lookup of that invoice as unpaid is empty after the spend is indexed.
+
+Optional local Docker still works if Overlay URL is `http://localhost:8082`.
 
 The wallet must be able to fund the billed amount. The registry token is not custody of the invoice funds.
 
@@ -72,9 +77,16 @@ The wallet must be able to fund the billed amount. The registry token is not cus
 
 No calculator. No APR. We are not a bank or a lender.
 
-## Run the overlay locally
+## Public overlay vs local Docker
 
-Docker Compose is the default local indexer (overlay-express + MySQL + Mongo) and seeds **10 sample receivables** as one real PushDrop transaction.
+| Path | Host | Broadcast | Lookup |
+| --- | --- | --- | --- |
+| Pages / default | `https://overlay-us-1.bsvb.tech` | `tm_anytx` | `ls_anytx` + client filter |
+| Local Docker override | `http://localhost:8082` | `tm_receivables` | `ls_receivables` |
+
+## Run the overlay locally (optional)
+
+Docker Compose is the optional local indexer (overlay-express + MySQL + Mongo) and seeds **10 sample receivables** as one real PushDrop transaction. The Pages default does not need this.
 
 ```bash
 cd receivable-desk
@@ -88,7 +100,7 @@ docker compose up --build
 
 The seed service waits until overlay is healthy, then submits ten invoices (`INV-2026-001` … `INV-2026-010`) — mix of open, approved, approved+intent, and paid. Each output is a BRC-48 PushDrop script, not a fake table.
 
-Point the static UI at a reachable overlay with **Overlay URL** (stored in localStorage). Default is `http://localhost:8082`.
+Point the UI at a local overlay-express node by setting **Overlay URL** to `http://localhost:8082` (stored in localStorage). Pages default is `https://overlay-us-1.bsvb.tech`.
 
 ### Frontend only (wallet against a running overlay)
 
@@ -141,8 +153,10 @@ Covers no double-register, paid-after-settle, and junk rejection (protocol + top
 | Basket | `receivables` |
 | Protocol ID | `[0, "receivables"]` |
 | BRC-29 settle | `[2, "3241645161d8"]` |
-| Topic | `tm_receivables` |
-| Lookup | `ls_receivables` |
+| Topic (public / Pages) | `tm_anytx` |
+| Lookup (public / Pages) | `ls_anytx` (filter to receivable fields) |
+| Topic (local Docker) | `tm_receivables` |
+| Lookup (local Docker) | `ls_receivables` |
 | Statuses | `open`, `approved`, `paid` |
 | Stub advance | 70% (`7000` bps) |
 
