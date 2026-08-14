@@ -1,6 +1,4 @@
 import {
-  Beef,
-  LockingScript,
   PushDrop,
   Transaction,
   Utils,
@@ -12,19 +10,17 @@ import {
   PROTOCOL_ID,
   TICKET_TYPE,
   encodeTicketFields,
-  parseTicketFields,
-  type TicketPayload
+  parseTicketFields
 } from '../../../protocol/ticket'
+import {
+  inspectBaskets,
+  type BasketInspection,
+  type HeldTicket
+} from './basket'
 import { originator } from './config'
 import { submitTicketTx } from './overlay'
 
-export interface HeldTicket {
-  outpoint: string
-  satoshis: number
-  ticket: TicketPayload
-  customInstructions: string
-  beef?: number[]
-}
+export type { BasketInspection, HeldTicket } from './basket'
 
 export interface CustomInstructions {
   protocolID: [0 | 1 | 2, string]
@@ -75,61 +71,39 @@ function pushdrop(wallet: WalletClient): PushDrop {
   return new PushDrop(wallet, originator())
 }
 
-function beefForOutpoint(listedBeef: number[] | undefined, outpoint: string): number[] | undefined {
-  if (!listedBeef || listedBeef.length === 0) return listedBeef
-  const [txid] = outpoint.split('.')
-  const beef = new Beef()
-  beef.mergeBeef(listedBeef)
-  if (beef.findTxid(txid)) return beef.toBinaryAtomic(txid)
-  return listedBeef
-}
-
 function ticketOutputIndex(tx: Transaction): number {
   for (const [index, output] of tx.outputs.entries()) {
-    try {
-      const ticket = parseTicketFields(PushDrop.decode(output.lockingScript).fields)
-      if (ticket) return index
-    } catch {
-      // Change and unrelated outputs are ignored.
+    for (const position of ['before', 'after'] as const) {
+      try {
+        const ticket = parseTicketFields(PushDrop.decode(output.lockingScript, position).fields)
+        if (ticket) return index
+      } catch {
+        // Change and unrelated outputs are ignored.
+      }
     }
   }
   return 0
 }
 
-export async function listHeldTickets(wallet: WalletClient): Promise<HeldTicket[]> {
-  const listed = await wallet.listOutputs({
-    basket: BASKET,
-    include: 'entire transactions',
-    includeCustomInstructions: true,
-    limit: 1000
-  })
+export async function inspectHeldBaskets(wallet: WalletClient): Promise<BasketInspection> {
+  return inspectBaskets((args) => wallet.listOutputs(args))
+}
 
-  const held: HeldTicket[] = []
-  for (const output of listed.outputs) {
-    try {
-      if (!output.lockingScript) continue
-      const decoded = PushDrop.decode(LockingScript.fromHex(output.lockingScript))
-      const ticket = parseTicketFields(decoded.fields)
-      if (!ticket) continue
-      held.push({
-        outpoint: output.outpoint,
-        satoshis: Number(output.satoshis ?? 1),
-        ticket,
-        customInstructions: output.customInstructions ?? '',
-        beef: beefForOutpoint(listed.BEEF as number[] | undefined, output.outpoint)
-      })
-    } catch {
-      // Skip non-ticket basket items.
-    }
-  }
-  return held
+export async function listHeldTickets(wallet: WalletClient): Promise<HeldTicket[]> {
+  return (await inspectHeldBaskets(wallet)).tickets
+}
+
+export interface MintResult {
+  txid: string
+  count: number
+  overlayError?: string
 }
 
 export async function mintTickets(
   wallet: WalletClient,
   overlayUrl: string,
   count: number
-): Promise<{ txid: string, count: number }> {
+): Promise<MintResult> {
   if (count < 1 || count > 20) throw new Error('Mint between 1 and 20 tickets')
 
   const token = pushdrop(wallet)
@@ -181,12 +155,25 @@ export async function mintTickets(
     )
   }
 
-  const submitted = await submitTicketTx(overlayUrl, response.tx as number[])
-  if (submitted.admitted.length === 0) {
-    throw new Error('Overlay rejected the mint (no outputs admitted)')
+  // Spend is the mint. Overlay submit is a separate step and must not hide the txid.
+  try {
+    const submitted = await submitTicketTx(overlayUrl, response.tx as number[])
+    if (submitted.admitted.length === 0) {
+      return {
+        txid: response.txid,
+        count,
+        overlayError: `no ticket outputs parsed after submit to ${submitted.topic} at ${submitted.host}`
+      }
+    }
+    return { txid: response.txid, count: submitted.admitted.length }
+  } catch (error) {
+    const detail = error instanceof Error && error.message.trim() ? error.message : String(error ?? '')
+    return {
+      txid: response.txid,
+      count,
+      overlayError: detail.trim() || 'overlay submit failed with no message'
+    }
   }
-
-  return { txid: response.txid, count: submitted.admitted.length }
 }
 
 async function spendTicket(

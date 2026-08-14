@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import QRCode from 'qrcode'
-import { qrPayload } from '../../../protocol/ticket'
+import { BASKET, qrPayload } from '../../../protocol/ticket'
+import { useBasket } from '../context/BasketContext'
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
 import {
   acceptTransfer,
   isIdentityKey,
-  listHeldTickets,
   parseTransferPackage,
   transferTicket,
   type HeldTicket,
@@ -17,7 +17,7 @@ import { errorMessage, shortKey } from '../lib/config'
 export function Attendee() {
   const { wallet, identityKey } = useWallet()
   const { url } = useOverlay()
-  const [tickets, setTickets] = useState<HeldTicket[]>([])
+  const { tickets, diagnostic, error: basketError, refresh: refreshBasket } = useBasket()
   const [qrs, setQrs] = useState<Record<string, string>>({})
   const [recipients, setRecipients] = useState<Record<string, string>>({})
   const [incoming, setIncoming] = useState('')
@@ -26,25 +26,24 @@ export function Attendee() {
   const [packageJson, setPackageJson] = useState<string | null>(null)
 
   const refresh = async (): Promise<void> => {
-    if (!wallet) return
-    const held = await listHeldTickets(wallet)
-    setTickets(held)
-    const next: Record<string, string> = {}
-    for (const ticket of held) {
-      next[ticket.outpoint] = await QRCode.toDataURL(qrPayload(ticket.outpoint, ticket.ticket), {
-        margin: 1,
-        width: 240
-      })
-    }
-    setQrs(next)
+    await refreshBasket()
   }
 
   useEffect(() => {
-    void refresh().catch((err: unknown) => {
-      console.error('Basket refresh failed', err)
+    void (async () => {
+      const next: Record<string, string> = {}
+      for (const ticket of tickets) {
+        next[ticket.outpoint] = await QRCode.toDataURL(qrPayload(ticket.outpoint, ticket.ticket), {
+          margin: 1,
+          width: 240
+        })
+      }
+      setQrs(next)
+    })().catch((err: unknown) => {
+      console.error('QR render failed', err)
       setError(errorMessage(err))
     })
-  }, [wallet])
+  }, [tickets])
 
   const send = async (held: HeldTicket): Promise<void> => {
     if (!wallet) return
@@ -91,7 +90,13 @@ export function Attendee() {
         <div className="row">
           <button className="btn" onClick={() => void refresh()}>Refresh basket</button>
         </div>
-        {tickets.length === 0 && <p className="hint">No tickets in the eventtickets basket yet.</p>}
+        {tickets.length === 0 && !diagnostic && !basketError && (
+          <p className="hint">No tickets in the {BASKET} basket yet.</p>
+        )}
+        {diagnostic && tickets.length > 0 && <p className="hint">{diagnostic}</p>}
+        {(basketError || (diagnostic && tickets.length === 0)) && (
+          <p className="status err">{basketError || diagnostic}</p>
+        )}
         {tickets.map((held) => {
           const recipient = recipients[held.outpoint] ?? ''
           return (

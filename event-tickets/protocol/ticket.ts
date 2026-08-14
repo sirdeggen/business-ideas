@@ -7,6 +7,8 @@
 
 export const PROTOCOL_ID: [0, string] = [0, 'tickets']
 export const BASKET = 'eventtickets'
+/** Older Desktop mints also landed in this two-word basket. Read-only; new mints use BASKET. */
+export const LEGACY_BASKET = 'event tickets'
 export const TOPIC = 'tm_tickets'
 export const LOOKUP_SERVICE = 'ls_tickets'
 export const MAGIC = 'eventticket'
@@ -62,33 +64,104 @@ export function encodeTicketFields(ticket: Omit<TicketPayload, 'magic'>): number
   ]
 }
 
-export function parseTicketFields(fields: Array<number[] | Uint8Array>): TicketPayload | null {
-  if (fields.length < 5) return null
-  try {
-    const asBytes = (field: number[] | Uint8Array): number[] => Array.from(field)
-    const magic = utf8BytesToString(asBytes(fields[0]))
-    if (magic !== MAGIC) return null
-    const eventId = utf8BytesToString(asBytes(fields[1]))
-    const serial = utf8BytesToString(asBytes(fields[2]))
-    const kind = utf8BytesToString(asBytes(fields[3]))
-    if (!eventId || !serial || kind !== TICKET_TYPE) return null
-    const meta = JSON.parse(utf8BytesToString(asBytes(fields[4]))) as {
-      name?: string
-      venue?: string
-      startsAt?: string
+function fieldUtf8(field: number[] | Uint8Array): string {
+  return utf8BytesToString(Array.from(field))
+}
+
+function magicIndex(fields: Array<number[] | Uint8Array>): number {
+  return fields.findIndex((field) => {
+    try {
+      return fieldUtf8(field) === MAGIC
+    } catch {
+      return false
     }
+  })
+}
+
+function metaFromFields(
+  fields: Array<number[] | Uint8Array>,
+  start: number
+): { name: string, venue: string, startsAt: string } {
+  for (let i = start + 4; i < fields.length; i++) {
+    try {
+      const meta = JSON.parse(fieldUtf8(fields[i])) as {
+        name?: string
+        venue?: string
+        startsAt?: string
+      }
+      if (meta && typeof meta === 'object') {
+        return {
+          name: String(meta.name ?? ''),
+          venue: String(meta.venue ?? ''),
+          startsAt: String(meta.startsAt ?? '')
+        }
+      }
+    } catch {
+      // lock() may insert a pubkey/signature before or after venue meta.
+    }
+  }
+  return { name: '', venue: '', startsAt: '' }
+}
+
+/**
+ * Accepts encodeTicketFields() plus extra PushDrop.lock() fields (pubkey /
+ * signature before or after the ticket). Requires magic, eventId, serial, kind.
+ */
+export function parseTicketFields(fields: Array<number[] | Uint8Array>): TicketPayload | null {
+  const start = magicIndex(fields)
+  if (start < 0 || start + 3 >= fields.length) return null
+  try {
+    const eventId = fieldUtf8(fields[start + 1])
+    const serial = fieldUtf8(fields[start + 2])
+    const kind = fieldUtf8(fields[start + 3])
+    if (!eventId || !serial || kind !== TICKET_TYPE) return null
+    const meta = metaFromFields(fields, start)
     return {
       magic: MAGIC,
       eventId,
       serial,
       kind: TICKET_TYPE,
-      name: String(meta.name ?? ''),
-      venue: String(meta.venue ?? ''),
-      startsAt: String(meta.startsAt ?? '')
+      name: meta.name,
+      venue: meta.venue,
+      startsAt: meta.startsAt
     }
   } catch {
     return null
   }
+}
+
+/** Why parseTicketFields returned null — used when a basket is non-empty but blind. */
+export function explainTicketParse(fields: Array<number[] | Uint8Array>): string {
+  if (fields.length === 0) return 'PushDrop has 0 fields'
+  const start = magicIndex(fields)
+  if (start < 0) {
+    const preview = fields.slice(0, 4).map((field, index) => {
+      try {
+        const text = fieldUtf8(field)
+        if (text.length > 0 && text.length <= 32 && /^[\x20-\x7e]+$/.test(text)) {
+          return text
+        }
+      } catch {
+        // Fall through to byte count.
+      }
+      return `field[${index}] ${Array.from(field).length}B`
+    })
+    return `magic mismatch (no ${MAGIC}; ${preview.join(', ')})`
+  }
+  if (start + 3 >= fields.length) {
+    return `fields after ${MAGIC} incomplete (${fields.length - start} from magic, need eventId/serial/kind)`
+  }
+  try {
+    const eventId = fieldUtf8(fields[start + 1])
+    const serial = fieldUtf8(fields[start + 2])
+    const kind = fieldUtf8(fields[start + 3])
+    if (!eventId) return 'empty eventId'
+    if (!serial) return 'empty serial'
+    if (kind !== TICKET_TYPE) return `kind ${JSON.stringify(kind)} ≠ ${TICKET_TYPE}`
+  } catch (error) {
+    return error instanceof Error ? error.message : 'field decode failed'
+  }
+  return 'unknown parse failure'
 }
 
 export function isDemoEventTicket(ticket: TicketPayload): boolean {

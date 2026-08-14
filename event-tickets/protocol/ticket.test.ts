@@ -5,6 +5,7 @@ import {
   TICKET_TYPE,
   classifyTicketTransaction,
   encodeTicketFields,
+  explainTicketParse,
   parseQrPayload,
   parseTicketFields,
   qrPayload,
@@ -27,6 +28,30 @@ describe('ticket protocol', () => {
   it('round-trips PushDrop fields', () => {
     const fields = encodeTicketFields(demoTicket('7'))
     expect(parseTicketFields(fields)).toEqual(demoTicket('7'))
+  })
+
+  it('still parses a Demo Night ticket when lock() adds extra fields', () => {
+    const fields = encodeTicketFields(demoTicket('7'))
+    const pubkey = new Array(33).fill(2)
+    const signature = new Array(71).fill(3)
+    expect(parseTicketFields([...fields, pubkey, signature])).toEqual(demoTicket('7'))
+    expect(parseTicketFields([pubkey, ...fields, signature])).toEqual(demoTicket('7'))
+    expect(parseTicketFields([pubkey, signature, ...fields])).toEqual(demoTicket('7'))
+  })
+
+  it('accepts magic/eventId/serial/kind when venue meta is displaced by lock() fields', () => {
+    const fields = encodeTicketFields(demoTicket('4'))
+    const pubkey = new Array(33).fill(2)
+    const displaced = [fields[0], fields[1], fields[2], fields[3], pubkey, fields[4]]
+    expect(parseTicketFields(displaced)).toEqual(demoTicket('4'))
+  })
+
+  it('explains why parse failed', () => {
+    const fields = encodeTicketFields(demoTicket('1'))
+    fields[0] = Array.from(new TextEncoder().encode('notaticket'))
+    expect(parseTicketFields(fields)).toBeNull()
+    expect(explainTicketParse(fields)).toMatch(/magic mismatch/)
+    expect(explainTicketParse([])).toMatch(/0 fields/)
   })
 
   it('rejects the wrong magic or ticket type', () => {
