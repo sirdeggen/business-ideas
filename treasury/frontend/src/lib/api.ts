@@ -14,7 +14,14 @@ import {
   type Proposal,
   type Treasury
 } from '../../../protocol/events'
-import { FEE_SATS, PROTOCOL_ID, planSpend, type Role } from '../../../protocol/treasury'
+import {
+  FEE_SATS,
+  PROTOCOL_ID,
+  heldRoles,
+  nextOpenRole,
+  planSpend,
+  type Role
+} from '../../../protocol/treasury'
 import { notifySigners } from './messagebox'
 import { loadTreasury, pingOverlay as pingOverlayHost, publishBoardEvent, rememberEvents } from './overlay'
 
@@ -25,12 +32,28 @@ function beefHex(bytes: number[]): string {
   return Utils.toHex(bytes)
 }
 
+function requireHeldRoles(treasury: Treasury, identityKey: string): Role[] {
+  const roles = heldRoles(treasury.signers, identityKey)
+  if (roles.length === 0) throw new Error('Only a joined signer can do that')
+  return roles
+}
+
 function signerRole(treasury: Treasury, identityKey: string): Role {
-  const seat = treasury.signers.find(
-    (signer) => signer.identityKey && signer.identityKey.toLowerCase() === identityKey.toLowerCase()
-  )
-  if (!seat) throw new Error('Only a joined signer can do that')
-  return seat.role
+  return requireHeldRoles(treasury, identityKey)[0]
+}
+
+function nextApprovalRole(treasury: Treasury, identityKey: string, proposalId: string): Role {
+  const proposal = treasury.proposals.find((item) => item.id === proposalId)
+  const role = nextOpenRole(requireHeldRoles(treasury, identityKey), proposal?.approvals ?? [])
+  if (!role) throw new Error('Every seat you hold has already approved')
+  return role
+}
+
+function nextVaultSignRole(treasury: Treasury, identityKey: string, proposalId: string): Role {
+  const proposal = treasury.proposals.find((item) => item.id === proposalId)
+  const role = nextOpenRole(requireHeldRoles(treasury, identityKey), proposal?.p2msSigs ?? [])
+  if (!role) throw new Error('Every seat you hold has already signed the vault')
+  return role
 }
 
 function pickVault(treasury: Treasury, amountSats: number) {
@@ -162,11 +185,12 @@ export async function postApproval(
     derivedPubkey: string
     signature: number[]
     memo?: string
+    role?: Role
   }
 ): Promise<Treasury> {
   return applyEvent(wallet, treasury, makeEvent(treasury.id, 'approved', {
     ...body,
-    role: signerRole(treasury, body.identityKey)
+    role: body.role ?? nextApprovalRole(treasury, body.identityKey, body.proposalId)
   }), true)
 }
 
@@ -179,13 +203,14 @@ export async function postP2msSig(
     derivedPubkey: string
     signature: number[]
     memo?: string
+    role?: Role
   }
 ): Promise<Treasury> {
   return applyEvent(wallet, treasury, makeEvent(treasury.id, 'approved', {
     proposalId: body.proposalId,
     identityKey: body.identityKey,
     derivedPubkey: body.derivedPubkey,
-    role: signerRole(treasury, body.identityKey),
+    role: body.role ?? nextVaultSignRole(treasury, body.identityKey, body.proposalId),
     p2msSignature: body.signature,
     memo: body.memo
   }), true)
