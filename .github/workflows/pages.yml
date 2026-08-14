@@ -27,6 +27,7 @@ jobs:
             event-tickets/frontend/package-lock.json
             receivable-desk/frontend/package-lock.json
             invoices/frontend/package-lock.json
+            treasury/package-lock.json
             treasury/frontend/package-lock.json
       - name: Install and build tickets
         working-directory: event-tickets/frontend
@@ -61,6 +62,7 @@ jobs:
           VITE_BASE: /business-ideas/treasury/
           VITE_OVERLAY_URL: https://overlay-us-1.bsvb.tech
         run: |
+          npm ci --prefix ..
           npm ci
           npm run build
           cp dist/index.html dist/404.html
