@@ -22,7 +22,7 @@ import {
   parseReceiptFields
 } from '../../../protocol/invoice'
 import { originator } from './config'
-import { lookupInvoices, submitInvoiceTx, type OverlayInvoice } from './overlay'
+import { lookupInvoices, submitInvoiceTx, txFromWalletBeef, type OverlayInvoice } from './overlay'
 
 export interface PaymentPackage {
   tx: number[]
@@ -112,7 +112,7 @@ export async function createInvoice(
     throw new Error('Overlay rejected the invoice (no outputs admitted)')
   }
 
-  const outputIndex = invoiceOutputIndex(Transaction.fromBEEF(response.tx as number[]))
+  const outputIndex = invoiceOutputIndex(txFromWalletBeef(response.tx as number[]))
   return {
     txid: response.txid,
     invoiceId,
@@ -204,7 +204,7 @@ export async function payInvoice(
     throw new Error('Overlay rejected the payment (already paid or malformed)')
   }
 
-  const paidTx = Transaction.fromBEEF(response.tx as number[])
+  const paidTx = txFromWalletBeef(response.tx as number[])
   return {
     tx: response.tx as number[],
     txid: response.txid,

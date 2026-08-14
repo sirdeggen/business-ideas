@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DECLINED_APPROVAL_PAY, DECLINED_APPROVAL_SEND, errorMessage } from './config'
+import {
+  DECLINED_APPROVAL_PAY,
+  DECLINED_APPROVAL_SEND,
+  OVERLAY_PAY_FAILED,
+  OVERLAY_SEND_FAILED,
+  errorMessage
+} from './config'
 import {
   CONNECT_MS,
   CONNECT_TIMEOUT_MESSAGE,
@@ -86,5 +92,20 @@ describe('errorMessage wallet failures', () => {
     expect(errorMessage(new Error('Invoice already paid'))).toBe('Invoice already paid')
     expect(errorMessage(new Error('Overlay rejected the payment (already paid or malformed)')))
       .toBe('Overlay rejected the payment (already paid or malformed)')
+  })
+
+  it('maps the live overlay host-reject sentence to human copy, never declined or tm_anytx', () => {
+    const live = new Error(
+      'Overlay broadcast to tm_anytx at https://overlay-us-1.bsvb.tech failed: All local topical hosts have rejected the transaction.'
+    )
+    const mapped = errorMessage(live)
+    expect(mapped).toBe(OVERLAY_SEND_FAILED)
+    expect(mapped.toLowerCase()).not.toContain('declined')
+    expect(mapped).not.toContain('tm_anytx')
+    expect(mapped).not.toContain('overlay-us-1')
+    expect(mapped).not.toContain('STEAK')
+    expect(errorMessage(live, 'pay')).toBe(OVERLAY_PAY_FAILED)
+    expect(errorMessage(new Error('ERR_ALL_HOSTS_REJECTED'))).toBe(OVERLAY_SEND_FAILED)
+    expect(errorMessage(new Error('overlay submit failed'), 'pay')).toBe(OVERLAY_PAY_FAILED)
   })
 })
