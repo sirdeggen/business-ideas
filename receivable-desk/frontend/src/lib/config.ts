@@ -50,12 +50,6 @@ export const DESKTOP_INSTALL_URL = 'https://github.com/bsv-blockchain/bsv-deskto
 export const CHROME_ALLOW_HINT =
   'Unlock Desktop and try again. Chrome may ask to allow this site to talk to apps on this device. Allow, then Retry.'
 
-export const DECLINED_APPROVAL_RECORD =
-  'You declined the approval. Unlock Desktop and hit Record again.'
-
-export const DECLINED_APPROVAL_REFRESH =
-  'Unlock Desktop and hit Refresh again.'
-
 export function walletHint(): string {
   const host = typeof window === 'undefined' ? 'sirdeggen.github.io' : window.location.hostname
   return `Chrome hides BSV Desktop until you Allow “${host} wants to Access other apps and services on this device,” then Retry with Desktop unlocked.`
@@ -157,35 +151,74 @@ function looksLikeWalletFailure(text: string): boolean {
   )
 }
 
-function looksLikeRejected(text: string): boolean {
-  const lower = text.toLowerCase()
-  if (lower.includes('overlay rejected')) return false
-  return (
-    lower.includes('permission denied') ||
-    lower.includes('reject') ||
-    lower.includes('denied') ||
-    lower.includes('cancelled') ||
-    lower.includes('canceled')
-  )
-}
-
 function looksLikeTimeout(text: string): boolean {
   const lower = text.toLowerCase()
   return lower.includes('timeout') || lower.includes('timed out') || lower.includes('deadline')
 }
 
-function looksLikeWalletCallJson(text: string): boolean {
-  return /"call"\s*:/.test(text) || text.includes('"createAction"') || text.includes('"args"')
+function fieldString(value: unknown): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : ''
+}
+
+/** Raw createAction / signAction fields — never remap to “Wallet rejected.” */
+export function formatWalletError(error: unknown): string {
+  const parts: string[] = []
+  const seen = new Set<string>()
+  const push = (value: unknown): void => {
+    const text = fieldString(value)
+    if (!text || seen.has(text)) return
+    seen.add(text)
+    parts.push(text)
+  }
+
+  const walk = (value: unknown, depth = 0): void => {
+    if (value == null || depth > 3) return
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (trimmed.startsWith('{')) {
+        try {
+          walk(JSON.parse(trimmed), depth + 1)
+          return
+        } catch {
+          // Fall through to peeled text.
+        }
+      }
+      push(peelJsonMessage(trimmed))
+      return
+    }
+    if (value instanceof Error) {
+      const extra = value as Error & { code?: unknown, description?: unknown, cause?: unknown }
+      walk(extra.message, depth + 1)
+      push(extra.code)
+      push(extra.description)
+      walk(extra.cause, depth + 1)
+      return
+    }
+    if (typeof value === 'object') {
+      const record = value as Record<string, unknown>
+      push(record.call)
+      push(record.code)
+      push(record.description)
+      walk(record.message, depth + 1)
+      push(record.error)
+      walk(record.cause, depth + 1)
+    }
+  }
+
+  walk(error)
+  return parts.join(' — ')
 }
 
 export function errorMessage(error: unknown, verb: 'record' | 'refresh' = 'record'): string {
+  void verb
+  const formatted = formatWalletError(error)
   const raw = extractErrorText(error).trim()
-  if (/spending request/i.test(raw)) return CHROME_ALLOW_HINT
-  if (looksLikeRejected(raw)) {
-    return verb === 'refresh' ? DECLINED_APPROVAL_REFRESH : DECLINED_APPROVAL_RECORD
+  if (looksLikeTimeout(formatted) || looksLikeTimeout(raw) || raw === CHROME_ALLOW_HINT) {
+    return CHROME_ALLOW_HINT
   }
-  if (looksLikeWalletFailure(raw) || looksLikeTimeout(raw)) return CHROME_ALLOW_HINT
-  if (!raw || looksLikeWalletCallJson(raw) || raw.startsWith('{')) return CHROME_ALLOW_HINT
+  if (looksLikeWalletFailure(formatted) || looksLikeWalletFailure(raw)) return CHROME_ALLOW_HINT
+  if (formatted) return formatted
+  if (!raw) return CHROME_ALLOW_HINT
   return raw
 }
 

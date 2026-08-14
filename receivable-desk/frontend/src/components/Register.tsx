@@ -103,6 +103,10 @@ export function Register() {
     setBusy(true)
     setError(null)
     setStatus(null)
+    const silent = window.setTimeout(() => {
+      setBusy(false)
+      setError(CHROME_ALLOW_HINT)
+    }, 8000)
     try {
       const result = await registerReceivable(activeWallet, url, {
         invoiceId,
@@ -112,14 +116,19 @@ export function Register() {
         dueDate,
         memo
       })
+      window.clearTimeout(silent)
       setStatus(`Recorded ${result.invoiceId} (txid ${result.txid}).`)
       if (result.overlayError) {
         setError(`Recorded in wallet (txid ${result.txid}). Overlay submit failed: ${result.overlayError}`)
+      } else {
+        setError(null)
       }
     } catch (err) {
+      window.clearTimeout(silent)
       console.error('Register failed', err)
       setError(errorMessage(err, 'record'))
     } finally {
+      window.clearTimeout(silent)
       setBusy(false)
     }
   }
@@ -217,7 +226,9 @@ export function Register() {
           </a>
         </div>
       )}
-      {(error || walletError) && !overlayDown && <p className="hint">{CHROME_ALLOW_HINT}</p>}
+      {(error === CHROME_ALLOW_HINT || walletError === CHROME_ALLOW_HINT) && (
+        <p className="hint">{CHROME_ALLOW_HINT}</p>
+      )}
     </section>
   )
 }

@@ -25,7 +25,8 @@ import {
 import {
   inspectBaskets,
   type BasketInspection,
-  type HeldReceivable
+  type HeldReceivable,
+  type ListOutputsFn
 } from './basket'
 import { originator } from './config'
 import { lookupReceivables, submitReceivableTx } from './overlay'
@@ -66,18 +67,25 @@ function pushdrop(wallet: WalletClient): PushDrop {
   return new PushDrop(wallet, originator())
 }
 
-export async function inspectHeldReceivables(wallet: WalletClient): Promise<BasketInspection> {
-  const timed = (
-    client: WalletClient
-  ) => (args: { basket: string, include?: 'entire transactions' | 'locking scripts', includeCustomInstructions?: boolean, limit: number }) =>
+function timedLister(client: WalletClient) {
+  return (args: { basket: string, include?: 'entire transactions' | 'locking scripts', includeCustomInstructions?: boolean, limit: number }) =>
     withTimeout(client.listOutputs(args), CONNECT_MS, CONNECT_TIMEOUT_MESSAGE)
-  const listers = [timed(wallet)]
-  const bound = (wallet as WalletClient & { originator?: string }).originator
-  const extras = ['simple', originator()].filter((item, index, all) => item && item !== bound && all.indexOf(item) === index)
-  for (const extra of extras) {
-    const other = new WalletClient('auto', extra)
-    listers.push(timed(other))
+}
+
+/** List basket `receivables` under the page host and `"simple"` — no mint under `"simple"`. */
+export async function inspectHeldReceivables(wallet?: WalletClient | null): Promise<BasketInspection> {
+  const listers: ListOutputsFn[] = []
+  const seen = new Set<string>()
+  const add = (client: WalletClient, label: string): void => {
+    if (!label || seen.has(label)) return
+    seen.add(label)
+    listers.push(timedLister(client))
   }
+  if (wallet) {
+    add(wallet, (wallet as WalletClient & { originator?: string }).originator || 'bound')
+  }
+  add(new WalletClient('auto', originator()), originator())
+  add(new WalletClient('auto', 'simple'), 'simple')
   return inspectBaskets(listers)
 }
 
@@ -162,46 +170,55 @@ export async function registerReceivable(
     CONNECT_TIMEOUT_MESSAGE
   )
 
-  let response
-  try {
-    response = await withTimeout(wallet.createAction({
-      description: `Register receivable ${input.invoiceId}`,
-      outputs: [{
-        satoshis: 1,
-        lockingScript: locked.lockingScript.toHex(),
-        outputDescription: `Receivable ${input.invoiceId}`,
-        basket: BASKET,
-        customInstructions: locked.customInstructions,
-        tags: [BASKET, 'register', input.invoiceId]
-      }],
-      labels: [BASKET, 'register'],
-      options: { randomizeOutputs: false }
-    }), CONNECT_MS, CONNECT_TIMEOUT_MESSAGE)
-  } catch (err) {
-    throw err instanceof Error ? err : new Error(CONNECT_TIMEOUT_MESSAGE)
+  // Do not 8s-abort createAction — that races the Authorize click and drops the spend.
+  const response = await wallet.createAction({
+    description: `Register receivable ${input.invoiceId}`,
+    outputs: [{
+      satoshis: 1,
+      lockingScript: locked.lockingScript.toHex(),
+      outputDescription: `Receivable ${input.invoiceId}`,
+      basket: BASKET,
+      customInstructions: locked.customInstructions,
+      tags: [BASKET, 'register', input.invoiceId]
+    }],
+    labels: [BASKET, 'register'],
+    options: { randomizeOutputs: false }
+  })
+
+  let txid = response.txid
+  let tx = response.tx as number[] | undefined
+  if ((!txid || !tx) && response.signableTransaction) {
+    const signed = await wallet.signAction({
+      reference: response.signableTransaction.reference,
+      spends: {}
+    })
+    txid = signed.txid
+    tx = signed.tx as number[] | undefined
+    if (!txid || !tx) {
+      throw Object.assign(new Error('signAction returned no txid/tx'), { cause: signed })
+    }
+  }
+  if (!txid || !tx) {
+    throw Object.assign(new Error('createAction returned no txid/tx'), { cause: response })
   }
 
-  if (!response.txid || !response.tx) {
-    throw new Error(CONNECT_TIMEOUT_MESSAGE)
-  }
-
-  rememberChaseRow(chaseRowFromRegister({ magic: MAGIC, ...item }, response.txid))
+  rememberChaseRow(chaseRowFromRegister({ magic: MAGIC, ...item }, txid))
 
   // Spend is the register. Overlay submit is a separate step and must not hide the txid.
   try {
-    const submitted = await submitReceivableTx(overlayUrl, response.tx as number[])
+    const submitted = await submitReceivableTx(overlayUrl, tx)
     if (submitted.admitted.length === 0) {
       return {
-        txid: response.txid,
+        txid,
         invoiceId: input.invoiceId.trim(),
         overlayError: `no invoice outputs parsed after submit to ${submitted.topic} at ${submitted.host}`
       }
     }
-    return { txid: response.txid, invoiceId: input.invoiceId.trim() }
+    return { txid, invoiceId: input.invoiceId.trim() }
   } catch (error) {
     const detail = error instanceof Error && error.message.trim() ? error.message : String(error ?? '')
     return {
-      txid: response.txid,
+      txid,
       invoiceId: input.invoiceId.trim(),
       overlayError: detail.trim() || 'overlay submit failed with no message'
     }
@@ -224,7 +241,7 @@ async function spendReceivable(
   const instructions = parseInstructions(held.customInstructions)
   let response
   try {
-    response = await withTimeout(wallet.createAction({
+    response = await wallet.createAction({
       description,
       inputBEEF: held.beef,
       inputs: [{
@@ -235,9 +252,9 @@ async function spendReceivable(
       outputs: newOutputs,
       labels: [BASKET],
       options: { randomizeOutputs: false }
-    }), CONNECT_MS, CONNECT_TIMEOUT_MESSAGE)
+    })
   } catch (err) {
-    throw err instanceof Error ? err : new Error(CONNECT_TIMEOUT_MESSAGE)
+    throw err instanceof Error ? err : new Error(String(err ?? 'createAction failed'))
   }
 
   if (!response.signableTransaction) {

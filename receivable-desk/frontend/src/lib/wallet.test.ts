@@ -1,10 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  CHROME_ALLOW_HINT,
-  DECLINED_APPROVAL_RECORD,
-  DECLINED_APPROVAL_REFRESH,
-  errorMessage
-} from './config'
+import { CHROME_ALLOW_HINT, errorMessage, formatWalletError } from './config'
 import {
   CONNECT_MS,
   CONNECT_TIMEOUT_MESSAGE,
@@ -34,13 +29,14 @@ describe('wallet connect timeout', () => {
       expect(err).toBeInstanceOf(Error)
       expect(errorMessage(err)).toBe(CONNECT_TIMEOUT_MESSAGE)
       expect(errorMessage(err)).not.toMatch(/Spending Request/i)
+      expect(errorMessage(err)).not.toMatch(/Wallet rejected/i)
       return true
     })
     await vi.advanceTimersByTimeAsync(CONNECT_MS)
     await rejected
   })
 
-  it('rejects a hanging createAction via withTimeout', async () => {
+  it('rejects a hanging promise via withTimeout', async () => {
     vi.useFakeTimers()
     const pending = withTimeout(new Promise(() => {}), CONNECT_MS, CONNECT_TIMEOUT_MESSAGE)
     const rejected = expect(pending).rejects.toThrow(CONNECT_TIMEOUT_MESSAGE)
@@ -56,27 +52,34 @@ describe('wallet connect timeout', () => {
   })
 })
 
-describe('errorMessage wallet failures', () => {
+describe('errorMessage shows raw createAction / signAction fields', () => {
   const createActionDenied = {
     call: 'createAction',
-    args: { description: 'Register receivable QA-0813-NAMED' },
+    code: 'ERR_DENIED',
+    description: 'output not admitted',
     message: 'Permission denied.'
   }
 
-  it('maps Permission denied to Unlock Desktop / Record again, never Spending Request', () => {
+  it('does not remap a wallet error to Wallet rejected / Spending Request', () => {
     const mapped = errorMessage(createActionDenied)
-    expect(mapped).toBe(DECLINED_APPROVAL_RECORD)
+    expect(mapped).toContain('createAction')
+    expect(mapped).toContain('ERR_DENIED')
+    expect(mapped).toContain('output not admitted')
+    expect(mapped).toContain('Permission denied.')
     expect(mapped).not.toMatch(/Spending Request/i)
-    expect(mapped).not.toContain('createAction')
+    expect(mapped).not.toMatch(/Wallet rejected/i)
+    expect(mapped).not.toMatch(/You declined the approval/i)
   })
 
-  it('maps a hanging/timeout to the unlock path', () => {
+  it('keeps an Error wrapping createAction JSON readable', () => {
+    const mapped = formatWalletError(new Error(JSON.stringify(createActionDenied)))
+    expect(mapped).toContain('createAction')
+    expect(mapped).toContain('ERR_DENIED')
+    expect(mapped).not.toMatch(/Spending Request/i)
+  })
+
+  it('maps only a silent timeout to Unlock Desktop / Retry', () => {
     expect(errorMessage(new Error(CHROME_ALLOW_HINT))).toBe(CHROME_ALLOW_HINT)
     expect(errorMessage(new Error('Wallet request timed out'))).toBe(CHROME_ALLOW_HINT)
-    expect(errorMessage(new Error('Wallet rejected the Spending Request'))).toBe(CHROME_ALLOW_HINT)
-  })
-
-  it('uses Refresh copy on Chase', () => {
-    expect(errorMessage(createActionDenied, 'refresh')).toBe(DECLINED_APPROVAL_REFRESH)
   })
 })

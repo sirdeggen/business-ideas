@@ -63,19 +63,15 @@ export function Desk() {
       activeWallet = result?.wallet ?? null
     }
     let heldItems: HeldReceivable[] = []
-    if (activeWallet) {
-      try {
-        const inspection = await inspectHeldReceivables(activeWallet)
-        heldItems = inspection.held
-        setHeld(heldItems)
-        const basketNote = formatBasketDiagnostic(inspection)
-        if (basketNote) notes.push(basketNote)
-      } catch (err) {
-        console.error('Desk basket list failed', err)
-        notes.push(errorMessage(err, 'refresh'))
-        setHeld([])
-      }
-    } else {
+    try {
+      const inspection = await inspectHeldReceivables(activeWallet)
+      heldItems = inspection.held
+      setHeld(heldItems)
+      const basketNote = formatBasketDiagnostic(inspection)
+      if (basketNote) notes.push(basketNote)
+    } catch (err) {
+      console.error('Desk basket list failed', err)
+      notes.push(errorMessage(err, 'refresh'))
       setHeld([])
     }
 
@@ -199,7 +195,9 @@ export function Desk() {
           </a>
         </div>
       )}
-      {(error || walletError) && <p className="hint">{CHROME_ALLOW_HINT}</p>}
+      {(error === CHROME_ALLOW_HINT || walletError === CHROME_ALLOW_HINT) && (
+        <p className="hint">{CHROME_ALLOW_HINT}</p>
+      )}
 
       {allEmpty && !preview && (
         <p className="hint">
