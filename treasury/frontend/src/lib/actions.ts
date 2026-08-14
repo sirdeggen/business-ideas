@@ -16,10 +16,10 @@ import {
 import type { Proposal, Treasury } from '../../../protocol/events'
 import { originator } from './config'
 
-export async function derivedVaultKey(wallet: WalletClient, treasuryId: string): Promise<string> {
+export async function derivedVaultKey(wallet: WalletClient, keyID: string): Promise<string> {
   const { publicKey } = await wallet.getPublicKey({
     protocolID: PROTOCOL_ID,
-    keyID: treasuryId,
+    keyID,
     counterparty: 'self'
   })
   return publicKey
@@ -27,12 +27,13 @@ export async function derivedVaultKey(wallet: WalletClient, treasuryId: string):
 
 export async function signProposal(
   wallet: WalletClient,
-  proposal: Parameters<typeof canonicalProposalBytes>[0]
+  proposal: Parameters<typeof canonicalProposalBytes>[0],
+  keyID = proposal.treasuryId
 ): Promise<number[]> {
   const { signature } = await wallet.createSignature({
     data: canonicalProposalBytes(proposal),
     protocolID: PROTOCOL_ID,
-    keyID: proposal.treasuryId,
+    keyID,
     counterparty: 'self'
   })
   return signature
@@ -112,7 +113,8 @@ function vaultFor(proposal: Proposal, treasury: Treasury) {
 export async function signVaultSpend(
   wallet: WalletClient,
   treasury: Treasury,
-  proposal: Proposal
+  proposal: Proposal,
+  keyID = treasury.id
 ): Promise<number[]> {
   const plan = {
     sourceTXID: proposal.vaultTxid,
@@ -127,7 +129,7 @@ export async function signVaultSpend(
   const { signature } = await wallet.createSignature({
     data: p2msSignData(plan),
     protocolID: PROTOCOL_ID,
-    keyID: treasury.id,
+    keyID,
     counterparty: 'self'
   })
   return signature

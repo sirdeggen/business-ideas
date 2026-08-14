@@ -57,7 +57,7 @@ There is no Solidity account and no `@bsv/sdk` FROST/MuSig helper. The smallest 
 | --- | --- |
 | Named roles | Treasurer, chair, bookkeeper identity keys (`getPublicKey({ identityKey: true })`). |
 | On-chain vault | [BRC-47](https://bsv.brc.dev/scripts/0047) bare **P2MS**: `OP_2 <pk1> <pk2> <pk3> OP_3 OP_CHECKMULTISIG`. Unchanged. |
-| Keys in that script | BRC-42 children of each identity: `getPublicKey({ protocolID: [1, "policy treasury"], keyID: treasuryId, counterparty: "self" })`. Same idea as ts-stack `P2MSKH`, which uses `[1, "multi sig brc29"]`. |
+| Keys in that script | BRC-42 children of each identity: `getPublicKey({ protocolID: [1, "policy treasury"], keyID: treasuryId, counterparty: "self" })` when each seat is a different wallet. If one identity holds a second or third seat, those extra seats use `keyID: ${treasuryId}:${role}` so P2MS can collect two distinct pubkeys. Same idea as ts-stack `P2MSKH`, which uses `[1, "multi sig brc29"]`. Overlay event tag and `?treasury=` lookup are unchanged. |
 | Board approvals | BRC-100 `createSignature({ data })` over a canonical proposal JSON. Signed with the same treasury child key (`keyID: treasuryId`), not a per-proposal key. |
 | Spend | After two approvals, two signers `createSignature({ data: sha256(preimage) })` so the wallet’s extra SHA-256 yields HASH256(preimage) — the [PushDrop](https://github.com/bsv-blockchain/ts-stack/blob/main/packages/sdk/src/script/templates/PushDrop.ts) trick. Unlocking script is `OP_0 <sig> <sig>`. One `createAction` broadcasts. |
 | Payee | PushDrop / BRC-29 lock to the payee’s identity key, computed by the proposer so every signer hashes the same output. Not a Bitcoin address. |
@@ -87,7 +87,7 @@ DATA_DIR=./data npm run dev   # :8080, optional
 ## The 2-of-3 flow
 
 1. **Treasurer** connects a BSV wallet. Create a treasury named for the club. Optionally paste the chair and bookkeeper identity keys (or leave blank). Copy the invite link (`?treasury=<id>`).
-2. **Chair** and **bookkeeper** each open the link (readable without a wallet), connect *their* wallet, click **Join**. When both have joined, the P2MS vault script is live.
+2. **Chair** and **bookkeeper** each open the link (readable without a wallet), connect a wallet, click **Join**. One wallet may hold more than one remaining seat. When the seats have joined, the P2MS vault script is live. Threshold counts distinct **roles**, so treasurer+chair on the same identity is still 2-of-3.
 3. Anyone with sats clicks **Fund from this wallet** and approves `createAction`. Coins lock to the 2-of-3 script (basket `treasury`). A 1-sat announcement records the outpoint + BEEF.
 4. A signer **proposes**: sats, payee identity key, memo. Their wallet signs the proposal. The event goes to overlay and Message Box.
 5. A second signer clicks **Approve**. Threshold is met. Each of two signers clicks **Sign vault spend** (Bitcoin sighash, still via WalletClient). Then **Broadcast pay**. The paid announcement is a *separate* 1-sat tx — the P2MS spend itself is not a PushDrop.

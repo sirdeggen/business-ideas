@@ -3,9 +3,11 @@
  *
  * On-chain vault: BRC-47 bare P2MS (`OP_M <pks> OP_N OP_CHECKMULTISIG`).
  * Keys in the script are BRC-42 children of each signer's identity
- * (`protocolID [1, "policy treasury"]`, `counterparty: "self"`, `keyID: treasuryId`).
- * That matches how ts-stack P2MSKH talks to a BRC-100 wallet: `getPublicKey` +
- * `createSignature`. It is not an EVM Safe account and not FROST/MuSig.
+ * (`protocolID [1, "policy treasury"]`, `counterparty: "self"`, `keyID: treasuryId`
+ * when each seat is a different identity; `${treasuryId}:${role}` for extra seats
+ * held by the same identity). That matches how ts-stack P2MSKH talks to a
+ * BRC-100 wallet: `getPublicKey` + `createSignature`. It is not an EVM Safe
+ * account and not FROST/MuSig.
  *
  * Board policy: BRC-100 `createSignature` over a canonical proposal
  * (amount, payee identity key, memo). Announcements live on tm_anytx;
@@ -251,16 +253,63 @@ export function assembleP2msUnlockingScript(args: {
   return p2msUnlock(ordered.slice(0, args.threshold))
 }
 
-export function uniqueApprovers<T extends { identityKey: string }>(rows: T[]): T[] {
+export function uniqueApprovers<T extends { role: string }>(rows: T[]): T[] {
   const seen = new Set<string>()
   const out: T[] = []
   for (const row of rows) {
-    const key = row.identityKey.trim().toLowerCase()
-    if (seen.has(key)) continue
+    const key = row.role.trim().toLowerCase()
+    if (!key || seen.has(key)) continue
     seen.add(key)
     out.push(row)
   }
   return out
+}
+
+export function seatsForIdentity<T extends { role: Role; identityKey?: string }>(
+  signers: T[],
+  identityKey: string | null | undefined
+): T[] {
+  if (!identityKey) return []
+  const id = identityKey.trim().toLowerCase()
+  return signers.filter((signer) => signer.identityKey && signer.identityKey.toLowerCase() === id)
+}
+
+export function heldRoles(
+  signers: Array<{ role: Role; identityKey?: string }>,
+  identityKey: string | null | undefined
+): Role[] {
+  return seatsForIdentity(signers, identityKey).map((signer) => signer.role)
+}
+
+export function nextOpenRole(
+  held: Role[],
+  used: Array<{ role: Role }>
+): Role | undefined {
+  const taken = new Set(used.map((row) => row.role))
+  return held.find((role) => !taken.has(role))
+}
+
+/**
+ * Classic single-person-per-seat treasuries keep `keyID: treasuryId`.
+ * Extra seats held by the same identity use `${treasuryId}:${role}` so P2MS
+ * can collect two distinct pubkeys / signatures from one wallet.
+ */
+export function vaultKeyID(
+  treasuryId: string,
+  role: Role,
+  identityKey: string,
+  signers: Array<{ role: Role; identityKey?: string; derivedPubkey?: string; joinedAt?: string }>
+): string {
+  const mine = seatsForIdentity(signers, identityKey)
+  const othersJoined = mine.filter((signer) => signer.role !== role && signer.derivedPubkey)
+  if (othersJoined.length === 0) return treasuryId
+  const first = [...mine.filter((signer) => signer.derivedPubkey)].sort((a, b) => {
+    const byTime = (a.joinedAt || '').localeCompare(b.joinedAt || '')
+    if (byTime !== 0) return byTime
+    return ROLES.indexOf(a.role) - ROLES.indexOf(b.role)
+  })[0]
+  if (first?.role === role) return treasuryId
+  return `${treasuryId}:${role}`
 }
 
 export function thresholdMet(approvalCount: number, threshold: number): boolean {
