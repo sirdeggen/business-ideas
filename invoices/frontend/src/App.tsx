@@ -255,6 +255,7 @@ function Create({
       onSent(created.invoiceId, created.txid)
     } catch (err) {
       setError(errorMessage(err))
+      setShowInstall(true)
     } finally {
       setBusy(false)
     }
@@ -426,9 +427,12 @@ function InvoicePage({
       })
       setInvoice(rows[0] ?? invoice)
     } catch (err) {
-      const message = errorMessage(err)
+      const message = errorMessage(err, 'pay')
       setError(message)
-      if (!/already paid/i.test(message)) setProcessing(false)
+      if (!/already paid/i.test(message)) {
+        setShowInstall(true)
+        setProcessing(false)
+      }
     } finally {
       setBusy(false)
     }

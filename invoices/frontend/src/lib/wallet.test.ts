@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { errorMessage } from './config'
+import { DECLINED_APPROVAL_PAY, DECLINED_APPROVAL_SEND, errorMessage } from './config'
 import {
   CONNECT_MS,
   CONNECT_TIMEOUT_MESSAGE,
@@ -47,5 +47,44 @@ describe('wallet connect timeout', () => {
     const pending = withTimeout(Promise.resolve('ok'), CONNECT_MS, CONNECT_TIMEOUT_MESSAGE)
     await expect(pending).resolves.toBe('ok')
     await vi.advanceTimersByTimeAsync(CONNECT_MS + 1000)
+  })
+})
+
+describe('errorMessage wallet failures', () => {
+  const createActionDenied = {
+    call: 'createAction',
+    args: {
+      description: 'Send invoice: 2026 dues',
+      outputs: [{ satoshis: 1 }]
+    },
+    message: 'Permission denied.'
+  }
+  const createActionJson = JSON.stringify(createActionDenied)
+
+  it('maps a createAction Permission denied object to the declined-approval sentence', () => {
+    const mapped = errorMessage(createActionDenied)
+    expect(mapped).toBe(DECLINED_APPROVAL_SEND)
+    expect(mapped).not.toContain('createAction')
+    expect(mapped).not.toContain('{')
+    expect(mapped).not.toMatch(/"call"/)
+  })
+
+  it('maps an Error wrapping createAction JSON to the declined-approval sentence', () => {
+    const mapped = errorMessage(new Error(createActionJson))
+    expect(mapped).toBe(DECLINED_APPROVAL_SEND)
+    expect(mapped).not.toContain(createActionJson)
+    expect(mapped).not.toContain('createAction')
+    expect(mapped).not.toContain('{')
+  })
+
+  it('uses Pay copy on the pay screen', () => {
+    expect(errorMessage(createActionDenied, 'pay')).toBe(DECLINED_APPROVAL_PAY)
+    expect(errorMessage(new Error(createActionJson), 'pay')).toBe(DECLINED_APPROVAL_PAY)
+  })
+
+  it('does not remap already-paid overlay errors to a declined spend', () => {
+    expect(errorMessage(new Error('Invoice already paid'))).toBe('Invoice already paid')
+    expect(errorMessage(new Error('Overlay rejected the payment (already paid or malformed)')))
+      .toBe('Overlay rejected the payment (already paid or malformed)')
   })
 })
