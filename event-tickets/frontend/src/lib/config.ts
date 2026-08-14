@@ -1,19 +1,54 @@
-export const DEFAULT_OVERLAY_URL =
-  (import.meta.env.VITE_OVERLAY_URL as string | undefined) || 'http://localhost:8080'
+export const PUBLIC_OVERLAY_URL = 'https://overlay-us-1.bsvb.tech'
+export const PUBLIC_TOPIC = 'tm_anytx'
+export const PUBLIC_LOOKUP = 'ls_anytx'
+
+const BAKED_OVERLAY_URL = (import.meta.env.VITE_OVERLAY_URL as string | undefined)?.trim() ?? ''
 
 export const OVERLAY_STORAGE_KEY = 'event-tickets.overlayUrl'
 
 export const LOCAL_OVERLAY_HINT =
-  'Overlay is local Docker, not GitHub Pages. Run: cd event-tickets && docker compose up --build (overlay :8080, UI :5173).'
+  'Optional local Docker override: cd event-tickets && docker compose up --build (overlay :8080, UI :5173), then set Overlay URL to http://localhost:8080 for tm_tickets / ls_tickets.'
 
-export function originator(): string {
-  if (typeof window === 'undefined') return 'localhost'
-  return window.location.hostname
+export const PUBLIC_OVERLAY_HINT =
+  'Pages talks to the public overlay at overlay-us-1.bsvb.tech (tm_anytx / ls_anytx). No docker compose required.'
+
+export function isLocalhostUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
+  } catch {
+    return /localhost|127\.0\.0\.1/i.test(url)
+  }
 }
 
 export function isGitHubPages(): boolean {
   if (typeof window === 'undefined') return false
   return window.location.hostname.endsWith('github.io')
+}
+
+/**
+ * Pages never defaults to localhost. Local Vite/Docker may still point at :8080
+ * via VITE_OVERLAY_URL or the in-UI overlay URL (custom tm_tickets).
+ */
+export function resolveOverlayUrl(): string {
+  const stored = typeof window === 'undefined'
+    ? ''
+    : (window.localStorage.getItem(OVERLAY_STORAGE_KEY) ?? '').trim()
+
+  if (isGitHubPages()) {
+    if (stored && !isLocalhostUrl(stored)) return stored
+    if (BAKED_OVERLAY_URL && !isLocalhostUrl(BAKED_OVERLAY_URL)) return BAKED_OVERLAY_URL
+    return PUBLIC_OVERLAY_URL
+  }
+
+  return stored || BAKED_OVERLAY_URL || PUBLIC_OVERLAY_URL
+}
+
+export const DEFAULT_OVERLAY_URL = resolveOverlayUrl()
+
+export function originator(): string {
+  if (typeof window === 'undefined') return 'localhost'
+  return window.location.hostname
 }
 
 export function walletHint(): string {
@@ -24,6 +59,10 @@ export function walletHint(): string {
 export function shortKey(key: string, size = 10): string {
   if (key.length <= size * 2) return key
   return `${key.slice(0, size)}…${key.slice(-6)}`
+}
+
+export function overlayHint(url = resolveOverlayUrl()): string {
+  return isLocalhostUrl(url) ? LOCAL_OVERLAY_HINT : PUBLIC_OVERLAY_HINT
 }
 
 function extractErrorText(error: unknown): string {
@@ -64,7 +103,19 @@ function looksLikeOverlayFailure(text: string): boolean {
     lower.includes('econnrefused') ||
     lower.includes('net::err_') ||
     lower.includes('overlay /submit') ||
-    lower.includes('overlay /lookup')
+    lower.includes('overlay /lookup') ||
+    lower.includes('overlay broadcast') ||
+    lower.includes('no competent') ||
+    lower.includes('all hosts')
+  )
+}
+
+function looksLikePublicOverlay(text: string): boolean {
+  return (
+    text.includes('overlay-us-1') ||
+    text.includes('tm_anytx') ||
+    text.includes('ls_anytx') ||
+    !/localhost|127\.0\.0\.1/.test(text)
   )
 }
 
@@ -86,7 +137,12 @@ function looksLikeTimeout(text: string): boolean {
 export function errorMessage(error: unknown): string {
   const raw = extractErrorText(error).trim()
   if (looksLikeWalletFailure(raw)) return walletHint()
-  if (looksLikeOverlayFailure(raw)) return LOCAL_OVERLAY_HINT
+  if (looksLikeOverlayFailure(raw)) {
+    if (looksLikePublicOverlay(raw)) {
+      return raw || PUBLIC_OVERLAY_HINT
+    }
+    return LOCAL_OVERLAY_HINT
+  }
   if (looksLikeRejected(raw)) {
     return 'Wallet rejected the Spending Request. Approve it in BSV Desktop, or you cancelled.'
   }
@@ -94,7 +150,7 @@ export function errorMessage(error: unknown): string {
     return `Wallet request timed out. ${walletHint()}`
   }
   if (!raw) {
-    return `Something failed with no message from the wallet or overlay. ${walletHint()} ${LOCAL_OVERLAY_HINT}`
+    return `Something failed with no message from the wallet or overlay. ${walletHint()} ${PUBLIC_OVERLAY_HINT}`
   }
   return raw
 }

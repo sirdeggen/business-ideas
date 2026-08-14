@@ -3,7 +3,7 @@ import { isIdentityKey } from '../../../protocol/receivable'
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
 import { registerReceivable } from '../lib/actions'
-import { LOCAL_OVERLAY_HINT, errorMessage, walletHint } from '../lib/config'
+import { errorMessage, overlayHint, walletHint } from '../lib/config'
 
 export function Register() {
   const { wallet, identityKey, connecting, error: walletError, connect } = useWallet()
@@ -26,16 +26,16 @@ export function Register() {
   const debtorMissing = !debtor.trim()
   const registerDisabled = busy || connecting || overlayDown || debtorMissing
   const registerTitle = overlayDown
-    ? LOCAL_OVERLAY_HINT
+    ? overlayHint(url)
     : debtorMissing
       ? 'Who owes us is required before Record is enabled'
       : connecting
         ? 'Connecting wallet…'
-        : 'Record this invoice on the local overlay'
+        : 'Record this invoice on the overlay'
 
   const submit = async (): Promise<void> => {
     if (overlayDown) {
-      setError(LOCAL_OVERLAY_HINT)
+      setError(overlayHint(url))
       return
     }
     if (debtorMissing) {
@@ -116,7 +116,7 @@ export function Register() {
           {busy ? 'Recording…' : connecting ? 'Connecting…' : 'Record'}
         </button>
       </div>
-      {overlayDown && <p className="status err">{LOCAL_OVERLAY_HINT}</p>}
+      {overlayDown && <p className="status err">{overlayHint(url)}</p>}
       {walletError && !walletError.includes('Access other apps') && (
         <p className="hint">{walletHint()}</p>
       )}

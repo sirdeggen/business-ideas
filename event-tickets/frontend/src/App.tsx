@@ -5,7 +5,8 @@ import { Door } from './components/Door'
 import { Organizer } from './components/Organizer'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
-import { LOCAL_OVERLAY_HINT, shortKey, walletHint } from './lib/config'
+import { overlayHint, shortKey, walletHint } from './lib/config'
+import { overlayLookupService, overlayTopic, usesPublicAnytx } from './lib/overlay'
 
 type Role = 'organizer' | 'attendee' | 'door'
 
@@ -30,8 +31,8 @@ function Shell() {
           <h1>{DEMO_EVENT.name}</h1>
           <p className="lede">
             One event, one ticket type, on BSV. Mint into a basket, show a QR,
-            transfer by spend, redeem at the door. GitHub Pages is the shell;
-            overlay is localhost Docker.
+            transfer by spend, redeem at the door. Pages persists on the public
+            overlay (overlay-us-1 / tm_anytx). Local Docker tm_tickets is optional.
           </p>
         </div>
         <div className="identity">
@@ -60,8 +61,8 @@ function Shell() {
 
       <p className="banner">
         {online === false
-          ? `${LOCAL_OVERLAY_HINT} This page is pointed at ${url}.`
-          : `Overlay ${online ? 'online' : 'checking'} · ${url}`}
+          ? `${overlayHint(url)} This page is pointed at ${url}.`
+          : `Overlay ${online ? 'online' : 'checking'} · ${url} · ${overlayTopic(url)} / ${overlayLookupService(url)}`}
       </p>
 
       <nav className="tabs">
@@ -79,8 +80,10 @@ function Shell() {
       <section className="panel">
         <h2>Overlay URL</h2>
         <p>
-          GitHub Pages is static. Point this at a local overlay-express node
-          (default localhost:8080). {LOCAL_OVERLAY_HINT}
+          {usesPublicAnytx(url)
+            ? 'Default is the public overlay (overlay-us-1). Broadcasts go to tm_anytx; lookups query ls_anytx and keep Demo Night tickets only.'
+            : 'Using local Docker custom topics (tm_tickets / ls_tickets).'}
+          {' '}Point this at http://localhost:8080 to use the optional local indexer.
         </p>
         <input value={url} onChange={(event) => setUrl(event.target.value)} />
       </section>

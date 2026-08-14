@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { sampleReceivables } from '../../../protocol/samples'
 import { useOverlay } from '../context/OverlayContext'
-import { LOCAL_OVERLAY_HINT, errorMessage, formatSats } from '../lib/config'
-import { lookupReceivables, type OverlayReceivable } from '../lib/overlay'
+import { errorMessage, formatSats, overlayHint } from '../lib/config'
+import { lookupReceivables, usesPublicAnytx, type OverlayReceivable } from '../lib/overlay'
 import { partyName } from './InvoiceCard'
 
 const ADVANCE_LABEL = 'Advance against this invoice — not available.'
@@ -21,14 +21,16 @@ export function Partner() {
   const refresh = async (): Promise<void> => {
     try {
       const book = await lookupReceivables(url, { approvedUnpaid: true })
-      if (book.length > 0) {
-        setRows(book.filter((row) => row.status === 'approved'))
-        setError(null)
-        return
-      }
+      setRows(book.filter((row) => row.status === 'approved'))
+      setError(null)
+      return
     } catch (err) {
       console.error('Advance list lookup failed', err)
       setError(errorMessage(err))
+    }
+    if (usesPublicAnytx(url)) {
+      setRows([])
+      return
     }
     setRows(previewApproved())
   }
@@ -45,7 +47,7 @@ export function Partner() {
       </p>
       <button className="btn" onClick={() => void refresh()}>Refresh</button>
       {error && <p className="status err">{error}</p>}
-      {error && !error.includes('local Docker') && <p className="hint">{LOCAL_OVERLAY_HINT}</p>}
+      {error && !error.includes('local Docker') && <p className="hint">{overlayHint(url)}</p>}
       {rows.length === 0 && (
         <div className="work-row">
           <div>No invoices in this view.</div>

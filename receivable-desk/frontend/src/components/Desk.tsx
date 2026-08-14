@@ -13,8 +13,8 @@ import {
   settleReceivable,
   type HeldReceivable
 } from '../lib/actions'
-import { LOCAL_DESK_HINT, LOCAL_OVERLAY_HINT, errorMessage, formatSats, isGitHubPages, walletHint } from '../lib/config'
-import { lookupReceivables, type OverlayReceivable } from '../lib/overlay'
+import { errorMessage, formatSats, overlayHint, walletHint } from '../lib/config'
+import { lookupReceivables, usesPublicAnytx, type OverlayReceivable } from '../lib/overlay'
 import { partyName } from './InvoiceCard'
 
 function previewRows(): OverlayReceivable[] {
@@ -38,22 +38,24 @@ export function Desk() {
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
-  const pages = isGitHubPages()
-  const canSettle = !pages && online === true
+  const canSettle = online === true
 
   const refresh = async (): Promise<void> => {
     if (wallet) setHeld(await listHeldReceivables(wallet))
     try {
       const unpaid = await lookupReceivables(url, { status: 'unpaid' })
-      if (unpaid.length > 0) {
-        setRows(unpaid)
-        setPreview(false)
-        setError(null)
-        return
-      }
+      setRows(unpaid)
+      setPreview(false)
+      setError(null)
+      return
     } catch (err) {
       console.error('Desk lookup failed', err)
       setError(errorMessage(err))
+    }
+    if (usesPublicAnytx(url)) {
+      setRows([])
+      setPreview(false)
+      return
     }
     setRows(previewRows())
     setPreview(true)
@@ -93,12 +95,12 @@ export function Desk() {
       return
     }
     if (!canSettle) {
-      setError(LOCAL_DESK_HINT)
+      setError(overlayHint(url))
       return
     }
     const item = held.find((entry) => entry.item.invoiceId === row.invoiceId && entry.item.status !== 'paid')
     if (!item) {
-      setError('Mark paid needs the wallet that recorded this invoice, and the local desk running.')
+      setError('Mark paid needs the wallet that recorded this invoice.')
       return
     }
     setBusy(row.invoiceId)
@@ -126,7 +128,7 @@ export function Desk() {
       {preview && (
         <p className="hint">
           Showing sample invoices because the local index is not running.
-          {pages ? ` ${LOCAL_DESK_HINT}` : ` ${LOCAL_OVERLAY_HINT}`}
+          {` ${overlayHint(url)}`}
         </p>
       )}
       <button className="btn" onClick={() => void refresh()}>Refresh list</button>
@@ -166,7 +168,7 @@ export function Desk() {
                         ? 'Connect only when you mark paid'
                         : settleReady
                           ? 'Mark this invoice paid'
-                          : LOCAL_DESK_HINT
+                          : 'Mark paid needs the wallet that recorded this invoice'
                     }
                     onClick={() => void markPaid(row)}
                   >

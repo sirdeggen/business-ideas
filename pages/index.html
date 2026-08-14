@@ -15,9 +15,10 @@
           <p class="lede">
             Invoices first: send a payable, get a receipt. The receivable desk
             is a collections list (this desk’s own registry), not a second
-            product. Tickets sit after invoices. Pages is the shell; overlays
-            are localhost Docker — tickets <strong>:8080</strong>, desk
-            <strong>:8082</strong>. Chrome hides BSV Desktop until you Allow
+            product. Tickets sit after invoices. Tickets and the desk persist
+            on the public overlay (<code>overlay-us-1.bsvb.tech</code> /
+            <code>tm_anytx</code>). Local Docker custom topics remain an
+            optional override. Chrome hides BSV Desktop until you Allow
             “sirdeggen.github.io wants to Access other apps and services on this
             device,” then Retry with Desktop unlocked.
           </p>
@@ -35,29 +36,35 @@
         </article>
 
         <article class="card">
-          <p class="eyebrow soon">Feature of invoices</p>
+          <p class="eyebrow live">Live</p>
           <h2>Receivable desk</h2>
           <p>
             Who do we chase today? A collections list on this desk’s registry —
             on time / a bit late / call them / board should know. Not a bank.
-            Overlay and settle are local Docker, not live from Pages:
+            Register, list, and mark paid persist on the public overlay
+            (<code>overlay-us-1</code> / <code>tm_anytx</code> /
+            <code>ls_anytx</code>, filtered to receivable fields). Local Docker
+            <code>tm_receivables</code> is optional:
             <code>cd receivable-desk &amp;&amp; docker compose up --build</code>
             (overlay <strong>:8082</strong>, UI <strong>:5175</strong>).
           </p>
-          <p class="path">Pages UI (no settle): <code>/receivables/</code></p>
+          <p class="path">Pages UI: <code>/receivables/</code></p>
           <a class="btn" href="./receivables/">Open list</a>
         </article>
 
         <article class="card">
-          <p class="eyebrow soon">Pages shell</p>
+          <p class="eyebrow live">Live</p>
           <h2>Event tickets</h2>
           <p>
             Tickets you can send, show on a phone, and spend at the door so they
-            can’t be used twice. Overlay is local Docker, not GitHub Pages:
+            can’t be used twice. Mint, transfer, redeem, and door lookup persist
+            on the public overlay (<code>overlay-us-1</code> /
+            <code>tm_anytx</code> / <code>ls_anytx</code>, filtered to Demo Night
+            tickets). Local Docker <code>tm_tickets</code> is optional:
             <code>cd event-tickets &amp;&amp; docker compose up --build</code>
             (overlay <strong>:8080</strong>, UI <strong>:5173</strong>).
           </p>
-          <p class="path">Pages UI (no public overlay): <code>/tickets/</code></p>
+          <p class="path">Pages UI: <code>/tickets/</code></p>
           <a class="btn" href="./tickets/">Open UI</a>
         </article>
 

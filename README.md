@@ -6,7 +6,7 @@ Switcher on GitHub Pages: https://sirdeggen.github.io/business-ideas/
 
 Invoices are the first product. The receivable desk is a collections list on this desk’s own registry — not a second company. Tickets sit after invoices.
 
-Pages is the shell; overlays are localhost Docker (tickets :8080, desk :8082). There is no public overlay. Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access other apps and services on this device,” then Retry with Desktop unlocked.
+Tickets and the receivable desk persist on the public overlay (`https://overlay-us-1.bsvb.tech`, topic `tm_anytx`, lookup `ls_anytx`, then client-side protocol filters). Local Docker custom topics (`tm_tickets` / `tm_receivables`) remain an optional override via the in-UI overlay URL. Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access other apps and services on this device,” then Retry with Desktop unlocked.
 
 ## Invoices
 
@@ -16,19 +16,19 @@ Send a payable. Get a receipt.
 
 ## Receivable desk (feature of invoices)
 
-Who do we chase today? Aging in English: on time / a bit late / call them / board should know. Not a bank. This Pages UI does not settle.
+Who do we chase today? Aging in English: on time / a bit late / call them / board should know. Not a bank.
 
-The list is this desk’s own registry (sample invoices in `receivable-desk/`). Overlay is localhost.
+The list is this desk’s own registry. Pages register / list / mark paid use public overlay-us-1 / `tm_anytx`. Local Docker `tm_receivables` is optional.
 
-- Pages UI (no settle): https://sirdeggen.github.io/business-ideas/receivables/
-- Overlay and settle: `cd receivable-desk && docker compose up --build` (overlay :8082, UI :5175)
+- Pages UI: https://sirdeggen.github.io/business-ideas/receivables/
+- Optional local indexer: `cd receivable-desk && docker compose up --build` (overlay :8082, UI :5175)
 - How to run: [receivable-desk/README.md](./receivable-desk/README.md)
 
 ## Event tickets
 
 Tickets you can send, show on a phone, and spend at the door so they can’t be used twice.
 
-Silent until a door actually scans. How to run overlay + frontend: [event-tickets/README.md](./event-tickets/README.md)
+Mint, transfer, redeem, and door lookup persist on public overlay-us-1 / `tm_anytx`. Local Docker `tm_tickets` is optional. How to run: [event-tickets/README.md](./event-tickets/README.md)
 
 ## 402 publisher (server / local Docker)
 
