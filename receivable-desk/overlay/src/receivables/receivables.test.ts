@@ -196,6 +196,17 @@ describe('receivables topic manager', () => {
     expect(refused.outputsToAdmit).toEqual([])
   })
 
+  it('admits a name-only register so the worklist can show the name', async () => {
+    const manager = new ReceivablesTopicManager()
+    const named = invoice({ creditor: 'Riverside Hall', debtor: 'Alex' })
+    const tx = receivableTx([named])
+    const admitted = await manager.identifyAdmissibleOutputs(tx.toBEEF(), [])
+    expect(admitted.outputsToAdmit).toEqual([0])
+    expect(parseReceivableFields(
+      PushDrop.decode(tx.outputs[0].lockingScript).fields
+    )?.debtor).toBe('Alex')
+  })
+
   it('rejects a double-register of one invoice id in the same beef', async () => {
     const manager = new ReceivablesTopicManager()
     const dup = receivableTx([

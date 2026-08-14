@@ -199,6 +199,23 @@ input, textarea {
 
 .grow { flex: 1; min-width: 180px; }
 
+.advanced {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px 12px;
+}
+
+.advanced summary {
+  cursor: pointer;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 0;
+}
+
 .status {
   font-family: ui-sans-serif, system-ui, sans-serif;
   font-size: 13px;

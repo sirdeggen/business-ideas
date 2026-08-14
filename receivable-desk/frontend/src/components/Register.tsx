@@ -1,16 +1,27 @@
-import { useEffect, useState } from 'react'
-import { isIdentityKey } from '../../../protocol/receivable'
+import { useState } from 'react'
+import {
+  DISPLAY_NAME_MAX,
+  isIdentityKey,
+  resolvePartyIdentity
+} from '../../../protocol/receivable'
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
 import { registerReceivable } from '../lib/actions'
 import { errorMessage, overlayCheckFailed, walletHint } from '../lib/config'
 
+function nameTooLong(value: string): boolean {
+  const trimmed = value.trim()
+  return trimmed.length > DISPLAY_NAME_MAX && !isIdentityKey(trimmed)
+}
+
 export function Register() {
   const { wallet, identityKey, connecting, error: walletError, connect } = useWallet()
   const { url, online, probeError } = useOverlay()
   const [invoiceId, setInvoiceId] = useState('INV-2026-')
-  const [creditor, setCreditor] = useState('')
-  const [debtor, setDebtor] = useState('')
+  const [creditorName, setCreditorName] = useState('')
+  const [debtorName, setDebtorName] = useState('')
+  const [creditorHex, setCreditorHex] = useState('')
+  const [debtorHex, setDebtorHex] = useState('')
   const [amountSats, setAmountSats] = useState(1000)
   const [dueDate, setDueDate] = useState('2026-09-30')
   const [memo, setMemo] = useState('')
@@ -18,20 +29,29 @@ export function Register() {
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (identityKey && !creditor) setCreditor(identityKey)
-  }, [identityKey, creditor])
-
   const overlayDown = online === false
-  const debtorMissing = !debtor.trim()
-  const registerDisabled = busy || connecting || overlayDown || debtorMissing
+  const resolvedCreditor = resolvePartyIdentity(creditorName, creditorHex, identityKey)
+  const resolvedDebtor = resolvePartyIdentity(debtorName, debtorHex)
+  const debtorMissing = resolvedDebtor === null
+  const advancedCreditorBad = creditorHex.trim().length > 0 && !isIdentityKey(creditorHex)
+  const advancedDebtorBad = debtorHex.trim().length > 0 && !isIdentityKey(debtorHex)
+  const sameParty = resolvedCreditor !== null && resolvedDebtor !== null && resolvedCreditor === resolvedDebtor
+  const namesTooLong = nameTooLong(creditorName) || nameTooLong(debtorName)
+  const registerDisabled =
+    busy || connecting || overlayDown || debtorMissing || advancedCreditorBad || advancedDebtorBad || sameParty || namesTooLong
   const registerTitle = overlayDown
     ? overlayCheckFailed(probeError, url)
     : debtorMissing
       ? 'Who owes us is required before Record is enabled'
-      : connecting
-        ? 'Connecting wallet…'
-        : 'Record this invoice on the overlay'
+      : advancedCreditorBad || advancedDebtorBad
+        ? 'Account id in Advanced must be a 66-character key, or leave it blank'
+        : sameParty
+          ? 'Who is owed and who owes us must be different'
+          : namesTooLong
+            ? 'Names must be 80 characters or fewer'
+            : connecting
+              ? 'Connecting wallet…'
+              : 'Record this invoice on the overlay'
 
   const submit = async (): Promise<void> => {
     if (overlayDown) {
@@ -42,20 +62,44 @@ export function Register() {
       setError('Who owes us is required.')
       return
     }
-    if (!wallet) {
-      const ok = await connect()
-      if (!ok) return
-      setStatus('Wallet connected. Click Record again.')
+    if (advancedCreditorBad || advancedDebtorBad) {
+      setError('Account id in Advanced must be a 66-character key, or leave it blank.')
       return
     }
+    if (sameParty) {
+      setError('Who is owed and who owes us must be different.')
+      return
+    }
+    if (namesTooLong) {
+      setError('Names must be 80 characters or fewer.')
+      return
+    }
+
+    let activeWallet = wallet
+    let activeIdentity = identityKey
+    if (!activeWallet) {
+      const result = await connect()
+      if (!result) return
+      activeWallet = result.wallet
+      activeIdentity = result.identityKey
+    }
+
+    const creditor = resolvePartyIdentity(creditorName, creditorHex, activeIdentity)
+    const debtor = resolvePartyIdentity(debtorName, debtorHex)
+    if (!creditor || !debtor) {
+      setError(debtor ? 'Who is owed needs a name or organisation.' : 'Who owes us is required.')
+      return
+    }
+    if (creditor === debtor) {
+      setError('Who is owed and who owes us must be different.')
+      return
+    }
+
     setBusy(true)
     setError(null)
     setStatus(null)
     try {
-      if (!isIdentityKey(creditor) || !isIdentityKey(debtor)) {
-        throw new Error('Who is owed and who owes must be 66-hex account ids')
-      }
-      const result = await registerReceivable(wallet, url, {
+      const result = await registerReceivable(activeWallet, url, {
         invoiceId,
         creditor,
         debtor,
@@ -82,9 +126,21 @@ export function Register() {
       <label htmlFor="invoiceId">Invoice id</label>
       <input id="invoiceId" value={invoiceId} onChange={(event) => setInvoiceId(event.target.value)} />
       <label htmlFor="creditor">Who is owed</label>
-      <input id="creditor" value={creditor} onChange={(event) => setCreditor(event.target.value)} />
+      <input
+        id="creditor"
+        value={creditorName}
+        onChange={(event) => setCreditorName(event.target.value)}
+        placeholder="Riverside Hall"
+        autoComplete="organization"
+      />
       <label htmlFor="debtor">Who owes us</label>
-      <input id="debtor" value={debtor} onChange={(event) => setDebtor(event.target.value)} placeholder="Account id" />
+      <input
+        id="debtor"
+        value={debtorName}
+        onChange={(event) => setDebtorName(event.target.value)}
+        placeholder="Alex"
+        autoComplete="name"
+      />
       {debtorMissing && (
         <p className="hint">Record stays disabled until who owes us is filled in.</p>
       )}
@@ -106,6 +162,30 @@ export function Register() {
       </div>
       <label htmlFor="memo">Memo</label>
       <input id="memo" value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="What is owed" />
+      <details className="advanced">
+        <summary>Advanced</summary>
+        <p className="hint">
+          Optional account id. Leave blank to record the name. Only needed to pay on-chain.
+        </p>
+        <label htmlFor="creditorHex">Account id for who is owed</label>
+        <input
+          id="creditorHex"
+          value={creditorHex}
+          onChange={(event) => setCreditorHex(event.target.value)}
+          placeholder="Leave blank unless you already have one"
+          spellCheck={false}
+          autoComplete="off"
+        />
+        <label htmlFor="debtorHex">Account id for who owes us</label>
+        <input
+          id="debtorHex"
+          value={debtorHex}
+          onChange={(event) => setDebtorHex(event.target.value)}
+          placeholder="Leave blank unless you already have one"
+          spellCheck={false}
+          autoComplete="off"
+        />
+      </details>
       <div className="row" style={{ marginTop: 16 }}>
         <button
           className="btn primary"

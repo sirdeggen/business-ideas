@@ -8,7 +8,10 @@ import {
   classifyReceivableTransaction,
   daysLate,
   encodeReceivableFields,
+  isDisplayName,
+  isPartyIdentity,
   parseReceivableFields,
+  resolvePartyIdentity,
   validateReceivable,
   type ReceivablePayload
 } from './receivable'
@@ -85,18 +88,52 @@ describe('receivable protocol', () => {
     expect(classified.admitOutputIndexes).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
   })
 
-  it('rejects junk: wrong magic, bad keys, non-positive amount, bad status', () => {
+  it('rejects junk: wrong magic, empty parties, non-positive amount, bad status', () => {
     const fields = encodeReceivableFields(invoice())
     fields[0] = Array.from(new TextEncoder().encode('notareceivable'))
     expect(parseReceivableFields(fields)).toBeNull()
 
-    expect(validateReceivable(invoice({ creditor: 'not-a-key' }))).toMatch(/creditor/)
+    expect(validateReceivable(invoice({ creditor: '' }))).toMatch(/creditor/)
+    expect(validateReceivable(invoice({ debtor: '   ' }))).toMatch(/debtor/)
+    expect(validateReceivable(invoice({ creditor: 'x'.repeat(81) }))).toMatch(/creditor/)
     expect(validateReceivable(invoice({ amountSats: 0 }))).toMatch(/amount/)
     expect(validateReceivable(invoice({ amountSats: -5 }))).toMatch(/amount/)
     expect(validateReceivable(invoice({ status: 'pending' as ReceivablePayload['status'] }))).toMatch(/status/)
     expect(validateReceivable(invoice({ dueDate: '13 Aug 2026' }))).toMatch(/due date/)
     expect(validateReceivable(invoice({ invoiceId: '' }))).toMatch(/invoice id/)
     expect(validateReceivable(invoice({ creditor: DEBTOR, debtor: DEBTOR }))).toMatch(/differ/)
+    expect(validateReceivable(invoice({ creditor: 'Alex', debtor: 'Alex' }))).toMatch(/differ/)
+  })
+
+  it('accepts a name or org, or a 66-hex identity, and keeps name-only records', () => {
+    const named = invoice({ creditor: 'Riverside Hall', debtor: 'Alex' })
+    expect(validateReceivable(named)).toBeNull()
+    expect(parseReceivableFields(encodeReceivableFields(named))).toEqual(named)
+
+    const hex = invoice()
+    expect(validateReceivable(hex)).toBeNull()
+    expect(parseReceivableFields(encodeReceivableFields(hex))).toEqual(hex)
+
+    const mixed = invoice({ creditor: CREDITOR, debtor: 'Alex' })
+    expect(validateReceivable(mixed)).toBeNull()
+    expect(parseReceivableFields(encodeReceivableFields(mixed))).toEqual(mixed)
+
+    expect(isDisplayName('Riverside Hall')).toBe(true)
+    expect(isDisplayName('Alex')).toBe(true)
+    expect(isDisplayName('')).toBe(false)
+    expect(isPartyIdentity(CREDITOR)).toBe(true)
+    expect(isPartyIdentity('Alex')).toBe(true)
+    expect(isPartyIdentity('')).toBe(false)
+
+    expect(resolvePartyIdentity('Riverside Hall', '', CREDITOR)).toBe('Riverside Hall')
+    expect(resolvePartyIdentity('', '', CREDITOR)).toBe(CREDITOR)
+    expect(resolvePartyIdentity('Alex', DEBTOR)).toBe(DEBTOR)
+    expect(resolvePartyIdentity(CREDITOR, '')).toBe(CREDITOR)
+    expect(resolvePartyIdentity('Alex', 'not-a-key')).toBeNull()
+
+    const classified = classifyReceivableTransaction([], [{ index: 0, item: named }])
+    expect(classified.action).toBe('register')
+    expect(classified.admitOutputIndexes).toEqual([0])
   })
 
   it('rejects a double-register of the same invoice id in one transaction', () => {

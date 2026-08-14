@@ -13,10 +13,13 @@ import {
   BASKET,
   BRC29_PROTOCOL,
   PROTOCOL_ID,
+  MAGIC,
   encodeReceivableFields,
   findPaymentOutputIndex,
   isIdentityKey,
+  isPartyIdentity,
   parseReceivableFields,
+  validateReceivable,
   type ReceivablePayload,
   type ReceivableStatus
 } from '../../../protocol/receivable'
@@ -132,24 +135,32 @@ export async function registerReceivable(
   overlayUrl: string,
   input: RegisterInput
 ): Promise<{ txid: string, invoiceId: string }> {
-  if (!isIdentityKey(input.creditor) || !isIdentityKey(input.debtor)) {
-    throw new Error('Creditor and debtor must be 66-hex compressed identity keys')
-  }
-  const duplicates = await lookupReceivables(overlayUrl, { invoiceId: input.invoiceId.trim() })
-  if (duplicates.length > 0) {
-    throw new Error(`Invoice ${input.invoiceId} is already registered`)
-  }
-
-  const locked = await lockReceivable(wallet, {
+  const item = {
     invoiceId: input.invoiceId.trim(),
     creditor: input.creditor.trim(),
     debtor: input.debtor.trim(),
     amountSats: input.amountSats,
     dueDate: input.dueDate,
-    status: 'open',
+    status: 'open' as const,
     memo: input.memo.trim(),
     advanceBps: 0
-  }, 'self', true)
+  }
+  const invalid = validateReceivable({ magic: MAGIC, ...item })
+  if (invalid) {
+    if (invalid.includes('creditor') || invalid.includes('debtor')) {
+      throw new Error('Who is owed and who owes us need a name or organisation.')
+    }
+    if (invalid.includes('differ')) {
+      throw new Error('Who is owed and who owes us must be different.')
+    }
+    throw new Error(invalid)
+  }
+  const duplicates = await lookupReceivables(overlayUrl, { invoiceId: item.invoiceId })
+  if (duplicates.length > 0) {
+    throw new Error(`Invoice ${input.invoiceId} is already registered`)
+  }
+
+  const locked = await lockReceivable(wallet, item, 'self', true)
 
   let response
   try {
@@ -356,6 +367,9 @@ export async function settleReceivable(
   held: HeldReceivable
 ): Promise<SettlePackage> {
   if (held.item.status === 'paid') throw new Error('Already paid')
+  if (!isIdentityKey(held.item.creditor)) {
+    throw new Error('Need an account id in Advanced to pay on-chain.')
+  }
   const paid = await nextStateOutput(wallet, held, 'paid', 0)
   const payment = await brc29PaymentOutput(
     wallet,
@@ -459,4 +473,4 @@ export async function advanceReceivableOnChain(
   return { txid: spent.txid }
 }
 
-export { isIdentityKey }
+export { isIdentityKey, isPartyIdentity }

@@ -3,12 +3,17 @@ import type { WalletClient } from '@bsv/sdk'
 import { connectWallet } from '../lib/wallet'
 import { errorMessage } from '../lib/config'
 
+export interface ConnectedWallet {
+  wallet: WalletClient
+  identityKey: string
+}
+
 interface WalletState {
   wallet: WalletClient | null
   identityKey: string | null
   connecting: boolean
   error: string | null
-  connect: () => Promise<boolean>
+  connect: () => Promise<ConnectedWallet | null>
 }
 
 const WalletContext = createContext<WalletState | undefined>(undefined)
@@ -19,20 +24,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [connecting, setConnecting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const connect = async (): Promise<boolean> => {
+  const connect = async (): Promise<ConnectedWallet | null> => {
     setConnecting(true)
     setError(null)
     try {
       const result = await connectWallet()
       setWallet(result.wallet)
       setIdentityKey(result.identityKey)
-      return true
+      return result
     } catch (err) {
       console.error('Wallet connect failed', err)
       setError(errorMessage(err))
       setWallet(null)
       setIdentityKey(null)
-      return false
+      return null
     } finally {
       setConnecting(false)
     }
