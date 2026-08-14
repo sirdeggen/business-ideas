@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MAGIC } from '../../../protocol/receivable'
 import { inspectHeldReceivables } from './actions'
 import { loadChaseList } from './chase'
@@ -27,6 +27,10 @@ function invoice(partial: Partial<OverlayReceivable> = {}): OverlayReceivable {
 }
 
 describe('Chase overlay-first read', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('loads overlay rows with no wallet and does not call listOutputs', async () => {
     const overlayRow = invoice({ invoiceId: 'QA-0813-NAMED', debtor: 'QA Debtor' })
     const inspectHeld = vi.fn(async () => {
@@ -47,8 +51,8 @@ describe('Chase overlay-first read', () => {
     expect(result.rows[0].debtor).toBe('QA Debtor')
     expect(result.error).toBeNull()
     expect(result.preview).toBe(false)
-    expect(result.error).not.toMatch(/no wallet available/i)
-    expect(result.error).not.toMatch(/Install a BSV/i)
+    expect(result.error ?? '').not.toMatch(/no wallet available/i)
+    expect(result.error ?? '').not.toMatch(/Install a BSV/i)
   })
 
   it('keeps remembered rows when overlay is empty and there is no wallet', async () => {
@@ -76,6 +80,7 @@ describe('Chase overlay-first read', () => {
   })
 
   it('does not let a listOutputs failure become the Chase error or clear overlay rows', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     const overlayRow = invoice({ invoiceId: 'QA-0813-NAMED' })
     const inspectHeld = vi.fn(async () => {
       throw new Error(WALLET_MISSING)
@@ -98,6 +103,7 @@ describe('Chase overlay-first read', () => {
   })
 
   it('still shows a real overlay lookup failure', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
     const result = await loadChaseList(OVERLAY_URL, null, [invoice()], {
       inspectLookup: async () => {
         throw new Error('GET /lookup failed: 502')
