@@ -97,21 +97,20 @@
         </article>
 
         <article class="card">
-          <p class="eyebrow soon">Server / PR</p>
+          <p class="eyebrow soon">Server</p>
           <h2>Treasury</h2>
           <p>
             Shared treasury, two of three must agree. Create, invite signers,
-            fund, propose, approve, export CSV. Not a custodian.
+            fund, propose, approve. Board at <code>?treasury=&lt;id&gt;</code>
+            is lookup only (no wallet). Persists on public overlay-us-1 /
+            <code>tm_anytx</code> / <code>ls_anytx</code>. Message Box at
+            gmb.bsvblockchain.tech for propose/approve. Local Docker is
+            optional, not required.
           </p>
-          <p class="path">
-            Not on main yet — <a href="https://github.com/sirdeggen/business-ideas/pull/7">PR #7</a><br />
-            <code>cd treasury &amp;&amp; docker compose up --build</code> —
-            feed <strong>:8080</strong>, UI <strong>:5173</strong>
-          </p>
+          <p class="path">Pages UI: <code>/treasury/</code></p>
           <div class="row">
-            <a class="btn" href="https://github.com/sirdeggen/business-ideas/pull/7">Open PR</a>
-            <a class="btn" href="https://github.com/sirdeggen/business-ideas/tree/cursor/bsv-policy-treasury-5b3a/treasury">Repo folder</a>
-            <a class="btn" href="https://github.com/sirdeggen/business-ideas/blob/cursor/bsv-policy-treasury-5b3a/treasury/README.md">How to run</a>
+            <a class="btn" href="./treasury/">Open board</a>
+            <a class="btn" href="https://github.com/sirdeggen/business-ideas/blob/main/treasury/README.md">How to run</a>
           </div>
         </article>
       </section>

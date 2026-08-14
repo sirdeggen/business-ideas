@@ -46,9 +46,12 @@ Paid MCP tools in sats. Payment is the credential — no signup, no API key. Exp
 - How to run: [402-mcp/README.md](./402-mcp/README.md)
 - Cluster path later: `/402-mcp`
 
-## Treasury (PR / local Docker)
+## Treasury
 
-Shared treasury, two of three must agree. Create, invite signers, fund, propose, approve, export CSV. Not a custodian.
+Shared treasury, two of three must agree. Create, invite signers, fund, propose, approve. Board at `?treasury=<id>` is lookup only (no wallet). Not a custodian.
 
-- Open PR: https://github.com/sirdeggen/business-ideas/pull/7 (`treasury/` is not on main yet)
-- How to run: `cd treasury && docker compose up --build` — feed :8080, UI :5173 — [treasury/README.md](https://github.com/sirdeggen/business-ideas/blob/cursor/bsv-policy-treasury-5b3a/treasury/README.md)
+Persists on public overlay-us-1 / `tm_anytx` / `ls_anytx`. Message Box at gmb.bsvblockchain.tech for propose/approve. Local Docker is optional, not required.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/treasury/
+- Optional local: `cd treasury && docker compose up --build`
+- How to run: [treasury/README.md](./treasury/README.md)
