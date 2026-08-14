@@ -2,13 +2,20 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { reconstructTreasury, type BoardEvent } from './events.ts'
 import {
+  DEMO_CLUB_CREATE_TX,
+  DEMO_CLUB_ID,
+  DEMO_CLUB_JOIN_TX,
   MINUTES_COPY,
   keepLastGoodEvents,
+  legalAnytxQuery,
   minutesEmptyCopy,
   overlayBanner,
   reconstructPreferringCache,
+  relatedTxids,
+  resolveCreateTxid,
   retryEmptyLookup,
   resolveMinutesView,
+  shortPageIsEof,
   shouldRetryEmptyLookup
 } from './lookup.ts'
 
@@ -123,5 +130,25 @@ describe('flaky overlay lookup + empty-state copy', () => {
     })
     assert.equal(failedBare.emptyCopy, MINUTES_COPY.failed)
     assert.match(failedBare.emptyCopy ?? '', /not missing/)
+  })
+
+  it('queries ls_anytx by create txid, never by treasury uuid, and does not treat a short page as EOF', () => {
+    assert.equal(resolveCreateTxid(DEMO_CLUB_ID), DEMO_CLUB_CREATE_TX)
+    assert.equal(
+      resolveCreateTxid(DEMO_CLUB_ID, 'ec4f752843a15c3bb065286e6deefb34041f3795699516b6eafcc80438febb69'),
+      DEMO_CLUB_CREATE_TX
+    )
+    assert.deepEqual(relatedTxids(DEMO_CLUB_ID, DEMO_CLUB_CREATE_TX), [DEMO_CLUB_JOIN_TX])
+
+    const byTx = legalAnytxQuery({ txid: DEMO_CLUB_CREATE_TX })
+    assert.deepEqual(byTx, { txid: DEMO_CLUB_CREATE_TX })
+    assert.equal('treasuryId' in byTx, false)
+
+    const page = legalAnytxQuery({ limit: 50, skip: 0 })
+    assert.equal(page.limit, 50)
+    assert.equal('treasuryId' in page, false)
+    assert.equal(shortPageIsEof(49, 50), false)
+    assert.equal(shortPageIsEof(78, 100), false)
+    assert.equal(shortPageIsEof(0, 100), false)
   })
 })

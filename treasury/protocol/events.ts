@@ -284,8 +284,27 @@ function findProposal(treasury: Treasury, proposalId: string): Proposal | undefi
   return treasury.proposals.find((proposal) => proposal.id === proposalId)
 }
 
+const KIND_RANK: Record<EventKind, number> = {
+  created: 0,
+  joined: 1,
+  funded: 2,
+  proposed: 3,
+  approved: 4,
+  declined: 5,
+  paid: 6
+}
+
+/** Same `at` (Demo Club create+join) must apply `created` first or join is dropped. */
+export function orderBoardEvents(events: BoardEvent[]): BoardEvent[] {
+  return [...events].sort((a, b) => {
+    const byTime = a.at.localeCompare(b.at)
+    if (byTime !== 0) return byTime
+    return KIND_RANK[a.kind] - KIND_RANK[b.kind]
+  })
+}
+
 export function reconstructTreasury(events: BoardEvent[]): Treasury | null {
-  const ordered = [...events].sort((a, b) => a.at.localeCompare(b.at))
+  const ordered = orderBoardEvents(events)
   let treasury: Treasury | null = null
 
   for (const event of ordered) {

@@ -6,6 +6,7 @@ import {
   encodeEventFields,
   fundGate,
   inviteHeadline,
+  orderBoardEvents,
   parseEventFields,
   proposeGate,
   reconstructTreasury,
@@ -410,6 +411,35 @@ describe('board event tokens', () => {
     assert.equal(open.reason, '')
     assert.equal(allJoined.vault.length, 0)
     assert.equal(proposeGate({ wallet: {}, treasury: allJoined, busy: false }).disabled, true)
+  })
+
+  it('applies created before joined when both share the same at', () => {
+    const at = '2026-08-14T03:43:41.785Z'
+    const treasurer = '02' + 'c5'.repeat(32)
+    const derived = '02' + 'aa'.repeat(32)
+    const joinedFirst: BoardEvent[] = [
+      event({
+        treasuryId: 'fd99a97b-0415-4036-909d-ca7794a70f04',
+        kind: 'joined',
+        at,
+        payload: { role: 'treasurer', identityKey: treasurer, derivedPubkey: derived }
+      }),
+      event({
+        treasuryId: 'fd99a97b-0415-4036-909d-ca7794a70f04',
+        kind: 'created',
+        at,
+        payload: { name: 'Demo Club', signerCount: 3 }
+      })
+    ]
+    const ordered = orderBoardEvents(joinedFirst)
+    assert.equal(ordered[0].kind, 'created')
+    assert.equal(ordered[1].kind, 'joined')
+    const treasury = reconstructTreasury(joinedFirst)
+    assert.ok(treasury)
+    assert.equal(treasury.name, 'Demo Club')
+    assert.equal(treasury.signers[0].derivedPubkey, derived)
+    assert.ok(treasury.feed.some((item) => item.text.includes('Demo Club opened')))
+    assert.ok(treasury.feed.some((item) => item.text.includes('Treasurer joined')))
   })
 
   it('records a decline as a board event and does not mark the proposal paid', () => {

@@ -20,7 +20,11 @@ import {
 } from '../../../protocol/events'
 import {
   keepLastGoodEvents,
+  legalAnytxQuery,
+  relatedTxids,
+  resolveCreateTxid,
   retryEmptyLookup,
+  shortPageIsEof,
   type OverlayLookupStatus
 } from '../../../protocol/lookup'
 import { originator } from './config'
@@ -30,7 +34,6 @@ const SNAPSHOT_PREFIX = 'policy-treasury.snapshot.'
 const CREATED_TX_PREFIX = 'policy-treasury.createdTx.'
 const PAGE = 100
 const MAX_PAGES = 8
-const WIDE_PAGES = 16
 
 export type { OverlayLookupStatus }
 
@@ -193,68 +196,70 @@ async function queryAnytx(
   }
 }
 
+function forBoard(events: BoardEvent[], treasuryId?: string): BoardEvent[] {
+  if (!treasuryId) return events
+  return events.filter((event) => event.treasuryId === treasuryId)
+}
+
 export async function lookupBoardEvents(
   treasuryId?: string,
   opts?: { txid?: string; pages?: number }
-): Promise<{ events: BoardEvent[]; createdTxid?: string }> {
+): Promise<{ events: BoardEvent[]; createdTxid?: string; error?: string }> {
+  const createdTxid = resolveCreateTxid(treasuryId, opts?.txid)
   const found: BoardEvent[] = []
-  let createdTxid = opts?.txid
+  let error: string | undefined
 
-  if (opts?.txid) {
+  if (createdTxid) {
+    const byTx = await retryEmptyLookup(async () => {
+      const answer = await queryAnytx(legalAnytxQuery({ txid: createdTxid }), 20000)
+      return forBoard(answer.events, treasuryId)
+    }, { delayMs: 350 })
+    found.push(...byTx.items)
+    if (byTx.failed) error = byTx.error
+  }
+
+  for (const txid of relatedTxids(treasuryId, createdTxid)) {
     try {
-      const byTx = await queryAnytx({ txid: opts.txid }, 20000)
-      for (const event of byTx.events) {
-        if (treasuryId && event.treasuryId !== treasuryId) continue
-        found.push(event)
-        if (event.kind === 'created') createdTxid = opts.txid
-      }
-    } catch {
-      // Fall through to the firehose; overlay is flaky.
+      const extra = await queryAnytx(legalAnytxQuery({ txid }), 20000)
+      found.push(...forBoard(extra.events, treasuryId))
+    } catch (err) {
+      error = error || (err instanceof Error ? err.message : String(err))
     }
+  }
+
+  if (found.some((event) => event.kind === 'created')) {
+    try {
+      const created = found.find((event) => event.kind === 'created')
+      const start = created ? new Date(created.at) : new Date(Date.now() - 14 * 86_400_000)
+      const windowed = await queryAnytx(legalAnytxQuery({
+        limit: 50,
+        skip: 0,
+        startDate: new Date(start.getTime() - 60_000).toISOString(),
+        endDate: new Date().toISOString()
+      }), 20000)
+      found.push(...forBoard(windowed.events, treasuryId))
+    } catch (err) {
+      error = error || (err instanceof Error ? err.message : String(err))
+    }
+    return { events: found, createdTxid, error }
   }
 
   const pages = opts?.pages ?? MAX_PAGES
-  for (let page = 0; page < pages; page++) {
-    const answer = await queryAnytx({
-      limit: PAGE,
-      skip: page * PAGE,
-      sortOrder: 'desc'
-    })
-    for (const event of answer.events) {
-      if (treasuryId && event.treasuryId !== treasuryId) continue
-      found.push(event)
-      if (event.kind === 'created' && event.payload.announceTxid) {
-        createdTxid = String(event.payload.announceTxid)
-      }
-    }
-    if (answer.outputCount < PAGE) break
-    if (treasuryId && found.some((event) => event.kind === 'created')) break
-  }
-
-  if (treasuryId && !found.some((event) => event.kind === 'created')) {
-    const end = new Date()
-    const start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000)
-    try {
-      const windowed = await queryAnytx({
+  try {
+    for (let page = 0; page < pages; page++) {
+      const answer = await queryAnytx(legalAnytxQuery({
         limit: PAGE,
-        skip: 0,
-        sortOrder: 'desc',
-        startDate: start.toISOString(),
-        endDate: end.toISOString()
-      })
-      for (const event of windowed.events) {
-        if (event.treasuryId !== treasuryId) continue
-        found.push(event)
-        if (event.kind === 'created' && event.payload.announceTxid) {
-          createdTxid = String(event.payload.announceTxid)
-        }
-      }
-    } catch {
-      // Date-window query is best-effort.
+        skip: page * PAGE
+      }))
+      found.push(...forBoard(answer.events, treasuryId))
+      if (shortPageIsEof(answer.outputCount, PAGE)) break
+      if (found.some((event) => event.kind === 'created')) break
     }
+  } catch (err) {
+    error = error || (err instanceof Error ? err.message : String(err))
   }
 
-  return { events: found, createdTxid }
+  return { events: found, createdTxid, error }
 }
 
 export async function pingOverlay(): Promise<boolean> {
@@ -360,46 +365,57 @@ export async function loadTreasury(
   opts?: { txid?: string }
 ): Promise<TreasuryLoad> {
   const cached = lastGood(treasuryId)
-  const cachedTx = opts?.txid || readCreatedTxid(treasuryId)
-  let pages = MAX_PAGES
+  const cachedTx = resolveCreateTxid(treasuryId, opts?.txid || readCreatedTxid(treasuryId))
 
-  const result = await retryEmptyLookup(async () => {
-    const looked = await lookupBoardEvents(treasuryId, { txid: cachedTx, pages })
-    pages = WIDE_PAGES
-    return looked.events
-  }, { delayMs: 350 })
+  let looked: { events: BoardEvent[]; createdTxid?: string; error?: string }
+  try {
+    looked = await lookupBoardEvents(treasuryId, { txid: cachedTx })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return {
+      treasury: cached,
+      status: 'failed',
+      usedCache: Boolean(cached),
+      createdTxid: cachedTx,
+      error: message
+    }
+  }
 
-  if (result.items.length > 0) {
-    const events = rememberEvents(treasuryId, result.items)
+  if (looked.events.length > 0) {
+    const events = rememberEvents(treasuryId, looked.events)
+    const live = reconstructTreasury(looked.events)
     const treasury = reconstructTreasury(events) ?? cached
     if (treasury) writeCachedTreasury(treasuryId, treasury)
-    const created = result.items.find((event) => event.kind === 'created')
-    const createdTxid = cachedTx
-      || (created && typeof created.payload.announceTxid === 'string' ? created.payload.announceTxid : undefined)
+    const createdTxid = looked.createdTxid
+      || cachedTx
+      || (typeof looked.events.find((event) => event.kind === 'created')?.payload.announceTxid === 'string'
+        ? String(looked.events.find((event) => event.kind === 'created')?.payload.announceTxid)
+        : undefined)
     if (createdTxid) writeCreatedTxid(treasuryId, createdTxid)
     return {
       treasury,
-      status: 'online',
-      usedCache: !reconstructTreasury(result.items) && Boolean(cached),
-      createdTxid
+      status: live ? 'online' : looked.error ? 'failed' : 'online',
+      usedCache: !live && Boolean(cached),
+      createdTxid,
+      error: looked.error
     }
   }
 
   if (cached) {
     return {
       treasury: cached,
-      status: result.failed ? 'failed' : 'online',
+      status: looked.error ? 'failed' : 'online',
       usedCache: true,
       createdTxid: cachedTx,
-      error: result.error
+      error: looked.error
     }
   }
 
   return {
     treasury: null,
-    status: result.failed ? 'failed' : 'online',
+    status: looked.error ? 'failed' : 'online',
     usedCache: false,
     createdTxid: cachedTx,
-    error: result.error
+    error: looked.error
   }
 }

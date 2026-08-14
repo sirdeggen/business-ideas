@@ -12,6 +12,7 @@ import {
 import { downloadCsv, downloadPdf } from '../../protocol/export'
 import { vaultBalanceCopy } from '../../protocol/board'
 import { fundGate, inviteHeadline, proposeGate } from '../../protocol/events'
+import { resolveCreateTxid } from '../../protocol/lookup'
 import {
   minutesAgo,
   minutesEmptyCopy,
@@ -94,7 +95,9 @@ function Shell() {
   const fromUrl = urlParam('treasury')
   const [treasuryId, setTreasuryId] = useState(() => fromUrl)
   const [lookupDraft, setLookupDraft] = useState('')
-  const [createdTxid, setCreatedTxid] = useState(() => urlParam('tx') || (fromUrl ? readCreatedTxid(fromUrl) : undefined) || '')
+  const [createdTxid, setCreatedTxid] = useState(() =>
+    urlParam('tx') || (fromUrl ? readCreatedTxid(fromUrl) : undefined) || resolveCreateTxid(fromUrl) || ''
+  )
   const [treasury, setTreasury] = useState<Treasury | null>(null)
   const [overlayStatus, setOverlayStatus] = useState<OverlayLookupStatus>(fromUrl ? 'checking' : 'online')
   const [usedCache, setUsedCache] = useState(false)
@@ -157,6 +160,7 @@ function Shell() {
     setOverlayStatus(load.status)
     setUsedCache(load.usedCache)
     if (load.createdTxid) setCreatedTxid(load.createdTxid)
+    if (load.error && !load.treasury) setFail(load.error)
     if (load.treasury) {
       setTreasury(load.treasury)
       setTreasuryId(load.treasury.id)
@@ -229,7 +233,7 @@ function Shell() {
 
   const copyInvite = async (): Promise<void> => {
     if (!treasury) return
-    const tx = createdTxid || readCreatedTxid(treasury.id)
+    const tx = createdTxid || readCreatedTxid(treasury.id) || resolveCreateTxid(treasury.id)
     await navigator.clipboard.writeText(boardHref(treasury.id, tx))
     setNotice('Invite link copied. Chair and bookkeeper open it — they can read minutes without a wallet.')
   }

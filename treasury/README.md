@@ -8,11 +8,11 @@ This folder is self-contained. Do not look for a shared index change here — th
 
 A board URL is minutes first. Overlay lookup is flaky — the UI retries `ls_anytx`, keeps last-good minutes in localStorage, and never replaces a known book with “Nothing yet” because overlay blinked.
 
-Example (Demo Club, readable without connecting):
+Example (Demo Club, readable without connecting). Tokens are on overlay — created tx `ec4f7528…` vout 0. `?treasury=<uuid>` is not a legal `ls_anytx` key; the invite carries the create txid:
 
-https://sirdeggen.github.io/business-ideas/treasury/?treasury=fd99a97b-0415-4036-909d-ca7794a70f04
+https://sirdeggen.github.io/business-ideas/treasury/?treasury=fd99a97b-0415-4036-909d-ca7794a70f04&tx=ec4f752843a15c3bb065286e6deefb34041f3795699516b6eafcc80438febb69
 
-After create, the invite is `?treasury=<id>&tx=<createdTxid>` so `ls_anytx { txid }` can find the announcement even when the global firehose is empty. `?treasury=<id>` alone still works: retry, page, date window, then last-good cache.
+`lookupBoardEvents` queries `{ txid }` first (that returns the created PushDrop at vout 0), then related txids / a date window for later minutes. A recent scan is fallback only. Do not send `{ treasuryId: uuid }`. Do not treat `outputs.length < limit` as EOF (host has returned 78/100 and 49/50). Same-timestamp `created`+`joined` apply `created` first. Last-good minutes stay in localStorage so a flaky later fetch does not flash “Nothing yet.”
 
 What a stranger sees on `?treasury=` (first screen, in this order):
 
@@ -70,7 +70,7 @@ On-chain / overlay payloads can still store satoshis. The UI leads with dollars.
 
 Protocol ID for the announcement lock is `[0, "policy treasury"]` (Silent) so these tokens do not spam the wallet. After `createAction`, the tx is broadcast with `TopicBroadcaster(['tm_anytx'])` pinned at overlay-us-1. If SHIP host discovery fails, the client POSTs raw BEEF to `https://overlay-us-1.bsvb.tech/submit` with `x-topics: ["tm_anytx"]`.
 
-`ls_anytx` has no protocol filter. The UI queries `{ txid }` when the invite carries one, then `{ limit, skip, sortOrder: "desc" }` (and a date window), decodes each locking script with `PushDrop.decode`, and keeps tokens whose first field is `policy treasury`. A known `?treasury=` id that comes back empty is retried. Last-good minutes stay in localStorage.
+`ls_anytx` legal fields are `{ txid?, limit, skip, startDate, endDate, sortOrder }`. The UI never sends `{ treasuryId }`. It queries `{ txid }` first (create announcement, vout 0), then related txids / a date window. A recent `{ limit, skip, sortOrder: "desc" }` scan is fallback only and does not stop because a page came back short. Failed PushDrop decodes (change vouts) are skipped. Last-good minutes stay in localStorage.
 
 Propose and approve are also sent through `MessageBoxClient` (`messageBox: "policy treasury"`) so the other signers see pending work without paging the whole anytx index. If Message Box is down, overlay events remain the source of truth.
 

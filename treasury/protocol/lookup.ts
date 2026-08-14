@@ -16,6 +16,53 @@ export const MINUTES_COPY = {
 
 export const LOOKUP_RETRY_ATTEMPTS = 3
 
+/** Demo Club tokens on overlay-us-1 right now. `?treasury=` is not a legal ls_anytx key. */
+export const DEMO_CLUB_ID = 'fd99a97b-0415-4036-909d-ca7794a70f04'
+export const DEMO_CLUB_CREATE_TX = 'ec4f752843a15c3bb065286e6deefb34041f3795699516b6eafcc80438febb69'
+export const DEMO_CLUB_JOIN_TX = '4fd431a13b784f355455a7f7992072a2e6de27498bfa711fdd2c559dd4126179'
+
+export const KNOWN_CREATE_TX: Record<string, string> = {
+  [DEMO_CLUB_ID]: DEMO_CLUB_CREATE_TX
+}
+
+export const KNOWN_RELATED_TX: Record<string, string[]> = {
+  [DEMO_CLUB_ID]: [DEMO_CLUB_JOIN_TX]
+}
+
+export function resolveCreateTxid(treasuryId?: string, urlTx?: string): string | undefined {
+  const fromUrl = urlTx?.trim()
+  if (fromUrl) return fromUrl
+  if (treasuryId && KNOWN_CREATE_TX[treasuryId]) return KNOWN_CREATE_TX[treasuryId]
+  return undefined
+}
+
+export function relatedTxids(treasuryId?: string, createTxid?: string): string[] {
+  const extra = treasuryId ? KNOWN_RELATED_TX[treasuryId] ?? [] : []
+  return extra.filter((txid) => txid && txid !== createTxid)
+}
+
+/** Legal ls_anytx fields only. Never send `{ treasuryId: uuid }`. */
+export function legalAnytxQuery(input: {
+  txid?: string
+  limit?: number
+  skip?: number
+  startDate?: string
+  endDate?: string
+}): Record<string, unknown> {
+  if (input.txid) return { txid: input.txid }
+  const query: Record<string, unknown> = { sortOrder: 'desc' }
+  if (input.limit != null) query.limit = input.limit
+  if (input.skip != null) query.skip = input.skip
+  if (input.startDate) query.startDate = input.startDate
+  if (input.endDate) query.endDate = input.endDate
+  return query
+}
+
+/** Host has returned 78/100 and 49/50. A short page is not EOF. */
+export function shortPageIsEof(_outputCount: number, _limit: number): boolean {
+  return false
+}
+
 export function overlayBanner(status: OverlayLookupStatus, usedCache = false): string {
   if (status === 'checking') return 'checking overlay-us-1'
   if (status === 'failed') {
