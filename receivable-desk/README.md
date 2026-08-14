@@ -71,9 +71,7 @@ The wallet must be able to fund the billed amount. The registry token is not cus
 
 ## Show the registry / advance
 
-**You owe us** is the public unpaid list. **Advance** stays visible but disabled:
-
-**Advance against this invoice — not available.**
+**You owe us** is the public unpaid list. Advance is not in the stranger nav.
 
 No calculator. No APR. We are not a bank or a lender.
 

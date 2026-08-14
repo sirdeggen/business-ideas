@@ -30,7 +30,7 @@ Local Docker `tm_tickets` / `ls_tickets` is an optional override: set **Overlay 
 
 1. Connect the organizer wallet (needs satoshis for 1 sat per ticket plus fees).
 2. Open **organizer**.
-3. Choose N (1–20) and click **Mint tickets**.
+3. Choose N (1–20) and click **Make tickets**.
 4. Approve `createAction`. Each output is a PushDrop ticket in basket `eventtickets`.
 5. The app broadcasts the Atomic BEEF with `TopicBroadcaster(['tm_anytx'])` (or `tm_tickets` when the Overlay URL is localhost). Public `tm_anytx` stores all outputs; the UI keeps Demo Night tickets only.
 

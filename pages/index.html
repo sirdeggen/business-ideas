@@ -14,13 +14,7 @@
           <h1>Business ideas</h1>
           <p class="lede">
             Invoices first: send a payable, get a receipt. The receivable desk
-            is a collections list (this desk’s own registry), not a second
-            product. Tickets sit after invoices. Tickets and the desk persist
-            on the public overlay (<code>overlay-us-1.bsvb.tech</code> /
-            <code>tm_anytx</code>). Local Docker custom topics remain an
-            optional override. Chrome hides BSV Desktop until you Allow
-            “sirdeggen.github.io wants to Access other apps and services on this
-            device,” then Retry with Desktop unlocked.
+            is a collections list, not a bank. Tickets sit after invoices.
           </p>
         </div>
       </header>
@@ -33,23 +27,17 @@
           <p class="path">
             <a href="https://github.com/sirdeggen/business-ideas/blob/main/invoices/README.md">How to run</a>
           </p>
+          <a class="btn" href="./invoices/">Open UI</a>
         </article>
 
         <article class="card">
           <p class="eyebrow soon">Server</p>
           <h2>Receivable desk</h2>
-          <p>
-            Who do we chase today? A collections list on this desk’s registry —
-            on time / a bit late / call them / board should know. Not a bank.
-            Register, list, and mark paid persist on the public overlay
-            (<code>overlay-us-1</code> / <code>tm_anytx</code> /
-            <code>ls_anytx</code>, filtered to receivable fields). Local Docker
-            <code>tm_receivables</code> is optional:
-            <code>cd receivable-desk &amp;&amp; docker compose up --build</code>
-            (overlay <strong>:8082</strong>, UI <strong>:5175</strong>).
+          <p>Who do we chase today?</p>
+          <p class="path">
+            <a href="https://github.com/sirdeggen/business-ideas/blob/main/receivable-desk/README.md">How to run</a>
           </p>
-          <p class="path">Pages UI: <code>/receivables/</code></p>
-          <a class="btn" href="./receivables/">Open list</a>
+          <a class="btn" href="./receivables/">Open UI</a>
         </article>
 
         <article class="card">
@@ -57,14 +45,11 @@
           <h2>Event tickets</h2>
           <p>
             Tickets you can send, show on a phone, and spend at the door so they
-            can’t be used twice. Mint, transfer, redeem, and door lookup persist
-            on the public overlay (<code>overlay-us-1</code> /
-            <code>tm_anytx</code> / <code>ls_anytx</code>, filtered to Demo Night
-            tickets). Local Docker <code>tm_tickets</code> is optional:
-            <code>cd event-tickets &amp;&amp; docker compose up --build</code>
-            (overlay <strong>:8080</strong>, UI <strong>:5173</strong>).
+            can’t be used twice.
           </p>
-          <p class="path">Pages UI: <code>/tickets/</code></p>
+          <p class="path">
+            <a href="https://github.com/sirdeggen/business-ideas/blob/main/event-tickets/README.md">How to run</a>
+          </p>
           <a class="btn" href="./tickets/">Open UI</a>
         </article>
 
@@ -101,16 +86,13 @@
           <h2>Treasury</h2>
           <p>
             Shared treasury, two of three must agree. Board at
-            <code>?treasury=&lt;id&gt;</code> is lookup only (no wallet) and
-            persists on overlay-us-1 / <code>tm_anytx</code> /
-            <code>ls_anytx</code>. Create and join persist on Pages. A
-            stranger board works without Docker.
+            <code>?treasury=&lt;id&gt;</code> is lookup only (no wallet).
+            Create and join persist on Pages.
           </p>
-          <p class="path">Pages UI: <code>/treasury/</code></p>
-          <div class="row">
-            <a class="btn" href="./treasury/">Open board</a>
-            <a class="btn" href="https://github.com/sirdeggen/business-ideas/blob/main/treasury/README.md">How to run</a>
-          </div>
+          <p class="path">
+            <a href="https://github.com/sirdeggen/business-ideas/blob/main/treasury/README.md">How to run</a>
+          </p>
+          <a class="btn" href="./treasury/">Open board</a>
         </article>
       </section>
 

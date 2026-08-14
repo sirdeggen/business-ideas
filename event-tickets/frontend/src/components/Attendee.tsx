@@ -92,7 +92,9 @@ export function Attendee() {
         <div className="row">
           <button className="btn" onClick={() => void refresh()}>Refresh basket</button>
         </div>
-        {tickets.length === 0 && <p className="hint">No tickets in the eventtickets basket yet.</p>}
+        {tickets.length === 0 && (
+          <p className="hint">No tickets yet. Make some first, then refresh.</p>
+        )}
         {tickets.map((held) => {
           const recipient = recipients[held.outpoint] ?? ''
           return (

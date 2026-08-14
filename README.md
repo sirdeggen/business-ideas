@@ -4,31 +4,28 @@ First versions, shipped fast.
 
 Switcher on GitHub Pages: https://sirdeggen.github.io/business-ideas/
 
-Invoices are the first product. The receivable desk is a collections list on this desk’s own registry — not a second company. Tickets sit after invoices.
-
-Tickets and the receivable desk persist on the public overlay (`https://overlay-us-1.bsvb.tech`, topic `tm_anytx`, lookup `ls_anytx`, then client-side protocol filters). Local Docker custom topics (`tm_tickets` / `tm_receivables`) remain an optional override via the in-UI overlay URL. Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access other apps and services on this device,” then Retry with Desktop unlocked.
+Invoices are the first product. The receivable desk is a collections list — not a bank. Tickets sit after invoices.
 
 ## Invoices
 
 Send a payable. Get a receipt.
 
-- How to run: [invoices/README.md](./invoices/README.md) (`cd invoices && docker compose up --build`)
+- Pages UI: https://sirdeggen.github.io/business-ideas/invoices/
+- How to run: [invoices/README.md](./invoices/README.md)
 
 ## Receivable desk (feature of invoices)
 
-Who do we chase today? Aging in English: on time / a bit late / call them / board should know. Not a bank.
-
-The list is this desk’s own registry. Pages register / list / mark paid use public overlay-us-1 / `tm_anytx`. Local Docker `tm_receivables` is optional.
+Who do we chase today?
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/receivables/
-- Optional local indexer: `cd receivable-desk && docker compose up --build` (overlay :8082, UI :5175)
 - How to run: [receivable-desk/README.md](./receivable-desk/README.md)
 
 ## Event tickets
 
 Tickets you can send, show on a phone, and spend at the door so they can’t be used twice.
 
-Mint, transfer, redeem, and door lookup persist on public overlay-us-1 / `tm_anytx`. Local Docker `tm_tickets` is optional. How to run: [event-tickets/README.md](./event-tickets/README.md)
+- Pages UI: https://sirdeggen.github.io/business-ideas/tickets/
+- How to run: [event-tickets/README.md](./event-tickets/README.md)
 
 ## 402 publisher (server / local Docker)
 
@@ -50,8 +47,5 @@ Paid MCP tools in sats. Payment is the credential — no signup, no API key. Exp
 
 Shared treasury, two of three must agree. Board at `?treasury=<id>` is lookup only (no wallet). Create and join persist on Pages; a stranger board works without Docker. Not a custodian.
 
-Persists on public overlay-us-1 / `tm_anytx` / `ls_anytx`. Local Docker is optional, not required.
-
 - Pages UI: https://sirdeggen.github.io/business-ideas/treasury/
-- Optional local: `cd treasury && docker compose up --build`
 - How to run: [treasury/README.md](./treasury/README.md)

@@ -257,6 +257,53 @@ input, textarea {
   border: 1px solid var(--danger);
 }
 
+.advanced {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px 12px;
+}
+
+.advanced summary {
+  cursor: pointer;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 0;
+}
+
+.advanced p {
+  color: var(--muted);
+}
+
+.identity-ask {
+  margin-top: 12px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.identity-ask code {
+  display: block;
+  color: var(--ink);
+  margin-top: 6px;
+  word-break: break-all;
+}
+
+.install {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px dashed var(--gold-dim);
+  background: #1a1712;
+}
+
+.install p {
+  color: var(--muted);
+  margin-top: 0;
+}
+
 footer {
   margin-top: 40px;
   color: var(--muted);

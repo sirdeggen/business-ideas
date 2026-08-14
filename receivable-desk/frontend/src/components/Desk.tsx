@@ -38,6 +38,7 @@ export function Desk() {
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
   const canSettle = online === true
 
   const refresh = async (): Promise<void> => {
@@ -51,6 +52,8 @@ export function Desk() {
     } catch (err) {
       console.error('Desk lookup failed', err)
       setError(errorMessage(err))
+    } finally {
+      setLoaded(true)
     }
     if (usesPublicAnytx(url)) {
       setRows([])
@@ -138,7 +141,13 @@ export function Desk() {
       )}
       {(error || walletError) && <p className="status err">{error || walletError}</p>}
 
-      {AGING_LABELS.map((label) => (
+      {loaded && rows.length === 0 && !preview && (
+        <p className="hint">
+          No open invoices yet — <a href="../invoices/">create one</a>
+        </p>
+      )}
+
+      {(preview || rows.length > 0) && AGING_LABELS.map((label) => (
         <div key={label} className={`aging-group aging-${label.replace(/\s+/g, '-')}`}>
           <h3 className="subhead">{label}</h3>
           {grouped[label].length === 0 && <p className="hint">None.</p>}
