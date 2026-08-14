@@ -129,6 +129,11 @@ h1 {
   font-size: 22px;
 }
 
+.panel .subhead {
+  margin: 20px 0 0;
+  font-size: 16px;
+}
+
 .panel p, .hint {
   color: var(--muted);
   margin-top: 0;
