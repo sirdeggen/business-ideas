@@ -88,7 +88,7 @@ DATA_DIR=./data npm run dev   # :8080, optional
 
 1. **Treasurer** connects a BSV wallet. Create a treasury named for the club. Optionally paste the chair and bookkeeper identity keys (or leave blank). Copy the invite link (`?treasury=<id>`).
 2. **Chair** and **bookkeeper** each open the link (readable without a wallet), connect *their* wallet, click **Join**. When both have joined, the P2MS vault script is live.
-3. Anyone with sats clicks **Fund from this wallet** and approves `createAction`. Coins lock to the 2-of-3 script (basket `treasury`). A 1-sat announcement records the outpoint + BEEF.
+3. Anyone with sats clicks **Fund from this wallet** and approves `createAction`. An empty vault is the reason to fund, not a reason to disable it. The first fund locks to whoever has joined so far (1-of-1 after the treasurer creates, then 2-of-2 / 2-of-3 as seats fill). A 1-sat announcement records the outpoint + BEEF.
 4. A signer **proposes**: sats, payee identity key, memo. Their wallet signs the proposal. The event goes to overlay and Message Box.
 5. A second signer clicks **Approve**. Threshold is met. Each of two signers clicks **Sign vault spend** (Bitcoin sighash, still via WalletClient). Then **Broadcast pay**. The paid announcement is a *separate* 1-sat tx — the P2MS spend itself is not a PushDrop.
 6. **Export** CSV or PDF for the month (`YYYY-MM`) from the reconstructed board.

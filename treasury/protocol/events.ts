@@ -189,9 +189,37 @@ function feedLine(event: BoardEvent): string {
   }
 }
 
-function maybeLockingScript(signers: Signer[], threshold: number): string | undefined {
-  if (!signers.every((signer) => signer.derivedPubkey) || signers.length < 2) return undefined
-  return p2msLock(signers.map((signer) => signer.derivedPubkey as string), threshold).toHex()
+/** Lock to whoever has actually joined. 1-of-1, 2-of-2, or 2-of-3. */
+export function vaultLockFromJoined(signers: Signer[]): {
+  pubkeys: string[]
+  threshold: number
+  lockingScriptHex: string
+} | null {
+  const pubkeys = signers
+    .filter((signer) => signer.derivedPubkey)
+    .map((signer) => signer.derivedPubkey as string)
+  if (pubkeys.length === 0) return null
+  const threshold = pubkeys.length === 1 ? 1 : Math.min(2, pubkeys.length)
+  return {
+    pubkeys,
+    threshold,
+    lockingScriptHex: p2msLock(pubkeys, threshold).toHex()
+  }
+}
+
+function applyJoinedLock(treasury: Treasury): void {
+  const lock = vaultLockFromJoined(treasury.signers)
+  treasury.lockingScriptHex = lock?.lockingScriptHex
+  if (lock) treasury.threshold = lock.threshold
+}
+
+/** Empty vault must not disable Fund. Only missing wallet, missing treasury, or a run in progress. */
+export function fundActionDisabled(input: {
+  wallet: unknown
+  treasury: Treasury | null | undefined
+  busy?: boolean
+}): boolean {
+  return !input.wallet || !input.treasury || Boolean(input.busy)
 }
 
 function findProposal(treasury: Treasury, proposalId: string): Proposal | undefined {
@@ -241,7 +269,7 @@ export function reconstructTreasury(events: BoardEvent[]): Treasury | null {
           slot.derivedPubkey = asString(event.payload.derivedPubkey).toLowerCase()
           slot.joinedAt = event.at
         }
-        treasury.lockingScriptHex = maybeLockingScript(treasury.signers, treasury.threshold)
+        applyJoinedLock(treasury)
       }
     }
 

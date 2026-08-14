@@ -13,7 +13,7 @@ import {
   p2msSignData,
   vaultInstructions
 } from '../../../protocol/treasury'
-import type { Proposal, Treasury } from '../../../protocol/events'
+import { vaultLockFromJoined, type Proposal, type Treasury } from '../../../protocol/events'
 import { originator } from './config'
 
 export async function derivedVaultKey(wallet: WalletClient, treasuryId: string): Promise<string> {
@@ -63,22 +63,19 @@ export async function fundVault(
   wallet: WalletClient,
   treasury: Treasury,
   satoshis: number
-): Promise<{ txid: string; vout: number; beef: number[]; satoshis: number }> {
-  if (!treasury.lockingScriptHex) throw new Error('Wait until every signer has joined')
+): Promise<{ txid: string; vout: number; beef: number[]; satoshis: number; lockingScriptHex: string }> {
+  const lock = vaultLockFromJoined(treasury.signers)
+  if (!lock) throw new Error('A signer must join before the vault can be funded')
   if (satoshis < 1) throw new Error('Fund at least 1 sat')
-  const pubkeys = treasury.signers.map((signer) => {
-    if (!signer.derivedPubkey) throw new Error(`${signer.role} has not joined`)
-    return signer.derivedPubkey
-  })
   const response = await wallet.createAction({
     description: `Fund ${treasury.name}`.slice(0, 50),
     outputs: [{
       satoshis,
-      lockingScript: treasury.lockingScriptHex,
-      outputDescription: '2-of-n treasury vault',
+      lockingScript: lock.lockingScriptHex,
+      outputDescription: `${lock.threshold}-of-${lock.pubkeys.length} treasury vault`,
       basket: BASKET,
       customInstructions: JSON.stringify(
-        vaultInstructions(treasury.id, pubkeys, treasury.threshold)
+        vaultInstructions(treasury.id, lock.pubkeys, lock.threshold)
       ),
       tags: [BASKET, 'vault']
     }],
@@ -90,13 +87,14 @@ export async function fundVault(
   }
   const tx = Transaction.fromBEEF(response.tx as number[])
   const vout = tx.outputs.findIndex(
-    (output) => output.lockingScript.toHex() === treasury.lockingScriptHex
+    (output) => output.lockingScript.toHex() === lock.lockingScriptHex
   )
   return {
     txid: response.txid,
     vout: vout >= 0 ? vout : 0,
     beef: response.tx as number[],
-    satoshis
+    satoshis,
+    lockingScriptHex: lock.lockingScriptHex
   }
 }
 
@@ -118,7 +116,8 @@ export async function signVaultSpend(
     sourceTXID: proposal.vaultTxid,
     sourceOutputIndex: proposal.vaultVout,
     sourceSatoshis: proposal.vaultSatoshis,
-    vaultLockingScriptHex: treasury.lockingScriptHex as string,
+    vaultLockingScriptHex: (vaultLockFromJoined(treasury.signers)?.lockingScriptHex ??
+      treasury.lockingScriptHex) as string,
     payeeLockingScriptHex: proposal.payeeLockingScriptHex,
     amountSats: proposal.amountSats,
     changeSats: proposal.changeSats,
@@ -139,15 +138,16 @@ export async function broadcastVaultSpend(
   proposal: Proposal
 ): Promise<{ txid: string; tx: number[]; changeVout?: number }> {
   const utxo = vaultFor(proposal, treasury)
-  const pubkeys = treasury.signers.map((signer) => signer.derivedPubkey as string)
+  const lock = vaultLockFromJoined(treasury.signers)
+  if (!lock) throw new Error('Vault locking script missing')
   const signaturesByPubkey: Record<string, number[]> = {}
   for (const row of proposal.p2msSigs) {
     signaturesByPubkey[row.derivedPubkey] = row.signature
   }
   const unlocking = assembleP2msUnlockingScript({
-    pubkeys,
+    pubkeys: lock.pubkeys,
     signaturesByPubkey,
-    threshold: treasury.threshold
+    threshold: lock.threshold
   })
   const outputs: Array<{
     satoshis: number
@@ -161,14 +161,14 @@ export async function broadcastVaultSpend(
     lockingScript: proposal.payeeLockingScriptHex,
     outputDescription: proposal.memo.slice(0, 50)
   }]
-  if (proposal.changeSats > 0 && treasury.lockingScriptHex) {
+  if (proposal.changeSats > 0) {
     outputs.push({
       satoshis: proposal.changeSats,
-      lockingScript: treasury.lockingScriptHex,
+      lockingScript: lock.lockingScriptHex,
       outputDescription: 'treasury change',
       basket: BASKET,
       customInstructions: JSON.stringify(
-        vaultInstructions(treasury.id, pubkeys, treasury.threshold)
+        vaultInstructions(treasury.id, lock.pubkeys, lock.threshold)
       ),
       tags: [BASKET, 'change']
     })
@@ -195,7 +195,7 @@ export async function broadcastVaultSpend(
   const changeVout = proposal.changeSats > 0
     ? tx.outputs.findIndex((output) =>
       output.satoshis === proposal.changeSats &&
-      output.lockingScript.toHex() === treasury.lockingScriptHex
+      output.lockingScript.toHex() === lock.lockingScriptHex
     )
     : -1
 

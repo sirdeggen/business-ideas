@@ -20,6 +20,7 @@ import {
   type Proposal,
   type Treasury
 } from './lib/api'
+import { fundActionDisabled } from '../../protocol/events'
 import {
   derivedVaultKey,
   fundVault,
@@ -298,15 +299,26 @@ function Shell() {
           <section className="panel">
             <h2>3. Fund the vault</h2>
             <p>
-              Pays a BRC-47 2-of-{treasury?.signers.length ?? 3} locking script.
+              Pays a BRC-47 {treasury?.threshold ?? 2}-of-{
+                treasury?.signers.filter((signer) => signer.derivedPubkey).length ||
+                treasury?.signers.length ||
+                3
+              } locking script.
               Anyone with sats can fund. Current vault: {vaultSats.toLocaleString()} sats.
+            </p>
+            <p className="hint">
+              {vaultSats === 0
+                ? treasury && treasury.signers.some((signer) => !signer.derivedPubkey)
+                  ? 'Empty vault — fund from this wallet. This first fund locks to the signers who have joined so far.'
+                  : 'Empty vault — fund from this wallet.'
+                : 'More sats can be added to the same vault script.'}
             </p>
             <label>Amount (sats)</label>
             <input value={fundSats} onChange={(event) => setFundSats(event.target.value)} />
             <div className="row">
               <button
                 className="btn primary"
-                disabled={!wallet || !treasury?.lockingScriptHex || Boolean(busy)}
+                disabled={fundActionDisabled({ wallet, treasury, busy: Boolean(busy) })}
                 onClick={() => void run('Funding vault…', async () => {
                   if (!wallet || !treasury) return
                   const funded = await fundVault(wallet, treasury, Number(fundSats))
@@ -315,7 +327,7 @@ function Shell() {
                     txid: funded.txid,
                     vout: funded.vout,
                     beef: funded.beef,
-                    lockingScriptHex: treasury.lockingScriptHex as string
+                    lockingScriptHex: funded.lockingScriptHex
                   })
                   setTreasury(next)
                   setNotice(`Funded ${funded.satoshis.toLocaleString()} sats.`)

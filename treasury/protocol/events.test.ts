@@ -4,6 +4,7 @@ import { PrivateKey } from '@bsv/sdk'
 import {
   EVENT_TAG,
   encodeEventFields,
+  fundActionDisabled,
   parseEventFields,
   reconstructTreasury,
   type BoardEvent
@@ -185,5 +186,42 @@ describe('board event tokens', () => {
     const pdf = paymentsPdf(treasury, '2026-08')
     assert.equal(new TextDecoder().decode(pdf.subarray(0, 5)), '%PDF-')
     assert.match(new TextDecoder('latin1').decode(pdf), /Demo Club/)
+  })
+
+  it('reconstructs a lock after create + treasurer join so Fund works on an empty vault', () => {
+    const treasurer = key()
+    const derived = key()
+    const treasury = reconstructTreasury([
+      event({
+        treasuryId: 'fresh',
+        kind: 'created',
+        at: '2026-08-14T03:00:00.000Z',
+        payload: {
+          name: 'Demo Club',
+          signerCount: 3,
+          signers: [
+            { role: 'treasurer', identityKey: treasurer },
+            { role: 'chair' },
+            { role: 'bookkeeper' }
+          ]
+        }
+      }),
+      event({
+        treasuryId: 'fresh',
+        kind: 'joined',
+        at: '2026-08-14T03:00:01.000Z',
+        payload: { role: 'treasurer', identityKey: treasurer, derivedPubkey: derived }
+      })
+    ])
+    assert.ok(treasury)
+    assert.ok(treasury.lockingScriptHex)
+    assert.equal(treasury.threshold, 1)
+    assert.equal(treasury.vault.length, 0)
+    assert.equal(treasury.signers.filter((signer) => signer.derivedPubkey).length, 1)
+    assert.equal(fundActionDisabled({ wallet: {}, treasury, busy: false }), false)
+    assert.equal(fundActionDisabled({ wallet: {}, treasury: { ...treasury, vault: [] }, busy: false }), false)
+    assert.equal(fundActionDisabled({ wallet: null, treasury, busy: false }), true)
+    assert.equal(fundActionDisabled({ wallet: {}, treasury: null, busy: false }), true)
+    assert.equal(fundActionDisabled({ wallet: {}, treasury, busy: true }), true)
   })
 })
