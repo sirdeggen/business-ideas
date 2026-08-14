@@ -92,7 +92,7 @@ function extractErrorText(error: unknown): string {
   if (error instanceof Error) {
     const extra = error as Error & { code?: string, description?: string, cause?: unknown }
     return [extra.message, extra.description, extra.code, extractErrorText(extra.cause)]
-      .filter((part) => typeof part === 'string' && part.trim())
+      .filter((part): part is string => typeof part === 'string' && part.trim().length > 0)
       .map(peelJsonMessage)
       .join(' — ')
   }
