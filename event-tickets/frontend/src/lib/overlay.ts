@@ -33,6 +33,8 @@ export interface OverlayTicket extends TicketPayload {
 export interface SubmitResult {
   admitted: number[]
   raw: unknown
+  host: string
+  topic: string
 }
 
 export interface TicketQuery {
@@ -67,6 +69,7 @@ class HostPinnedFacilitator implements OverlayBroadcastFacilitator {
   }
 
   async send(_url: string, taggedBEEF: TaggedBEEF): Promise<STEAK> {
+    // Ignore SHIP-discovered URLs (often localhost). Always POST to the pinned host.
     return new HTTPSOverlayBroadcastFacilitator(undefined, this.allowHTTP).send(this.host, taggedBEEF)
   }
 }
@@ -93,34 +96,88 @@ function createResolver(host: string, service: string): LookupResolver {
 function ticketOutputIndexes(tx: Transaction): number[] {
   const indexes: number[] = []
   for (const [index, output] of tx.outputs.entries()) {
-    try {
-      if (parseTicketFields(PushDrop.decode(output.lockingScript).fields)) {
-        indexes.push(index)
+    for (const position of ['before', 'after'] as const) {
+      try {
+        if (parseTicketFields(PushDrop.decode(output.lockingScript, position).fields)) {
+          indexes.push(index)
+          break
+        }
+      } catch {
+        // Change and unrelated outputs are ignored.
       }
-    } catch {
-      // Change and unrelated outputs are ignored.
     }
   }
   return indexes
+}
+
+function overlayErrorText(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  if (error && typeof error === 'object') {
+    const record = error as { description?: unknown, message?: unknown }
+    const description = typeof record.description === 'string' ? record.description : ''
+    const message = typeof record.message === 'string' ? record.message : ''
+    return [message, description].filter((part) => part.trim()).join(' — ')
+  }
+  return String(error ?? '')
+}
+
+async function submitBeefFallback(host: string, topic: string, beef: number[]): Promise<SubmitResult> {
+  const response = await fetch(`${host}/submit`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/octet-stream',
+      'x-topics': JSON.stringify([topic])
+    },
+    body: Uint8Array.from(beef)
+  })
+  const text = await response.text()
+  if (!response.ok) {
+    throw new Error(
+      `POST ${host}/submit x-topics ${JSON.stringify([topic])} failed (${response.status}): ${text.slice(0, 300)}`
+    )
+  }
+  let raw: unknown = text
+  try {
+    raw = JSON.parse(text) as unknown
+  } catch {
+    // Overlay may return empty or non-JSON on success.
+  }
+  return {
+    admitted: ticketOutputIndexes(Transaction.fromBEEF(beef)),
+    raw,
+    host,
+    topic
+  }
 }
 
 export async function submitTicketTx(base: string, beef: number[]): Promise<SubmitResult> {
   const host = overlayUrl(base)
   const topic = overlayTopic(host)
   const tx = Transaction.fromBEEF(beef)
-  const overlay = createBroadcaster(host, topic)
-  const result = await tx.broadcast(overlay)
-  if (result.status !== 'success') {
+  try {
+    const overlay = createBroadcaster(host, topic)
+    const result = await tx.broadcast(overlay)
+    if (result.status === 'success') {
+      return {
+        admitted: ticketOutputIndexes(tx),
+        raw: result,
+        host,
+        topic
+      }
+    }
     const description = 'description' in result ? result.description : ''
-    throw new Error(
-      description
-        ? `Overlay broadcast to ${topic} at ${host} failed: ${description}`
-        : `Overlay broadcast to ${topic} at ${host} failed`
-    )
-  }
-  return {
-    admitted: ticketOutputIndexes(tx),
-    raw: result
+    throw new Error(description || `broadcast status ${result.status}`)
+  } catch (error) {
+    try {
+      return await submitBeefFallback(host, topic, beef)
+    } catch (fallbackError) {
+      const first = overlayErrorText(error)
+      const second = overlayErrorText(fallbackError)
+      throw new Error(
+        `Overlay submit to ${topic} at ${host} failed: ${second || first || 'no message from overlay/facilitator'}`
+      )
+    }
   }
 }
 
@@ -180,7 +237,15 @@ function ticketFromBeef(beef: number[] | undefined, outputIndex: number): Overla
     const tx = Transaction.fromBEEF(beef)
     const output = tx.outputs[outputIndex]
     if (!output) return null
-    const ticket = parseTicketFields(PushDrop.decode(output.lockingScript).fields)
+    let ticket = null
+    for (const position of ['before', 'after'] as const) {
+      try {
+        ticket = parseTicketFields(PushDrop.decode(output.lockingScript, position).fields)
+        if (ticket) break
+      } catch {
+        // Try the other lock() position.
+      }
+    }
     if (!ticket) return null
     return {
       ...ticket,

@@ -19,5 +19,6 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src", "../protocol/ticket.ts"]
+  "include": ["src", "../protocol/ticket.ts"],
+  "exclude": ["src/**/*.test.ts"]
 }

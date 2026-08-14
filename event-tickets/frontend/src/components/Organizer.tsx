@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { DEMO_EVENT } from '../../../protocol/ticket'
+import { useBasket } from '../context/BasketContext'
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
 import { mintTickets } from '../lib/actions'
@@ -8,6 +9,7 @@ import { overlayTopic } from '../lib/overlay'
 
 export function Organizer() {
   const { wallet } = useWallet()
+  const { refresh } = useBasket()
   const { url, online, probeError } = useOverlay()
   const [count, setCount] = useState(5)
   const [busy, setBusy] = useState(false)
@@ -26,7 +28,11 @@ export function Organizer() {
         throw new Error(overlayCheckFailed(probeError, url))
       }
       const result = await mintTickets(wallet, url, count)
-      setStatus(`Minted ${result.count} tickets in ${result.txid}`)
+      setStatus(`Minted in wallet (txid ${result.txid}).`)
+      if (result.overlayError) {
+        setError(`Minted in wallet (txid ${result.txid}). Overlay submit failed: ${result.overlayError}`)
+      }
+      await refresh()
     } catch (err) {
       console.error('Mint failed', err)
       setError(errorMessage(err))

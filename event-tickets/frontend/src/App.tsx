@@ -3,6 +3,7 @@ import { DEMO_EVENT } from '../../protocol/ticket'
 import { Attendee } from './components/Attendee'
 import { Door } from './components/Door'
 import { Organizer } from './components/Organizer'
+import { BasketProvider } from './context/BasketContext'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import { overlayCheckFailed, overlayHint, shortKey, walletHint } from './lib/config'
@@ -102,7 +103,9 @@ export default function App() {
   return (
     <WalletProvider>
       <OverlayProvider>
-        <Shell />
+        <BasketProvider>
+          <Shell />
+        </BasketProvider>
       </OverlayProvider>
     </WalletProvider>
   )
