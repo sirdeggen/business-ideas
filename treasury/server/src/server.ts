@@ -13,6 +13,8 @@ import {
   requiredRoles,
   shortKey,
   thresholdMet,
+  nextOpenRole,
+  seatsForIdentity,
   uniqueApprovers,
   verifyWalletDataSignature,
   type Role
@@ -35,9 +37,19 @@ function parseRole(value: unknown): Role | null {
   return null
 }
 
-function findSigner(treasury: Treasury, identityKey: string): Signer | undefined {
-  const key = identityKey.trim().toLowerCase()
-  return treasury.signers.find((signer) => signer.identityKey.toLowerCase() === key)
+function findSigner(
+  treasury: Treasury,
+  identityKey: string,
+  derivedPubkey?: string,
+  used: Array<{ role: Role }> = []
+): Signer | undefined {
+  const seats = seatsForIdentity(treasury.signers, identityKey)
+  if (derivedPubkey) {
+    const match = seats.find((signer) => signer.derivedPubkey === derivedPubkey.toLowerCase())
+    if (match) return match
+  }
+  const next = nextOpenRole(seats.map((signer) => signer.role), used)
+  return next ? seats.find((signer) => signer.role === next) : seats[0]
 }
 
 function vaultReady(treasury: Treasury): boolean {
@@ -274,7 +286,7 @@ export function createApp(store: JsonStore) {
       const treasury = await store.update((data) => {
         const item = data.treasuries.find((row) => row.id === req.params.id)
         if (!item) throw new Error('treasury not found')
-        const signer = findSigner(item, identityKey)
+        const signer = findSigner(item, identityKey, derivedPubkey)
         if (!signer?.derivedPubkey) throw new Error('only a joined signer can propose')
         if (signer.derivedPubkey !== derivedPubkey.toLowerCase()) {
           throw new Error('derived pubkey does not match the joined seat')
@@ -351,7 +363,7 @@ export function createApp(store: JsonStore) {
         const proposal = item.proposals.find((row) => row.id === req.params.proposalId)
         if (!proposal) throw new Error('proposal not found')
         if (proposal.status === 'paid') throw new Error('already paid')
-        const signer = findSigner(item, identityKey)
+        const signer = findSigner(item, identityKey, derivedPubkey, proposal.approvals)
         if (!signer?.derivedPubkey) throw new Error('only a joined signer can approve')
         if (signer.derivedPubkey !== derivedPubkey.toLowerCase()) {
           throw new Error('derived pubkey does not match the joined seat')
@@ -368,7 +380,7 @@ export function createApp(store: JsonStore) {
         if (!verifyWalletDataSignature(derivedPubkey, dataBytes, signature)) {
           throw new Error('approval signature did not verify')
         }
-        if (!proposal.approvals.some((row) => row.identityKey === identityKey.toLowerCase())) {
+        if (!proposal.approvals.some((row) => row.role === signer.role)) {
           proposal.approvals.push({
             identityKey: identityKey.toLowerCase(),
             role: signer.role,
@@ -412,7 +424,7 @@ export function createApp(store: JsonStore) {
         const proposal = item.proposals.find((row) => row.id === req.params.proposalId)
         if (!proposal) throw new Error('proposal not found')
         if (proposal.status === 'paid') throw new Error('already paid')
-        const signer = findSigner(item, identityKey)
+        const signer = findSigner(item, identityKey, derivedPubkey, proposal.p2msSigs)
         if (!signer?.derivedPubkey) throw new Error('only a joined signer can sign the vault')
         if (signer.derivedPubkey !== derivedPubkey.toLowerCase()) {
           throw new Error('derived pubkey does not match the joined seat')
@@ -434,7 +446,7 @@ export function createApp(store: JsonStore) {
         if (!verifyWalletDataSignature(derivedPubkey, signData, signature)) {
           throw new Error('vault signature did not verify against the planned spend')
         }
-        if (!proposal.p2msSigs.some((row) => row.identityKey === identityKey.toLowerCase())) {
+        if (!proposal.p2msSigs.some((row) => row.role === signer.role)) {
           proposal.p2msSigs.push({
             identityKey: identityKey.toLowerCase(),
             role: signer.role,

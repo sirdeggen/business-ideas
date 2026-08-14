@@ -2,10 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   FEE_SATS,
   ROLE_LABEL,
+  heldRoles,
+  nextOpenRole,
   shortKey,
+  thresholdMet,
+  uniqueApprovers,
+  vaultKeyID,
   type Role
 } from '../../protocol/treasury'
 import { downloadCsv, downloadPdf } from '../../protocol/export'
+import { fundGate, inviteHeadline, proposeGate } from '../../protocol/events'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import {
   createTreasury,
@@ -20,7 +26,6 @@ import {
   type Proposal,
   type Treasury
 } from './lib/api'
-import { fundGate, inviteHeadline, proposeGate } from '../../protocol/events'
 import {
   derivedVaultKey,
   fundVault,
@@ -50,9 +55,8 @@ function monthNow(): string {
   return new Date().toISOString().slice(0, 7)
 }
 
-function mySeat(treasury: Treasury, identityKey: string | null) {
-  if (!identityKey) return undefined
-  return treasury.signers.find((signer) => signer.identityKey.toLowerCase() === identityKey.toLowerCase())
+function mySeats(treasury: Treasury, identityKey: string | null) {
+  return heldRoles(treasury.signers, identityKey)
 }
 
 function openSeat(treasury: Treasury, identityKey: string | null) {
@@ -88,7 +92,7 @@ function Shell() {
   const [memo, setMemo] = useState('hall hire')
   const [month, setMonth] = useState(monthNow())
 
-  const seat = treasury ? mySeat(treasury, identityKey) : undefined
+  const seats = treasury ? mySeats(treasury, identityKey) : []
   const joinable = treasury ? openSeat(treasury, identityKey) : undefined
   const invite = treasury ? inviteHeadline(treasury) : null
   const fund = fundGate({ wallet, treasury, busy: Boolean(busy) })
@@ -193,7 +197,7 @@ function Shell() {
       <p className="banner">
         {online ? 'overlay-us-1 online' : online === false ? 'overlay-us-1 unreachable — cached minutes still show' : 'checking overlay-us-1'}
         {' · tm_anytx / ls_anytx · Message Box gmb.bsvblockchain.tech'}
-        {seat ? ` · you are ${ROLE_LABEL[seat.role]}` : ''}
+        {seats.length ? ` · you are ${seats.map((role) => ROLE_LABEL[role]).join(', ')}` : ''}
       </p>
 
       {fail && <div className="status err">{fail}</div>}
@@ -280,7 +284,7 @@ function Shell() {
 
           <section className="panel">
             <h2>2. Join as a signer</h2>
-            <p>Each seat connects their own wallet. The app asks for a derived vault pubkey; it never sees a private key. Anyone can load `?treasury=` without connecting.</p>
+            <p>Connect a wallet and join an open seat. One wallet may hold more than one remaining seat. The app asks for a derived vault pubkey; it never sees a private key. Anyone can load `?treasury=` without connecting.</p>
             <label>Treasury id</label>
             <input value={treasuryId} onChange={(event) => setTreasuryId(event.target.value.trim())} />
             <div className="row">
@@ -292,7 +296,8 @@ function Shell() {
                 disabled={!wallet || !identityKey || !joinable || Boolean(busy)}
                 onClick={() => void run('Joining…', async () => {
                   if (!wallet || !identityKey || !joinable || !treasury) return
-                  const derived = await derivedVaultKey(wallet, treasury.id)
+                  const keyID = vaultKeyID(treasury.id, joinable.role, identityKey, treasury.signers)
+                  const derived = await derivedVaultKey(wallet, keyID)
                   const next = await joinTreasury(wallet, treasury, {
                     role: joinable.role,
                     identityKey,
@@ -343,7 +348,7 @@ function Shell() {
                     txid: funded.txid,
                     vout: funded.vout,
                     beef: funded.beef,
-                    lockingScriptHex: funded.lockingScriptHex
+                    lockingScriptHex: treasury.lockingScriptHex as string
                   })
                   setTreasury(next)
                   setNotice(`Funded ${funded.satoshis.toLocaleString()} sats.`)
@@ -375,7 +380,11 @@ function Shell() {
                   if (!isIdentityKey(payee)) throw new Error('Payee must be a 66-hex identity key')
                   const proposalId = newId()
                   const payeeLockingScriptHex = await lockPayeeOutput(wallet, payee, proposalId, memo)
-                  const derivedPubkey = await derivedVaultKey(wallet, treasury.id)
+                  const proposeRole = heldRoles(treasury.signers, identityKey)[0]
+                  const keyID = proposeRole
+                    ? vaultKeyID(treasury.id, proposeRole, identityKey, treasury.signers)
+                    : treasury.id
+                  const derivedPubkey = await derivedVaultKey(wallet, keyID)
                   const signature = await signProposal(wallet, {
                     v: 1,
                     treasuryId: treasury.id,
@@ -384,7 +393,7 @@ function Shell() {
                     payeeIdentityKey: payee,
                     memo,
                     payeeLockingScriptHex
-                  })
+                  }, keyID)
                   const next = await postProposal(wallet, treasury, {
                     proposalId,
                     identityKey,
@@ -396,7 +405,7 @@ function Shell() {
                     signature
                   })
                   setTreasury(next)
-                  setNotice('Proposal posted. The other signer approves next.')
+                  setNotice('Proposal posted. A remaining role still needs to approve.')
                 })}
               >
                 Propose
@@ -438,7 +447,10 @@ function Shell() {
                 disabled={!wallet || Boolean(busy)}
                 onApprove={() => void run('Approving…', async () => {
                   if (!wallet || !identityKey || !treasury) return
-                  const derivedPubkey = await derivedVaultKey(wallet, treasury.id)
+                  const role = nextOpenRole(heldRoles(treasury.signers, identityKey), proposal.approvals)
+                  if (!role) throw new Error('Every seat you hold has already approved')
+                  const keyID = vaultKeyID(treasury.id, role, identityKey, treasury.signers)
+                  const derivedPubkey = await derivedVaultKey(wallet, keyID)
                   const signature = await signProposal(wallet, {
                     v: 1,
                     treasuryId: treasury.id,
@@ -447,25 +459,30 @@ function Shell() {
                     payeeIdentityKey: proposal.payeeIdentityKey,
                     memo: proposal.memo,
                     payeeLockingScriptHex: proposal.payeeLockingScriptHex
-                  })
+                  }, keyID)
                   setTreasury(await postApproval(wallet, treasury, {
                     proposalId: proposal.id,
                     identityKey,
                     derivedPubkey,
                     signature,
-                    memo: proposal.memo
+                    memo: proposal.memo,
+                    role
                   }))
                 })}
                 onVaultSign={() => void run('Signing vault…', async () => {
                   if (!wallet || !identityKey || !treasury) return
-                  const derivedPubkey = await derivedVaultKey(wallet, treasury.id)
-                  const signature = await signVaultSpend(wallet, treasury, proposal)
+                  const role = nextOpenRole(heldRoles(treasury.signers, identityKey), proposal.p2msSigs)
+                  if (!role) throw new Error('Every seat you hold has already signed the vault')
+                  const keyID = vaultKeyID(treasury.id, role, identityKey, treasury.signers)
+                  const derivedPubkey = await derivedVaultKey(wallet, keyID)
+                  const signature = await signVaultSpend(wallet, treasury, proposal, keyID)
                   setTreasury(await postP2msSig(wallet, treasury, {
                     proposalId: proposal.id,
                     identityKey,
                     derivedPubkey,
                     signature,
-                    memo: proposal.memo
+                    memo: proposal.memo,
+                    role
                   }))
                 })}
                 onPay={() => void run('Broadcasting payment…', async () => {
@@ -527,32 +544,45 @@ function ProposalCard(props: {
   onPay: () => void
 }) {
   const { proposal, treasury, identityKey, disabled, onApprove, onVaultSign, onPay } = props
-  const already = proposal.approvals.some(
-    (row) => identityKey && row.identityKey === identityKey.toLowerCase()
-  )
-  const signedVault = proposal.p2msSigs.some(
-    (row) => identityKey && row.identityKey === identityKey.toLowerCase()
-  )
-  const canPay = proposal.status !== 'paid' && proposal.p2msSigs.length >= treasury.threshold
+  const held = heldRoles(treasury.signers, identityKey)
+  const nextApprove = nextOpenRole(held, proposal.approvals)
+  const nextVault = nextOpenRole(held, proposal.p2msSigs)
+  const approvedEnough = thresholdMet(uniqueApprovers(proposal.approvals).length, treasury.threshold)
+  const signedEnough = uniqueApprovers(proposal.p2msSigs).length >= treasury.threshold
+  const already = Boolean(identityKey) && (!nextApprove || approvedEnough)
+  const signedVault = Boolean(identityKey) && (!nextVault || signedEnough)
+  const priorApprove = held.some((role) => proposal.approvals.some((row) => row.role === role))
+  const priorVault = held.some((role) => proposal.p2msSigs.some((row) => row.role === role))
+  const approveLabel = already
+    ? 'Approved'
+    : priorApprove && nextApprove
+      ? `Approve as ${ROLE_LABEL[nextApprove]}`
+      : 'Approve'
+  const vaultLabel = signedVault
+    ? 'Vault signed'
+    : priorVault && nextVault
+      ? `Sign vault as ${ROLE_LABEL[nextVault]}`
+      : 'Sign vault spend'
+  const canPay = proposal.status !== 'paid' && uniqueApprovers(proposal.p2msSigs).length >= treasury.threshold
   return (
     <article className="proposal">
       <h3>{proposal.amountSats.toLocaleString()} sats</h3>
       <p>{proposal.memo}</p>
       <p className="meta">
         To {shortKey(proposal.payeeIdentityKey, 10)} · {proposal.status} ·
-        {' '}{proposal.approvals.length}/{treasury.threshold} approvals ·
-        {' '}{proposal.p2msSigs.length}/{treasury.threshold} vault signatures
+        {' '}{uniqueApprovers(proposal.approvals).length}/{treasury.threshold} approvals ·
+        {' '}{uniqueApprovers(proposal.p2msSigs).length}/{treasury.threshold} vault signatures
       </p>
       {proposal.txid && <p className="meta">txid {proposal.txid}</p>}
       <div className="row">
         {proposal.status !== 'paid' && (
           <button className="btn" disabled={disabled || already} onClick={onApprove}>
-            {already ? 'Approved' : 'Approve'}
+            {approveLabel}
           </button>
         )}
         {proposal.status === 'approved' && (
           <button className="btn" disabled={disabled || signedVault} onClick={onVaultSign}>
-            {signedVault ? 'Vault signed' : 'Sign vault spend'}
+            {vaultLabel}
           </button>
         )}
         {canPay && (

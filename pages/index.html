@@ -3,32 +3,69 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>BSV business ideas</title>
+    <title>Business ideas</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="app">
       <header class="masthead">
         <div>
-          <p class="eyebrow">BSV · v0</p>
-          <h1>BSV business ideas</h1>
+          <p class="eyebrow">v0</p>
+          <h1>Business ideas</h1>
           <p class="lede">
-            First versions, shipped fast. One static demo lives here; the HTTP 402
-            servers run from their repo folders (or later on a cluster).
+            Invoices first: send a payable, get a receipt. The receivable desk
+            is a collections list (this desk’s own registry), not a second
+            product. Tickets sit after invoices. Tickets and the desk persist
+            on the public overlay (<code>overlay-us-1.bsvb.tech</code> /
+            <code>tm_anytx</code>). Local Docker custom topics remain an
+            optional override. Chrome hides BSV Desktop until you Allow
+            “sirdeggen.github.io wants to Access other apps and services on this
+            device,” then Retry with Desktop unlocked.
           </p>
         </div>
       </header>
 
       <section class="cards" aria-label="Demos">
         <article class="card">
-          <p class="eyebrow live">Live</p>
+          <p class="eyebrow soon">Server</p>
+          <h2>Invoices</h2>
+          <p>Send a payable. Get a receipt.</p>
+          <p class="path">
+            <a href="https://github.com/sirdeggen/business-ideas/blob/main/invoices/README.md">How to run</a>
+          </p>
+        </article>
+
+        <article class="card">
+          <p class="eyebrow soon">Server</p>
+          <h2>Receivable desk</h2>
+          <p>
+            Who do we chase today? A collections list on this desk’s registry —
+            on time / a bit late / call them / board should know. Not a bank.
+            Register, list, and mark paid persist on the public overlay
+            (<code>overlay-us-1</code> / <code>tm_anytx</code> /
+            <code>ls_anytx</code>, filtered to receivable fields). Local Docker
+            <code>tm_receivables</code> is optional:
+            <code>cd receivable-desk &amp;&amp; docker compose up --build</code>
+            (overlay <strong>:8082</strong>, UI <strong>:5175</strong>).
+          </p>
+          <p class="path">Pages UI: <code>/receivables/</code></p>
+          <a class="btn" href="./receivables/">Open list</a>
+        </article>
+
+        <article class="card">
+          <p class="eyebrow soon">Server</p>
           <h2>Event tickets</h2>
           <p>
-            Mint a tranche, hold a QR, transfer by spend, redeem at the door.
-            Tickets are BSV UTXOs in a BRC-100 basket.
+            Tickets you can send, show on a phone, and spend at the door so they
+            can’t be used twice. Mint, transfer, redeem, and door lookup persist
+            on the public overlay (<code>overlay-us-1</code> /
+            <code>tm_anytx</code> / <code>ls_anytx</code>, filtered to Demo Night
+            tickets). Local Docker <code>tm_tickets</code> is optional:
+            <code>cd event-tickets &amp;&amp; docker compose up --build</code>
+            (overlay <strong>:8080</strong>, UI <strong>:5173</strong>).
           </p>
-          <p class="path">Pages path: <code>/tickets/</code></p>
-          <a class="btn primary" href="./tickets/">Open demo</a>
+          <p class="path">Pages UI: <code>/tickets/</code></p>
+          <a class="btn" href="./tickets/">Open UI</a>
         </article>
 
         <article class="card">
@@ -38,7 +75,7 @@
             Pay-per-crawl Ghost-class page. Readers and crawlers get an HTTP 402
             invoice in sats. Not static — Express + Docker.
           </p>
-          <p class="path">Live cluster path will be <code>/402-publisher</code></p>
+          <p class="path">Cluster path later: <code>/402-publisher</code></p>
           <div class="row">
             <a class="btn" href="https://github.com/sirdeggen/business-ideas/tree/main/402-publisher">Repo folder</a>
             <a class="btn" href="https://github.com/sirdeggen/business-ideas/blob/main/402-publisher/README.md">How to run</a>
@@ -52,10 +89,27 @@
             Paid MCP tools in sats. Payment is the credential — no signup, no API
             key. Not static — Express / MCP + Docker.
           </p>
-          <p class="path">Live cluster path will be <code>/402-mcp</code></p>
+          <p class="path">Cluster path later: <code>/402-mcp</code></p>
           <div class="row">
             <a class="btn" href="https://github.com/sirdeggen/business-ideas/tree/main/402-mcp">Repo folder</a>
             <a class="btn" href="https://github.com/sirdeggen/business-ideas/blob/main/402-mcp/README.md">How to run</a>
+          </div>
+        </article>
+
+        <article class="card">
+          <p class="eyebrow soon">Server</p>
+          <h2>Treasury</h2>
+          <p>
+            Shared treasury, two of three must agree. Board at
+            <code>?treasury=&lt;id&gt;</code> is lookup only (no wallet) and
+            persists on overlay-us-1 / <code>tm_anytx</code> /
+            <code>ls_anytx</code>. Create and join persist on Pages. A
+            stranger board works without Docker.
+          </p>
+          <p class="path">Pages UI: <code>/treasury/</code></p>
+          <div class="row">
+            <a class="btn" href="./treasury/">Open board</a>
+            <a class="btn" href="https://github.com/sirdeggen/business-ideas/blob/main/treasury/README.md">How to run</a>
           </div>
         </article>
       </section>
@@ -63,7 +117,6 @@
       <footer>
         Source:
         <a href="https://github.com/sirdeggen/business-ideas">sirdeggen/business-ideas</a>.
-        BSV only.
       </footer>
     </main>
   </body>

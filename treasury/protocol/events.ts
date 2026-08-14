@@ -367,8 +367,11 @@ export function reconstructTreasury(events: BoardEvent[]): Treasury | null {
       const role = asRole(event.payload.role) ?? 'chair'
       const derivedPubkey = asString(event.payload.derivedPubkey).toLowerCase()
       if (proposal && identityKey) {
-        if (event.payload.p2msSignature) {
-          if (!proposal.p2msSigs.some((row) => row.identityKey === identityKey)) {
+        const holdsRole = treasury.signers.some(
+          (signer) => signer.role === role && signer.identityKey === identityKey
+        )
+        if (holdsRole && event.payload.p2msSignature) {
+          if (!proposal.p2msSigs.some((row) => row.role === role)) {
             proposal.p2msSigs.push({
               identityKey,
               role,
@@ -377,7 +380,7 @@ export function reconstructTreasury(events: BoardEvent[]): Treasury | null {
               at: event.at
             })
           }
-        } else if (!proposal.approvals.some((row) => row.identityKey === identityKey)) {
+        } else if (holdsRole && !proposal.approvals.some((row) => row.role === role)) {
           proposal.approvals.push({
             identityKey,
             role,

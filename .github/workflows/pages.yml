@@ -23,21 +23,58 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: event-tickets/frontend/package-lock.json
+          cache-dependency-path: |
+            event-tickets/frontend/package-lock.json
+            receivable-desk/frontend/package-lock.json
+            invoices/frontend/package-lock.json
+            treasury/package-lock.json
+            treasury/frontend/package-lock.json
       - name: Install and build tickets
         working-directory: event-tickets/frontend
         env:
           VITE_BASE: /business-ideas/tickets/
-          VITE_OVERLAY_URL: http://localhost:8080
+          VITE_OVERLAY_URL: https://overlay-us-1.bsvb.tech
         run: |
+          npm ci
+          npm run build
+          cp dist/index.html dist/404.html
+      - name: Install and build receivables
+        working-directory: receivable-desk/frontend
+        env:
+          VITE_BASE: /business-ideas/receivables/
+          VITE_OVERLAY_URL: https://overlay-us-1.bsvb.tech
+        run: |
+          npm ci
+          npm run build
+          cp dist/index.html dist/404.html
+      - name: Install and build invoices
+        working-directory: invoices/frontend
+        env:
+          VITE_BASE: /business-ideas/invoices/
+          VITE_OVERLAY_URL: https://overlay-us-1.bsvb.tech
+        run: |
+          npm ci
+          npm run build
+          cp dist/index.html dist/404.html
+      - name: Install and build treasury
+        working-directory: treasury/frontend
+        env:
+          VITE_BASE: /business-ideas/treasury/
+          VITE_OVERLAY_URL: https://overlay-us-1.bsvb.tech
+        run: |
+          npm ci --prefix ..
           npm ci
           npm run build
           cp dist/index.html dist/404.html
       - name: Compose Pages site
         run: |
-          mkdir -p site/tickets
+          mkdir -p site/tickets site/receivables site/invoices site/treasury
           cp pages/index.html pages/styles.css site/
           cp -r event-tickets/frontend/dist/. site/tickets/
+          cp -r receivable-desk/frontend/dist/. site/receivables/
+          cp -r invoices/frontend/dist/. site/invoices/
+          cp -r treasury/frontend/dist/. site/treasury/
+          cp invoices/frontend/spa-404.html site/404.html
           touch site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:

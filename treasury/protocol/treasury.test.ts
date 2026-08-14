@@ -8,8 +8,11 @@ import {
   p2msLock,
   p2msSignData,
   planSpend,
+  nextOpenRole,
   requiredRoles,
   thresholdMet,
+  uniqueApprovers,
+  vaultKeyID,
   verifyWalletDataSignature
 } from './treasury.ts'
 
@@ -152,5 +155,110 @@ describe('policy treasury protocol', () => {
     assert.equal(thresholdMet(1, 2), false)
     assert.deepEqual(requiredRoles(2), ['treasurer', 'chair'])
     assert.deepEqual(requiredRoles(3), ['treasurer', 'chair', 'bookkeeper'])
+  })
+
+  it('counts distinct roles, not distinct identity keys', () => {
+    const one = PrivateKey.fromRandom().toPublicKey().toString()
+    const rows = [
+      { role: 'treasurer' as const, identityKey: one },
+      { role: 'chair' as const, identityKey: one },
+      { role: 'chair' as const, identityKey: one }
+    ]
+    const unique = uniqueApprovers(rows)
+    assert.equal(unique.length, 2)
+    assert.deepEqual(unique.map((row) => row.role), ['treasurer', 'chair'])
+    assert.equal(thresholdMet(unique.length, 2), true)
+    assert.equal(nextOpenRole(['treasurer', 'chair', 'bookkeeper'], unique), 'bookkeeper')
+    assert.equal(nextOpenRole(['treasurer', 'chair'], unique), undefined)
+  })
+
+  it('derives extra seats of the same identity with a per-role keyID', () => {
+    const one = PrivateKey.fromRandom().toPublicKey().toString()
+    const other = PrivateKey.fromRandom().toPublicKey().toString()
+    const signers = [
+      { role: 'treasurer' as const, identityKey: one, derivedPubkey: 'aa', joinedAt: '2026-08-01T10:01:00.000Z' },
+      { role: 'chair' as const, identityKey: one, derivedPubkey: 'bb', joinedAt: '2026-08-01T10:02:00.000Z' },
+      { role: 'bookkeeper' as const, identityKey: one }
+    ]
+    assert.equal(vaultKeyID('t-1', 'treasurer', one, signers), 't-1')
+    assert.equal(vaultKeyID('t-1', 'chair', one, signers), 't-1:chair')
+    assert.equal(vaultKeyID('t-1', 'bookkeeper', one, signers), 't-1:bookkeeper')
+    assert.equal(
+      vaultKeyID('t-1', 'chair', other, [
+        { role: 'treasurer', identityKey: one, derivedPubkey: 'aa' },
+        { role: 'chair', identityKey: other }
+      ]),
+      't-1'
+    )
+  })
+
+  it('2-of-3 P2MS spend works when two seats share one wallet via per-role keys', async () => {
+    const shared = new ProtoWallet(PrivateKey.fromRandom())
+    const bookkeeper = await signerWallet()
+    const { publicKey: treasurerKey } = await shared.getPublicKey({
+      protocolID: PROTOCOL_ID,
+      keyID: 'treasury-test',
+      counterparty: 'self'
+    })
+    const { publicKey: chairKey } = await shared.getPublicKey({
+      protocolID: PROTOCOL_ID,
+      keyID: 'treasury-test:chair',
+      counterparty: 'self'
+    })
+    assert.notEqual(treasurerKey, chairKey)
+    const pubkeys = [treasurerKey, chairKey, bookkeeper.derived]
+    const lockingScript = p2msLock(pubkeys, 2)
+    const sourceTXID = 'ab'.repeat(32)
+    const plan = {
+      sourceTXID,
+      sourceOutputIndex: 0,
+      sourceSatoshis: 20_000,
+      vaultLockingScriptHex: lockingScript.toHex(),
+      payeeLockingScriptHex: p2msLock(
+        [PrivateKey.fromRandom().toPublicKey().toString(), PrivateKey.fromRandom().toPublicKey().toString()],
+        2
+      ).toHex(),
+      amountSats: 12_000,
+      changeSats: 7_900,
+      feeSats: 100
+    }
+    const data = p2msSignData(plan)
+    const sigs: Record<string, number[]> = {}
+    const { signature: treasurerSig } = await shared.createSignature({
+      data,
+      protocolID: PROTOCOL_ID,
+      keyID: 'treasury-test',
+      counterparty: 'self'
+    })
+    const { signature: chairSig } = await shared.createSignature({
+      data,
+      protocolID: PROTOCOL_ID,
+      keyID: 'treasury-test:chair',
+      counterparty: 'self'
+    })
+    sigs[treasurerKey] = treasurerSig
+    sigs[chairKey] = chairSig
+    const unlockingScript = assembleP2msUnlockingScript({
+      pubkeys,
+      signaturesByPubkey: sigs,
+      threshold: 2
+    })
+    const spend = new Spend({
+      sourceTXID,
+      sourceOutputIndex: 0,
+      sourceSatoshis: 20_000,
+      lockingScript,
+      unlockingScript,
+      transactionVersion: 1,
+      otherInputs: [],
+      outputs: [
+        { satoshis: 12_000, lockingScript: LockingScript.fromHex(plan.payeeLockingScriptHex) },
+        { satoshis: 7_900, lockingScript }
+      ],
+      inputIndex: 0,
+      inputSequence: 0xffffffff,
+      lockTime: 0
+    })
+    assert.equal(spend.validate(), true)
   })
 })

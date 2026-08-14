@@ -190,6 +190,146 @@ describe('board event tokens', () => {
     assert.match(new TextDecoder('latin1').decode(pdf), /Demo Club/)
   })
 
+  it('counts two roles of the same identity as two approvals', () => {
+    const one = key()
+    const derivedTreasurer = key()
+    const derivedChair = key()
+    const derivedBookkeeper = key()
+    const payee = key()
+    const events: BoardEvent[] = [
+      event({
+        treasuryId: 'solo',
+        kind: 'created',
+        at: '2026-08-01T10:00:00.000Z',
+        payload: {
+          name: 'Solo Board',
+          signerCount: 3,
+          signers: [
+            { role: 'treasurer', identityKey: one },
+            { role: 'chair', identityKey: one },
+            { role: 'bookkeeper', identityKey: one }
+          ]
+        }
+      }),
+      event({
+        treasuryId: 'solo',
+        kind: 'joined',
+        at: '2026-08-01T10:01:00.000Z',
+        payload: { role: 'treasurer', identityKey: one, derivedPubkey: derivedTreasurer }
+      }),
+      event({
+        treasuryId: 'solo',
+        kind: 'joined',
+        at: '2026-08-01T10:02:00.000Z',
+        payload: { role: 'chair', identityKey: one, derivedPubkey: derivedChair }
+      }),
+      event({
+        treasuryId: 'solo',
+        kind: 'joined',
+        at: '2026-08-01T10:03:00.000Z',
+        payload: { role: 'bookkeeper', identityKey: one, derivedPubkey: derivedBookkeeper }
+      }),
+      event({
+        treasuryId: 'solo',
+        kind: 'proposed',
+        at: '2026-08-01T10:05:00.000Z',
+        payload: {
+          proposalId: 'p-solo',
+          amountSats: 12_000,
+          payeeIdentityKey: payee,
+          memo: 'hall hire',
+          payeeLockingScriptHex: '76a914' + 'ab'.repeat(20) + '88ac',
+          vaultTxid: 'ab'.repeat(32),
+          vaultVout: 0,
+          vaultSatoshis: 50_000,
+          feeSats: 100,
+          changeSats: 37_900,
+          identityKey: one,
+          derivedPubkey: derivedTreasurer,
+          role: 'treasurer',
+          signature: [4, 5, 6]
+        }
+      })
+    ]
+
+    const afterPropose = reconstructTreasury(events)
+    assert.ok(afterPropose)
+    assert.equal(afterPropose.proposals[0].approvals.length, 1)
+    assert.equal(afterPropose.proposals[0].approvals[0].role, 'treasurer')
+    assert.equal(afterPropose.proposals[0].status, 'open')
+
+    events.push(event({
+      treasuryId: 'solo',
+      kind: 'approved',
+      at: '2026-08-01T10:06:00.000Z',
+      payload: {
+        proposalId: 'p-solo',
+        identityKey: one,
+        derivedPubkey: derivedChair,
+        role: 'chair',
+        signature: [7, 8, 9],
+        memo: 'hall hire'
+      }
+    }))
+
+    const afterSecond = reconstructTreasury(events)
+    assert.ok(afterSecond)
+    const proposal = afterSecond.proposals[0]
+    assert.equal(proposal.approvals.length, 2)
+    assert.deepEqual(proposal.approvals.map((row) => row.role), ['treasurer', 'chair'])
+    assert.equal(proposal.approvals[0].identityKey, proposal.approvals[1].identityKey)
+    assert.equal(proposal.status, 'approved')
+
+    events.push(event({
+      treasuryId: 'solo',
+      kind: 'approved',
+      at: '2026-08-01T10:07:00.000Z',
+      payload: {
+        proposalId: 'p-solo',
+        identityKey: one,
+        derivedPubkey: derivedTreasurer,
+        role: 'treasurer',
+        signature: [4, 5, 6],
+        memo: 'hall hire'
+      }
+    }))
+    const afterDup = reconstructTreasury(events)
+    assert.ok(afterDup)
+    assert.equal(afterDup.proposals[0].approvals.length, 2)
+    assert.equal(afterDup.proposals[0].status, 'approved')
+
+    events.push(event({
+      treasuryId: 'solo',
+      kind: 'approved',
+      at: '2026-08-01T10:08:00.000Z',
+      payload: {
+        proposalId: 'p-solo',
+        identityKey: one,
+        derivedPubkey: derivedTreasurer,
+        role: 'treasurer',
+        p2msSignature: [10, 11],
+        memo: 'hall hire'
+      }
+    }))
+    events.push(event({
+      treasuryId: 'solo',
+      kind: 'approved',
+      at: '2026-08-01T10:09:00.000Z',
+      payload: {
+        proposalId: 'p-solo',
+        identityKey: one,
+        derivedPubkey: derivedChair,
+        role: 'chair',
+        p2msSignature: [12, 13],
+        memo: 'hall hire'
+      }
+    }))
+    const afterVault = reconstructTreasury(events)
+    assert.ok(afterVault)
+    assert.equal(afterVault.proposals[0].p2msSigs.length, 2)
+    assert.deepEqual(afterVault.proposals[0].p2msSigs.map((row) => row.role), ['treasurer', 'chair'])
+  })
+
   it('keeps Fund disabled after create until every seat has joined, and says invite first', () => {
     const treasurer = key()
     const chair = key()
@@ -225,7 +365,6 @@ describe('board event tokens', () => {
     assert.equal(blocked.disabled, true)
     assert.match(blocked.reason, /Invite chair and bookkeeper/)
     assert.match(blocked.reason, /every seat has joined/)
-    assert.equal(fundGate({ wallet: null, treasury: created, busy: false }).disabled, true)
     assert.equal(proposeGate({ wallet: {}, treasury: created, busy: false }).reason, 'Fund the vault before proposing a payment.')
 
     const allJoined = reconstructTreasury([

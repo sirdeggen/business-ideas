@@ -1,0 +1,25 @@
+{
+  "schema": "bsv-app",
+  "schemaVersion": "1.0",
+  "topicManagers": {
+    "tm_invoices": "./overlay/src/invoices/InvoicesTopicManager.ts"
+  },
+  "lookupServices": {
+    "ls_invoices": {
+      "serviceFactory": "./overlay/src/invoices/InvoicesLookupServiceFactory.ts",
+      "hydrateWith": "mongo"
+    }
+  },
+  "frontend": {
+    "language": "react",
+    "sourceDirectory": "./frontend"
+  },
+  "configs": [
+    {
+      "name": "Local LARS",
+      "network": "mainnet",
+      "provider": "LARS",
+      "run": ["backend", "frontend"]
+    }
+  ]
+}

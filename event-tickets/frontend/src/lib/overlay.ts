@@ -1,6 +1,28 @@
-import { Overlay } from '@bsv/simple/browser'
-import { DEMO_EVENT, LOOKUP_SERVICE, MAGIC, TICKET_TYPE, TOPIC } from '../../../protocol/ticket'
-import type { TicketPayload } from '../../../protocol/ticket'
+import {
+  HTTPSOverlayBroadcastFacilitator,
+  LookupResolver,
+  PushDrop,
+  TopicBroadcaster,
+  Transaction,
+  type LookupAnswer,
+  type OverlayBroadcastFacilitator,
+  type STEAK,
+  type TaggedBEEF
+} from '@bsv/sdk'
+import {
+  DEMO_EVENT,
+  LOOKUP_SERVICE,
+  MAGIC,
+  TICKET_TYPE,
+  TOPIC,
+  parseTicketFields,
+  type TicketPayload
+} from '../../../protocol/ticket'
+import {
+  PUBLIC_LOOKUP,
+  PUBLIC_TOPIC,
+  isLocalhostUrl
+} from './config'
 
 export interface OverlayTicket extends TicketPayload {
   txid: string
@@ -13,73 +35,171 @@ export interface SubmitResult {
   raw: unknown
 }
 
+export interface TicketQuery {
+  outpoint?: string
+  serial?: string
+  eventId?: string
+}
+
 function overlayUrl(base: string): string {
   return base.replace(/\/$/, '')
 }
 
-async function localOverlay(base: string): Promise<Overlay> {
-  const url = overlayUrl(base)
-  return Overlay.create({
-    topics: [TOPIC],
-    network: 'mainnet',
-    hostOverrides: {
-      [TOPIC]: [url],
-      [LOOKUP_SERVICE]: [url]
-    }
+export function usesPublicAnytx(base: string): boolean {
+  return !isLocalhostUrl(base)
+}
+
+export function overlayTopic(base: string): string {
+  return usesPublicAnytx(base) ? PUBLIC_TOPIC : TOPIC
+}
+
+export function overlayLookupService(base: string): string {
+  return usesPublicAnytx(base) ? PUBLIC_LOOKUP : LOOKUP_SERVICE
+}
+
+class HostPinnedFacilitator implements OverlayBroadcastFacilitator {
+  readonly host: string
+  readonly allowHTTP: boolean
+
+  constructor(host: string, allowHTTP: boolean) {
+    this.host = host
+    this.allowHTTP = allowHTTP
+  }
+
+  async send(_url: string, taggedBEEF: TaggedBEEF): Promise<STEAK> {
+    return new HTTPSOverlayBroadcastFacilitator(undefined, this.allowHTTP).send(this.host, taggedBEEF)
+  }
+}
+
+function createBroadcaster(host: string, topic: string): TopicBroadcaster {
+  const allowHTTP = host.startsWith('http://')
+  return new TopicBroadcaster([topic], {
+    // Skip SHIP discovery; the facilitator always posts to `host`.
+    networkPreset: 'local',
+    facilitator: new HostPinnedFacilitator(host, allowHTTP),
+    requireAcknowledgmentFromAllHostsForTopics: [],
+    requireAcknowledgmentFromAnyHostForTopics: 'any'
   })
+}
+
+function createResolver(host: string, service: string): LookupResolver {
+  const allowHTTP = host.startsWith('http://')
+  return new LookupResolver({
+    networkPreset: allowHTTP ? 'local' : 'mainnet',
+    hostOverrides: { [service]: [host] }
+  })
+}
+
+function ticketOutputIndexes(tx: Transaction): number[] {
+  const indexes: number[] = []
+  for (const [index, output] of tx.outputs.entries()) {
+    try {
+      if (parseTicketFields(PushDrop.decode(output.lockingScript).fields)) {
+        indexes.push(index)
+      }
+    } catch {
+      // Change and unrelated outputs are ignored.
+    }
+  }
+  return indexes
 }
 
 export async function submitTicketTx(base: string, beef: number[]): Promise<SubmitResult> {
-  const url = overlayUrl(base)
-  const response = await fetch(`${url}/submit`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-topics': TOPIC
-    },
-    body: JSON.stringify(beef)
-  })
-  const raw: unknown = await response.json().catch(() => undefined)
-  if (!response.ok) {
-    const message = (raw as { message?: string } | undefined)?.message
-    throw new Error(message || `Overlay /submit failed (${response.status})`)
+  const host = overlayUrl(base)
+  const topic = overlayTopic(host)
+  const tx = Transaction.fromBEEF(beef)
+  const overlay = createBroadcaster(host, topic)
+  const result = await tx.broadcast(overlay)
+  if (result.status !== 'success') {
+    const description = 'description' in result ? result.description : ''
+    throw new Error(
+      description
+        ? `Overlay broadcast to ${topic} at ${host} failed: ${description}`
+        : `Overlay broadcast to ${topic} at ${host} failed`
+    )
   }
-  const topicResult = (raw as Record<string, { outputsToAdmit?: number[] }>)?.[TOPIC]
   return {
-    admitted: topicResult?.outputsToAdmit ?? [],
-    raw
+    admitted: ticketOutputIndexes(tx),
+    raw: result
   }
 }
 
-export async function lookupTickets(
-  base: string,
-  query: { outpoint?: string, serial?: string, eventId?: string }
-): Promise<OverlayTicket[]> {
-  const url = overlayUrl(base)
-  try {
-    const overlay = await localOverlay(url)
-    const outputs = await overlay.lookupOutputs(LOOKUP_SERVICE, query)
-    if (outputs.length > 0) {
-      return outputs.map((output) =>
-        fromContext(output.context, output.outputIndex) ?? ticketStub({ outputIndex: output.outputIndex })
-      )
-    }
-  } catch {
-    // Fall through to direct /lookup against the configured node.
+export async function lookupTickets(base: string, query: TicketQuery = {}): Promise<OverlayTicket[]> {
+  const host = overlayUrl(base)
+  const service = overlayLookupService(host)
+  const resolver = createResolver(host, service)
+  const answers = usesPublicAnytx(host)
+    ? await queryAnytx(resolver, service, query)
+    : [await resolver.query(localLookupQuestion(service, query), 15000)]
+
+  const tickets = answers.flatMap(ticketsFromAnswer)
+  return tickets.filter((ticket) => matchesTicketQuery(ticket, query))
+}
+
+function localLookupQuestion(service: string, query: TicketQuery): { service: string, query: TicketQuery } {
+  return { service, query }
+}
+
+async function queryAnytx(
+  resolver: LookupResolver,
+  service: string,
+  query: TicketQuery
+): Promise<LookupAnswer[]> {
+  if (query.outpoint) {
+    const [txid] = query.outpoint.split('.')
+    return [await resolver.query({ service, query: { txid } }, 20000)]
   }
 
-  const response = await fetch(`${url}/lookup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      service: LOOKUP_SERVICE,
-      query
-    })
-  })
-  if (!response.ok) {
-    throw new Error(`Overlay /lookup failed (${response.status})`)
+  const answers: LookupAnswer[] = []
+  const pageSize = 100
+  for (let page = 0; page < 5; page++) {
+    const answer = await resolver.query({
+      service,
+      query: { limit: pageSize, skip: page * pageSize, sortOrder: 'desc' }
+    }, 20000)
+    answers.push(answer)
+    const count = answer.type === 'output-list' ? answer.outputs.length : 0
+    if (count < pageSize) break
   }
-  return unwrapLookup(await response.json())
+  return answers
+}
+
+function ticketsFromAnswer(answer: LookupAnswer): OverlayTicket[] {
+  if (answer.type !== 'output-list' || !Array.isArray(answer.outputs)) return []
+  return answer.outputs.flatMap((output) => {
+    const fromScript = ticketFromBeef(output.beef, output.outputIndex)
+    if (fromScript) return [fromScript]
+    const fromCtx = fromContext(output.context, output.outputIndex)
+    return fromCtx ? [fromCtx] : []
+  })
+}
+
+function ticketFromBeef(beef: number[] | undefined, outputIndex: number): OverlayTicket | null {
+  if (!beef || beef.length === 0) return null
+  try {
+    const tx = Transaction.fromBEEF(beef)
+    const output = tx.outputs[outputIndex]
+    if (!output) return null
+    const ticket = parseTicketFields(PushDrop.decode(output.lockingScript).fields)
+    if (!ticket) return null
+    return {
+      ...ticket,
+      txid: tx.id('hex'),
+      outputIndex
+    }
+  } catch {
+    return null
+  }
+}
+
+function matchesTicketQuery(ticket: OverlayTicket, query: TicketQuery): boolean {
+  if (query.outpoint) {
+    const [txid, vout] = query.outpoint.split('.')
+    if (ticket.txid !== txid || ticket.outputIndex !== Number(vout)) return false
+  }
+  if (query.serial && ticket.serial !== query.serial) return false
+  if (query.eventId && ticket.eventId !== query.eventId) return false
+  return true
 }
 
 function ticketStub(partial: Partial<OverlayTicket> & { outputIndex: number }): OverlayTicket {
@@ -107,39 +227,64 @@ function fromContext(context: number[] | undefined, outputIndex: number): Overla
   }
 }
 
-function unwrapLookup(body: unknown): OverlayTicket[] {
-  if (Array.isArray(body)) {
-    return body.flatMap((item) => {
-      if (item && typeof item === 'object' && 'txid' in item && 'outputIndex' in item) {
-        const row = item as OverlayTicket & { context?: number[] }
-        return [fromContext(row.context, row.outputIndex) ?? ticketStub(row)]
-      }
-      return []
-    })
-  }
-  if (body && typeof body === 'object') {
-    const typed = body as {
-      type?: string
-      result?: unknown
-      outputs?: Array<{ outputIndex: number, context?: number[] }>
-    }
-    if (typed.type === 'output-list' && Array.isArray(typed.outputs)) {
-      return typed.outputs.map((output) =>
-        fromContext(output.context, output.outputIndex) ?? ticketStub({ outputIndex: output.outputIndex })
-      )
-    }
-    if (Array.isArray(typed.result)) return unwrapLookup(typed.result)
-  }
-  return []
+export interface OverlayPing {
+  ok: boolean
+  error?: string
 }
 
-export async function pingOverlay(base: string): Promise<boolean> {
-  try {
-    const response = await fetch(`${overlayUrl(base)}/version`)
-    if (response.ok) return true
-    const health = await fetch(`${overlayUrl(base)}/health/live`)
-    return health.ok
-  } catch {
-    return false
+function fetchFailure(path: string, error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (!message.trim() || /failed to fetch/i.test(message)) {
+    return `Failed to fetch ${path}`
   }
+  return `Failed to fetch ${path}: ${message}`
+}
+
+async function probeGet(host: string, path: string): Promise<OverlayPing> {
+  try {
+    const response = await fetch(`${host}${path}`)
+    if (response.ok) return { ok: true }
+    return { ok: false, error: `GET ${path} failed: ${response.status}` }
+  } catch (error) {
+    return { ok: false, error: fetchFailure(path, error) }
+  }
+}
+
+function isLiveHealthBody(body: unknown): boolean {
+  if (!body || typeof body !== 'object') return false
+  const record = body as { status?: unknown, live?: unknown }
+  return record.status === 'ok' && record.live === true
+}
+
+/**
+ * Pages: /version has no CORS and throws "Failed to fetch". Probe /health/live
+ * first so that throw is not treated as overlay-offline. /version stays a
+ * last-resort fallback for local Docker, isolated so a CORS failure continues.
+ */
+export async function pingOverlay(base: string): Promise<OverlayPing> {
+  const host = overlayUrl(base)
+  const errors: string[] = []
+
+  const live = await probeGet(host, '/health/live')
+  if (live.ok) return { ok: true }
+  if (live.error) errors.push(live.error)
+
+  try {
+    const response = await fetch(`${host}/health`)
+    if (response.ok) {
+      const body = await response.json().catch(() => null)
+      if (isLiveHealthBody(body)) return { ok: true }
+      errors.push('GET /health did not report { status: ok, live: true }')
+    } else {
+      errors.push(`GET /health failed: ${response.status}`)
+    }
+  } catch (error) {
+    errors.push(fetchFailure('/health', error))
+  }
+
+  const version = await probeGet(host, '/version')
+  if (version.ok) return { ok: true }
+  if (version.error) errors.push(version.error)
+
+  return { ok: false, error: errors[0] ?? 'Overlay check failed' }
 }

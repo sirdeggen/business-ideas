@@ -13,13 +13,13 @@ import {
   p2msSignData,
   vaultInstructions
 } from '../../../protocol/treasury'
-import { vaultLockFromJoined, type Proposal, type Treasury } from '../../../protocol/events'
+import type { Proposal, Treasury } from '../../../protocol/events'
 import { originator } from './config'
 
-export async function derivedVaultKey(wallet: WalletClient, treasuryId: string): Promise<string> {
+export async function derivedVaultKey(wallet: WalletClient, keyID: string): Promise<string> {
   const { publicKey } = await wallet.getPublicKey({
     protocolID: PROTOCOL_ID,
-    keyID: treasuryId,
+    keyID,
     counterparty: 'self'
   })
   return publicKey
@@ -27,12 +27,13 @@ export async function derivedVaultKey(wallet: WalletClient, treasuryId: string):
 
 export async function signProposal(
   wallet: WalletClient,
-  proposal: Parameters<typeof canonicalProposalBytes>[0]
+  proposal: Parameters<typeof canonicalProposalBytes>[0],
+  keyID = proposal.treasuryId
 ): Promise<number[]> {
   const { signature } = await wallet.createSignature({
     data: canonicalProposalBytes(proposal),
     protocolID: PROTOCOL_ID,
-    keyID: proposal.treasuryId,
+    keyID,
     counterparty: 'self'
   })
   return signature
@@ -63,19 +64,24 @@ export async function fundVault(
   wallet: WalletClient,
   treasury: Treasury,
   satoshis: number
-): Promise<{ txid: string; vout: number; beef: number[]; satoshis: number; lockingScriptHex: string }> {
-  const lock = vaultLockFromJoined(treasury.signers)
-  if (!lock) throw new Error('Invite the other signers first. Fund unlocks when every seat has joined.')
+): Promise<{ txid: string; vout: number; beef: number[]; satoshis: number }> {
+  if (!treasury.lockingScriptHex) {
+    throw new Error('Invite the other signers first. Fund unlocks when every seat has joined.')
+  }
   if (satoshis < 1) throw new Error('Fund at least 1 sat')
+  const pubkeys = treasury.signers.map((signer) => {
+    if (!signer.derivedPubkey) throw new Error(`${signer.role} has not joined`)
+    return signer.derivedPubkey
+  })
   const response = await wallet.createAction({
     description: `Fund ${treasury.name}`.slice(0, 50),
     outputs: [{
       satoshis,
-      lockingScript: lock.lockingScriptHex,
-      outputDescription: `${lock.threshold}-of-${lock.pubkeys.length} treasury vault`,
+      lockingScript: treasury.lockingScriptHex,
+      outputDescription: '2-of-n treasury vault',
       basket: BASKET,
       customInstructions: JSON.stringify(
-        vaultInstructions(treasury.id, lock.pubkeys, lock.threshold)
+        vaultInstructions(treasury.id, pubkeys, treasury.threshold)
       ),
       tags: [BASKET, 'vault']
     }],
@@ -87,14 +93,13 @@ export async function fundVault(
   }
   const tx = Transaction.fromBEEF(response.tx as number[])
   const vout = tx.outputs.findIndex(
-    (output) => output.lockingScript.toHex() === lock.lockingScriptHex
+    (output) => output.lockingScript.toHex() === treasury.lockingScriptHex
   )
   return {
     txid: response.txid,
     vout: vout >= 0 ? vout : 0,
     beef: response.tx as number[],
-    satoshis,
-    lockingScriptHex: lock.lockingScriptHex
+    satoshis
   }
 }
 
@@ -110,14 +115,14 @@ function vaultFor(proposal: Proposal, treasury: Treasury) {
 export async function signVaultSpend(
   wallet: WalletClient,
   treasury: Treasury,
-  proposal: Proposal
+  proposal: Proposal,
+  keyID = treasury.id
 ): Promise<number[]> {
   const plan = {
     sourceTXID: proposal.vaultTxid,
     sourceOutputIndex: proposal.vaultVout,
     sourceSatoshis: proposal.vaultSatoshis,
-    vaultLockingScriptHex: (vaultLockFromJoined(treasury.signers)?.lockingScriptHex ??
-      treasury.lockingScriptHex) as string,
+    vaultLockingScriptHex: treasury.lockingScriptHex as string,
     payeeLockingScriptHex: proposal.payeeLockingScriptHex,
     amountSats: proposal.amountSats,
     changeSats: proposal.changeSats,
@@ -126,7 +131,7 @@ export async function signVaultSpend(
   const { signature } = await wallet.createSignature({
     data: p2msSignData(plan),
     protocolID: PROTOCOL_ID,
-    keyID: treasury.id,
+    keyID,
     counterparty: 'self'
   })
   return signature
@@ -138,16 +143,15 @@ export async function broadcastVaultSpend(
   proposal: Proposal
 ): Promise<{ txid: string; tx: number[]; changeVout?: number }> {
   const utxo = vaultFor(proposal, treasury)
-  const lock = vaultLockFromJoined(treasury.signers)
-  if (!lock) throw new Error('Vault locking script missing')
+  const pubkeys = treasury.signers.map((signer) => signer.derivedPubkey as string)
   const signaturesByPubkey: Record<string, number[]> = {}
   for (const row of proposal.p2msSigs) {
     signaturesByPubkey[row.derivedPubkey] = row.signature
   }
   const unlocking = assembleP2msUnlockingScript({
-    pubkeys: lock.pubkeys,
+    pubkeys,
     signaturesByPubkey,
-    threshold: lock.threshold
+    threshold: treasury.threshold
   })
   const outputs: Array<{
     satoshis: number
@@ -161,14 +165,14 @@ export async function broadcastVaultSpend(
     lockingScript: proposal.payeeLockingScriptHex,
     outputDescription: proposal.memo.slice(0, 50)
   }]
-  if (proposal.changeSats > 0) {
+  if (proposal.changeSats > 0 && treasury.lockingScriptHex) {
     outputs.push({
       satoshis: proposal.changeSats,
-      lockingScript: lock.lockingScriptHex,
+      lockingScript: treasury.lockingScriptHex,
       outputDescription: 'treasury change',
       basket: BASKET,
       customInstructions: JSON.stringify(
-        vaultInstructions(treasury.id, lock.pubkeys, lock.threshold)
+        vaultInstructions(treasury.id, pubkeys, treasury.threshold)
       ),
       tags: [BASKET, 'change']
     })
@@ -195,7 +199,7 @@ export async function broadcastVaultSpend(
   const changeVout = proposal.changeSats > 0
     ? tx.outputs.findIndex((output) =>
       output.satoshis === proposal.changeSats &&
-      output.lockingScript.toHex() === lock.lockingScriptHex
+      output.lockingScript.toHex() === treasury.lockingScriptHex
     )
     : -1
 
