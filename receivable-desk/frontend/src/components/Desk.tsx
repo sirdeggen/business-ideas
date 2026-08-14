@@ -18,9 +18,10 @@ import {
   CHROME_ALLOW_HINT,
   DESKTOP_INSTALL_URL,
   errorMessage,
-  formatSats,
   overlayCheckFailed
 } from '../lib/config'
+import { partyName, workRowTitle } from '../lib/display'
+import { fetchUsdPerBsv, formatInvoiceAmount } from '../lib/money'
 import { loadChaseRows, saveChaseRows } from '../lib/persist'
 import {
   formatLookupDiagnostic,
@@ -28,7 +29,6 @@ import {
   usesPublicAnytx,
   type OverlayReceivable
 } from '../lib/overlay'
-import { partyName } from './InvoiceCard'
 
 function previewRows(): OverlayReceivable[] {
   return sampleReceivables()
@@ -36,9 +36,11 @@ function previewRows(): OverlayReceivable[] {
     .map((item, outputIndex) => ({ ...item, txid: 'sample', outputIndex }))
 }
 
-function reminderText(row: OverlayReceivable, late: number, aging: AgingLabel): string {
+function reminderText(row: OverlayReceivable, late: number, aging: AgingLabel, amount: string): string {
   const lateBit = late > 0 ? `${late} days late (${aging})` : aging
-  return `Reminder: ${partyName(row.debtor)} still owes ${formatSats(row.amountSats)} on ${row.invoiceId}, due ${row.dueDate} — ${lateBit}.`
+  const who = partyName(row.debtor) || row.invoiceId
+  const owed = amount || row.invoiceId
+  return `Reminder: ${who} still owes ${owed} on ${row.invoiceId}, due ${row.dueDate} — ${lateBit}.`
 }
 
 export function Desk() {
@@ -52,7 +54,10 @@ export function Desk() {
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
+  const [usdPerBsv, setUsdPerBsv] = useState<number | null>(null)
   const canSettle = online === true
+
+  const amountLabel = (row: OverlayReceivable): string => formatInvoiceAmount(row.amountSats, usdPerBsv)
 
   const refresh = async (connectIfNeeded = false): Promise<void> => {
     const notes: string[] = []
@@ -122,6 +127,12 @@ export function Desk() {
     })
   }, [wallet, url])
 
+  useEffect(() => {
+    void fetchUsdPerBsv()
+      .then(setUsdPerBsv)
+      .catch(() => setUsdPerBsv(null))
+  }, [])
+
   const grouped = useMemo(() => {
     const buckets = Object.fromEntries(AGING_LABELS.map((label) => [label, [] as OverlayReceivable[]])) as Record<
       AgingLabel,
@@ -139,7 +150,7 @@ export function Desk() {
   const sendReminder = async (row: OverlayReceivable): Promise<void> => {
     const late = Math.max(0, daysLate(row.dueDate))
     const aging = agingLabel(daysLate(row.dueDate))
-    await navigator.clipboard.writeText(reminderText(row, late, aging))
+    await navigator.clipboard.writeText(reminderText(row, late, aging, amountLabel(row)))
     setCopied(row.invoiceId)
     window.setTimeout(() => setCopied(null), 1500)
   }
@@ -221,10 +232,10 @@ export function Desk() {
             return (
               <article key={`${row.txid}.${row.outputIndex}`} className="work-row">
                 <div>
-                  <strong>{partyName(row.debtor)}</strong>
+                  <strong>{workRowTitle(row.debtor, row.invoiceId)}</strong>
                   <span className="work-id">{row.invoiceId}</span>
                 </div>
-                <div className="work-amount">{formatSats(row.amountSats)}</div>
+                <div className="work-amount">{amountLabel(row)}</div>
                 <div className="work-late">{late === 0 ? '0' : String(late)}</div>
                 <div className="row work-actions">
                   <button className="btn" onClick={() => void sendReminder(row)}>

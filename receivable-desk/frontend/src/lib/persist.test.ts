@@ -64,4 +64,15 @@ describe('chase persist', () => {
     const withNamed = unionChaseRows([named], [], loadChaseRows())
     expect(withNamed.map((item) => item.invoiceId).sort()).toEqual(['QA-0813-DESK', 'QA-0813-NAMED'])
   })
+
+  it('collapses two QA-0813-DESK copies into one row', () => {
+    const copy = chaseRowFromRegister({
+      ...row,
+      debtor: 'QA Debtor'
+    }, 'cc'.repeat(32), 1)
+    const combined = unionChaseRows([row], [], [copy])
+    expect(combined).toHaveLength(1)
+    expect(combined[0].invoiceId).toBe('QA-0813-DESK')
+    expect(combined[0].debtor).toBe('QA Debtor')
+  })
 })

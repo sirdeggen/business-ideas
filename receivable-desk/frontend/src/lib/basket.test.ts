@@ -171,4 +171,16 @@ describe('receivables basket list', () => {
       primary: { basket: BASKET, listed: 1, totalOutputs: 1, spendable: 1, parsed: 1, unparsed: [] }
     })).toBe('')
   })
+
+  it('dedupes the same invoice on identity or outpoint and prefers the name', () => {
+    const hex = invoice()
+    const named = invoice({ debtor: 'QA Debtor', amountSats: 245 })
+    const overlay = { ...hex, amountSats: 1, txid: 'aa'.repeat(32), outputIndex: 0 }
+    const remembered = { ...named, txid: 'bb'.repeat(32), outputIndex: 1 }
+    const rows = unionChaseRows([overlay], [], [remembered])
+    expect(rows).toHaveLength(1)
+    expect(rows[0].invoiceId).toBe('QA-0813-DESK')
+    expect(rows[0].debtor).toBe('QA Debtor')
+    expect(rows[0].amountSats).toBe(245)
+  })
 })
