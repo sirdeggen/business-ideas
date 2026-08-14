@@ -5,15 +5,10 @@ import {
   daysLate,
   type AgingLabel
 } from '../../../protocol/receivable'
-import { sampleReceivables } from '../../../protocol/samples'
 import { useOverlay } from '../context/OverlayContext'
 import { useWallet } from '../context/WalletContext'
-import {
-  inspectHeldReceivables,
-  settleReceivable,
-  type HeldReceivable
-} from '../lib/actions'
-import { formatBasketDiagnostic, unionChaseRows } from '../lib/basket'
+import { settleReceivable, type HeldReceivable } from '../lib/actions'
+import { loadChaseList } from '../lib/chase'
 import {
   CHROME_ALLOW_HINT,
   DESKTOP_INSTALL_URL,
@@ -22,19 +17,8 @@ import {
 } from '../lib/config'
 import { partyName, workRowTitle } from '../lib/display'
 import { fetchUsdPerBsv, formatInvoiceAmount } from '../lib/money'
+import { type OverlayReceivable } from '../lib/overlay'
 import { loadChaseRows, saveChaseRows } from '../lib/persist'
-import {
-  formatLookupDiagnostic,
-  inspectLookupReceivables,
-  usesPublicAnytx,
-  type OverlayReceivable
-} from '../lib/overlay'
-
-function previewRows(): OverlayReceivable[] {
-  return sampleReceivables()
-    .filter((item) => item.status !== 'paid')
-    .map((item, outputIndex) => ({ ...item, txid: 'sample', outputIndex }))
-}
 
 function reminderText(row: OverlayReceivable, late: number, aging: AgingLabel, amount: string): string {
   const lateBit = late > 0 ? `${late} days late (${aging})` : aging
@@ -59,65 +43,15 @@ export function Desk() {
 
   const amountLabel = (row: OverlayReceivable): string => formatInvoiceAmount(row.amountSats, usdPerBsv)
 
-  const refresh = async (connectIfNeeded = false): Promise<void> => {
-    const notes: string[] = []
+  const refresh = async (): Promise<void> => {
     const remembered = loadChaseRows()
-    let activeWallet = wallet
-    if (!activeWallet && connectIfNeeded) {
-      const result = await connect()
-      activeWallet = result?.wallet ?? null
-    }
-    let heldItems: HeldReceivable[] = []
-    try {
-      const inspection = await inspectHeldReceivables(activeWallet)
-      heldItems = inspection.held
-      setHeld(heldItems)
-      const basketNote = formatBasketDiagnostic(inspection)
-      if (basketNote) notes.push(basketNote)
-    } catch (err) {
-      console.error('Desk basket list failed', err)
-      notes.push(errorMessage(err, 'refresh'))
-      setHeld([])
-    }
-
-    const finish = (overlayRows: OverlayReceivable[], previewMode: boolean): void => {
-      const combined = unionChaseRows(overlayRows, heldItems, remembered)
-      if (combined.length > 0) saveChaseRows(combined)
-      setRows(combined)
-      setPreview(previewMode)
-      setError(notes.length > 0 ? notes.join(' ') : null)
-      setLoaded(true)
-    }
-
-    try {
-      const lookup = await inspectLookupReceivables(url, { status: 'unpaid' })
-      const lookupNote = formatLookupDiagnostic(lookup, usesPublicAnytx(url))
-      if (lookupNote) notes.push(lookupNote)
-      finish(lookup.rows, false)
-      return
-    } catch (err) {
-      console.error('Desk lookup failed', err)
-      notes.push(errorMessage(err, 'refresh'))
-    }
-
-    const fromBasket = unionChaseRows([], heldItems, remembered)
-    if (fromBasket.length > 0) {
-      saveChaseRows(fromBasket)
-      setRows(fromBasket)
-      setPreview(false)
-      setError(notes.length > 0 ? notes.join(' ') : null)
-      setLoaded(true)
-      return
-    }
-
-    if (usesPublicAnytx(url)) {
-      setRows(remembered)
-      setPreview(false)
-      setError(notes.length > 0 ? notes.join(' ') : null)
-      setLoaded(true)
-      return
-    }
-    finish(previewRows(), true)
+    const result = await loadChaseList(url, wallet, remembered)
+    if (result.rows.length > 0) saveChaseRows(result.rows)
+    setHeld(result.held)
+    setRows(result.rows)
+    setPreview(result.preview)
+    setError(result.error)
+    setLoaded(true)
   }
 
   useEffect(() => {
@@ -198,18 +132,22 @@ export function Desk() {
       {preview && (
         <p className="hint">Showing sample invoices because the local index is not running.</p>
       )}
-      <button className="btn" onClick={() => void refresh(true)}>Refresh list</button>
+      <button className="btn" onClick={() => void refresh()}>Refresh list</button>
       {status && <p className="status ok">{status}</p>}
-      {(error || walletError) && <p className="status err">{error || walletError}</p>}
-      {(error || walletError) && (
+      {error && <p className="status err">{error}</p>}
+      {error && (
+        <button className="btn" style={{ marginTop: 8 }} onClick={() => void refresh()}>Retry</button>
+      )}
+      {walletError && <p className="status err">{walletError}</p>}
+      {walletError && (
         <div className="row" style={{ marginTop: 8 }}>
-          <button className="btn primary" onClick={() => void refresh(true)}>Retry</button>
+          <button className="btn primary" onClick={() => void connect()}>Retry</button>
           <a className="btn" href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">
             Install BSV Desktop
           </a>
         </div>
       )}
-      {(error === CHROME_ALLOW_HINT || walletError === CHROME_ALLOW_HINT) && (
+      {walletError === CHROME_ALLOW_HINT && (
         <p className="hint">{CHROME_ALLOW_HINT}</p>
       )}
 
