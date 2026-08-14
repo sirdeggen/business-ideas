@@ -48,7 +48,7 @@ Paid MCP tools in sats. Payment is the credential — no signup, no API key. Exp
 
 ## Treasury
 
-Shared treasury, two of three must agree. The public board/lookup path is live on Pages. Board at `?treasury=<id>` is lookup only (no wallet). Create and join persist on Pages; a stranger board works without Docker. Not a custodian.
+Shared treasury, two of three must agree. Board at `?treasury=<id>` is lookup only (no wallet). Create and join persist on Pages; a stranger board works without Docker. Not a custodian.
 
 Persists on public overlay-us-1 / `tm_anytx` / `ls_anytx`. Local Docker is optional, not required.
 
