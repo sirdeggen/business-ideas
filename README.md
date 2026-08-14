@@ -48,9 +48,9 @@ Paid MCP tools in sats. Payment is the credential — no signup, no API key. Exp
 
 ## Treasury
 
-Shared treasury, two of three must agree. Create, invite signers, fund, propose, approve. Board at `?treasury=<id>` is lookup only (no wallet). Not a custodian.
+Shared treasury, two of three must agree. The public board/lookup path is live on Pages. Board at `?treasury=<id>` is lookup only (no wallet). Create and join persist on Pages; a stranger board works without Docker. Not a custodian.
 
-Persists on public overlay-us-1 / `tm_anytx` / `ls_anytx`. Message Box at gmb.bsvblockchain.tech for propose/approve. Local Docker is optional, not required.
+Persists on public overlay-us-1 / `tm_anytx` / `ls_anytx`. Local Docker is optional, not required.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/treasury/
 - Optional local: `cd treasury && docker compose up --build`
