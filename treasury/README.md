@@ -14,12 +14,14 @@ https://sirdeggen.github.io/business-ideas/treasury/?treasury=fd99a97b-0415-4036
 
 After create, the invite is `?treasury=<id>&tx=<createdTxid>` so `ls_anytx { txid }` can find the announcement even when the global firehose is empty. `?treasury=<id>` alone still works: retry, page, date window, then last-good cache.
 
-What a stranger sees:
+What a stranger sees on `?treasury=` (first screen, in this order):
 
 - Board name
 - Minutes (propose, approve, paid) in plain language
-- Approve / Decline on open proposals — wallet is requested **after** Approve (or Decline)
+- Open proposals with Approve / Decline — wallet is requested **after** Approve (or Decline)
 - Honest overlay status: checking / online / lookup failed (minutes may be cached)
+
+Fund, vault balance, Propose, and identity-key fields are **not** on that screen. They mount only after **Treasurer tools** is opened. Do not lead with a dead Fund or “0 sats.”
 
 Empty states (never a fake empty book while lookup is in flight or failed):
 

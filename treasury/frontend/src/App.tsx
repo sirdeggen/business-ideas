@@ -10,6 +10,7 @@ import {
   type Role
 } from '../../protocol/treasury'
 import { downloadCsv, downloadPdf } from '../../protocol/export'
+import { vaultBalanceCopy } from '../../protocol/board'
 import { fundGate, inviteHeadline, proposeGate } from '../../protocol/events'
 import {
   minutesAgo,
@@ -102,6 +103,7 @@ function Shell() {
   const [fail, setFail] = useState('')
   const [toolsOpen, setToolsOpen] = useState(!fromUrl)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [inviteNext, setInviteNext] = useState(false)
 
   const [name, setName] = useState('Demo Club')
   const [signerCount, setSignerCount] = useState<2 | 3>(3)
@@ -303,22 +305,26 @@ function Shell() {
       {fail && <div className="status err">{fail}</div>}
       {notice && <div className="status ok">{notice}</div>}
       {busy && <div className="status">{busy}</div>}
-      {connecting && <div className="status">Waiting for BSV wallet…</div>}
-      {error && <div className="status err">{error}</div>}
+      {busy && connecting && <div className="status">Waiting for BSV wallet…</div>}
+      {busy && error && <div className="status err">{error}</div>}
 
       {boardMode && (
-        <>
-          {invite && treasury && (
-            <section className="panel">
-              <h2>{invite}</h2>
-              <p>Copy the invite and send it to the empty seats. Fund stays locked until every seat has joined.</p>
-              <div className="row">
-                <button className="btn primary" onClick={() => void copyInvite()}>
-                  Copy invite
-                </button>
-              </div>
-            </section>
-          )}
+        <div className="stranger-board">
+          <section className="panel">
+            <h2>Minutes</h2>
+            {treasury?.feed.length ? (
+              <ol className="feed">
+                {treasury.feed.map((event) => (
+                  <li key={event.id}>
+                    <time>{minutesAgo(event.at)}</time>
+                    {event.text}
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="hint">{emptyCopy}</p>
+            )}
+          </section>
 
           <section className="panel">
             <h2>Open proposals</h2>
@@ -341,22 +347,18 @@ function Shell() {
             )}
           </section>
 
-          <section className="panel">
-            <h2>Minutes</h2>
-            {treasury?.feed.length ? (
-              <ol className="feed">
-                {treasury.feed.map((event) => (
-                  <li key={event.id}>
-                    <time>{minutesAgo(event.at)}</time>
-                    {event.text}
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <p className="hint">{emptyCopy}</p>
-            )}
-          </section>
-        </>
+          {inviteNext && invite && treasury && (
+            <section className="panel">
+              <h2>{invite}</h2>
+              <p>Copy invite is the next step.</p>
+              <div className="row">
+                <button className="btn primary" onClick={() => void copyInvite()}>
+                  Copy invite
+                </button>
+              </div>
+            </section>
+          )}
+        </div>
       )}
 
       {!boardMode && (
@@ -386,6 +388,8 @@ function Shell() {
 
       <details className="tools" open={toolsOpen} onToggle={(event) => setToolsOpen(event.currentTarget.open)}>
         <summary>Treasurer tools</summary>
+        {toolsOpen && (
+        <>
         <p className="hint">
           Create, join, fund, propose, and pay live here. The board above is for minutes and Approve / Decline.
         </p>
@@ -423,6 +427,7 @@ function Shell() {
                 })
                 adopt(created.treasury, created.createdTxid)
                 setToolsOpen(false)
+                setInviteNext(true)
                 setNotice(`Created ${created.treasury.name}. Copy invite is the next step.`)
               })}
             >
@@ -473,7 +478,7 @@ function Shell() {
           <h2>Fund the vault</h2>
           <p>
             Anyone can fund once every seat has joined.
-            {vaultUsd ? ` Current vault: ${vaultUsd}.` : vaultSats > 0 ? ' Vault has funds.' : ' Vault is empty.'}
+            {' '}{vaultBalanceCopy(vaultUsd, vaultSats > 0)}
           </p>
           {fund.reason && <p className="hint">{fund.reason}</p>}
           {rateError && <p className="hint">{rateError}</p>}
@@ -641,6 +646,8 @@ function Shell() {
             <p className="meta">Connected key {shortKey(identityKey, 10)}</p>
           )}
         </details>
+        </>
+        )}
       </details>
 
       <footer>
