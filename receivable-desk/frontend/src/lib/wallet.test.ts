@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { CHROME_ALLOW_HINT, errorMessage, formatWalletError } from './config'
+import { CHROME_ALLOW_HINT, errorMessage, formatWalletError, isListOutputsFailure, isWalletMissingMessage } from './config'
 import {
   CONNECT_MS,
   CONNECT_TIMEOUT_MESSAGE,
@@ -81,5 +81,13 @@ describe('errorMessage shows raw createAction / signAction fields', () => {
   it('maps only a silent timeout to Unlock Desktop / Retry', () => {
     expect(errorMessage(new Error(CHROME_ALLOW_HINT))).toBe(CHROME_ALLOW_HINT)
     expect(errorMessage(new Error('Wallet request timed out'))).toBe(CHROME_ALLOW_HINT)
+  })
+
+  it('treats listOutputs wallet-missing as noise, not a Chase read failure', () => {
+    const missing = 'listOutputs(receivables, include=locking scripts) failed: No wallet available over any communication substrate. Install a BSV wallet today!'
+    expect(isWalletMissingMessage(missing)).toBe(true)
+    expect(isListOutputsFailure(missing)).toBe(true)
+    expect(isWalletMissingMessage('GET /lookup failed: 502')).toBe(false)
+    expect(isListOutputsFailure('GET /lookup failed: 502')).toBe(false)
   })
 })

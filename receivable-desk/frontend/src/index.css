@@ -143,6 +143,10 @@ h1 {
 .work-late { color: var(--muted); }
 .work-actions { margin: 0; justify-content: flex-end; }
 
+.work-row.chase-row {
+  grid-template-columns: 1.6fr 1fr auto;
+}
+
 .aging-group .subhead {
   text-transform: none;
   letter-spacing: 0;
@@ -296,6 +300,7 @@ footer {
   .masthead { display: block; }
   .identity { text-align: left; margin-top: 16px; }
   .meta { grid-template-columns: 1fr; }
-  .work-row { grid-template-columns: 1fr 1fr; }
+  .work-row,
+  .work-row.chase-row { grid-template-columns: 1fr 1fr; }
   .work-actions { grid-column: 1 / -1; }
 }

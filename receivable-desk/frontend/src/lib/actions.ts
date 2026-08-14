@@ -72,18 +72,30 @@ function timedLister(client: WalletClient) {
     withTimeout(client.listOutputs(args), CONNECT_MS, CONNECT_TIMEOUT_MESSAGE)
 }
 
+const EMPTY_BASKET: BasketInspection = {
+  held: [],
+  primary: {
+    basket: BASKET,
+    listed: 0,
+    totalOutputs: 0,
+    spendable: 0,
+    parsed: 0,
+    unparsed: []
+  }
+}
+
 /** List basket `receivables` under the page host and `"simple"` — no mint under `"simple"`. */
-export async function inspectHeldReceivables(wallet?: WalletClient | null): Promise<BasketInspection> {
+export async function inspectHeldReceivables(wallet?: unknown): Promise<BasketInspection> {
+  if (!wallet) return EMPTY_BASKET
+  const client = wallet as WalletClient
   const listers: ListOutputsFn[] = []
   const seen = new Set<string>()
-  const add = (client: WalletClient, label: string): void => {
+  const add = (listed: WalletClient, label: string): void => {
     if (!label || seen.has(label)) return
     seen.add(label)
-    listers.push(timedLister(client))
+    listers.push(timedLister(listed))
   }
-  if (wallet) {
-    add(wallet, (wallet as WalletClient & { originator?: string }).originator || 'bound')
-  }
+  add(client, (client as WalletClient & { originator?: string }).originator || 'bound')
   add(new WalletClient('auto', originator()), originator())
   add(new WalletClient('auto', 'simple'), 'simple')
   return inspectBaskets(listers)
