@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_AMOUNT_SATS,
+  DEFAULT_DURATION_DAYS,
   TAG,
   UNFUNDED_STREAM_MESSAGE,
   accrue,
@@ -175,6 +176,12 @@ describe('stream fields', () => {
 })
 
 describe('open and claim plans', () => {
+  it('defaults Open to 100,000 sats over 14 days', () => {
+    expect(DEFAULT_AMOUNT_SATS).toBe(100_000)
+    expect(DEFAULT_DURATION_DAYS).toBe(14)
+    expect(planOpen(DEFAULT_AMOUNT_SATS)).toEqual({ potSats: 100_000 })
+  })
+
   it('opens by locking the sat pot the treasurer funds, not 1 sat and not a $400 spot conversion', () => {
     expect(planOpen(DEFAULT_AMOUNT_SATS)).toEqual({ potSats: DEFAULT_AMOUNT_SATS })
     expect(planOpen(DEFAULT_AMOUNT_SATS).potSats).not.toBe(1)

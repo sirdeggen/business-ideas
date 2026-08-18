@@ -196,7 +196,7 @@ function Create({
       return
     }
     if (sats > FUNDABLE_MAX_SATS) {
-      setError('That’s more than this wallet can fund. Try 50,000–200,000 sats.')
+      setError('That’s more than this wallet can fund. Default is 100,000 sats over 14 days.')
       return
     }
     const displayUsd = usdPerBsv ? satsToUsdInput(sats, usdPerBsv) : ''
