@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react'
 import type { WalletClient } from '@bsv/sdk'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
-import { DEFAULT_AMOUNT_USD, DEFAULT_DURATION_DAYS, accrue, isIdentityKey } from '../../protocol/stream'
+import {
+  DEFAULT_AMOUNT_SATS,
+  DEFAULT_DURATION_DAYS,
+  FUNDABLE_MAX_SATS,
+  accrue,
+  isIdentityKey
+} from '../../protocol/stream'
 import { claimStream, freezeStream, openStream } from './lib/actions'
 import {
   DESKTOP_INSTALL_URL,
@@ -13,17 +19,17 @@ import {
 } from './lib/config'
 import {
   accruedLine,
-  dailyUsd,
+  dailyRate,
   datetimeLocalToIso,
   dayPhrase,
   defaultStartLocal,
   displayAmount,
-  displaySatsAsUsd,
+  displaySats,
   formatWhen,
   humanReceiptId,
   statusLabel
 } from './lib/copy'
-import { fetchUsdPerBsv, formatUsdInput, parseUsdAmount, usdToSats } from './lib/money'
+import { fetchUsdPerBsv, parseSatsAmount, satsToDisplayUsd, satsToUsdInput } from './lib/money'
 import { lookupStreams, type OverlayStream } from './lib/overlay'
 import { goHome, goToStream, parseStreamLocation, streamPublicUrl } from './lib/route'
 
@@ -102,10 +108,10 @@ function Home({ onCreate }: { onCreate: () => void }) {
         <div className="ghost" aria-hidden="true">
           <div className="ghost-head">
             <span className="stamp open fat">Open</span>
-            <strong>$400.00</strong>
+            <strong>100,000 sats</strong>
           </div>
           <p className="memo">Legal research week</p>
-          <p className="hint">$85.71 accrued · $0.00 claimed</p>
+          <p className="hint">21,428 sats accrued · 0 sats claimed</p>
         </div>
         <p className="empty-sell">Pay as they work.</p>
         <button className="btn primary" onClick={onCreate}>Open a stream</button>
@@ -129,7 +135,7 @@ function Create({
   const [contractorName, setContractorName] = useState('')
   const [contractorIdentity, setContractorIdentity] = useState('')
   const [memo, setMemo] = useState('Legal research week')
-  const [amount, setAmount] = useState('400')
+  const [amount, setAmount] = useState(String(DEFAULT_AMOUNT_SATS))
   const [days, setDays] = useState(String(DEFAULT_DURATION_DAYS))
   const [startLocal, setStartLocal] = useState(defaultStartLocal)
   const [usdPerBsv, setUsdPerBsv] = useState<number | null>(null)
@@ -162,8 +168,8 @@ function Create({
       return
     }
     const identity = contractorIdentity.trim()
-    if (identity && !isIdentityKey(identity)) {
-      setError('Contractor identity should be a compressed public key, or leave it blank until they claim.')
+    if (!isIdentityKey(identity)) {
+      setError('Contractor identity is needed to open a funded stream.')
       return
     }
     const durationDays = Number(days)
@@ -182,30 +188,18 @@ function Create({
       setError('This page needs an overlay URL before it can open a stream. Open Advanced.')
       return
     }
-    let rate = usdPerBsv
-    if (!rate) {
-      try {
-        rate = await fetchUsdPerBsv()
-        setUsdPerBsv(rate)
-        setRateError(null)
-      } catch (err) {
-        const message = errorMessage(err)
-        setRateError(message)
-        setError(`Could not fetch a dollar rate. ${message}`)
-        return
-      }
-    }
-    if (rate === null) {
-      setError('Could not fetch a dollar rate.')
-      return
-    }
-    let usd: number
+    let sats: number
     try {
-      usd = parseUsdAmount(amount)
+      sats = parseSatsAmount(amount)
     } catch (err) {
       setError(errorMessage(err))
       return
     }
+    if (sats > FUNDABLE_MAX_SATS) {
+      setError('That’s more than this wallet can fund. Default is 100,000 sats over 14 days.')
+      return
+    }
+    const displayUsd = usdPerBsv ? satsToUsdInput(sats, usdPerBsv) : ''
     setBusy(true)
     let client
     try {
@@ -222,8 +216,8 @@ function Create({
         contractorName: contractorName.trim(),
         contractorIdentity: identity,
         memo: memo.trim(),
-        amountSats: usdToSats(usd, rate),
-        amountUsd: formatUsdInput(usd),
+        amountSats: sats,
+        amountUsd: displayUsd,
         startIso,
         durationSec: Math.round(durationDays * 86_400)
       })
@@ -236,13 +230,20 @@ function Create({
     }
   }
 
+  let usdPreview = ''
+  try {
+    usdPreview = satsToDisplayUsd(parseSatsAmount(amount), usdPerBsv)
+  } catch {
+    usdPreview = ''
+  }
+
   return (
     <div className="app">
       <header className="masthead">
         <div>
           <button className="text-link" onClick={onBack}>StreamPay</button>
           <h1>Open a stream</h1>
-          <p className="lede">Money accrues with time. They claim what’s earned. You can freeze it.</p>
+          <p className="lede">You fund the stream. They claim what’s accrued from it. You can freeze the clock.</p>
         </div>
       </header>
 
@@ -263,14 +264,15 @@ function Create({
           placeholder="Jordan Lee"
           maxLength={80}
         />
-        <label htmlFor="identity">Contractor identity (optional until claim)</label>
+        <label htmlFor="identity">Contractor identity</label>
         <input
           id="identity"
           value={contractorIdentity}
           onChange={(event) => setContractorIdentity(event.target.value)}
-          placeholder="Leave blank if they haven’t connected yet"
+          placeholder="Their compressed public key"
           autoComplete="off"
         />
+        <p className="helper">Needed so they can claim accrued pay from the stream you fund.</p>
         <label htmlFor="memo">What it’s for</label>
         <input
           id="memo"
@@ -281,15 +283,15 @@ function Create({
         />
         <div className="grid">
           <div>
-            <label htmlFor="amount">Amount</label>
+            <label htmlFor="amount">Amount (sats)</label>
             <div className="dollar">
-              <span>$</span>
               <input
                 id="amount"
-                inputMode="decimal"
+                inputMode="numeric"
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
               />
+              <span>sats</span>
             </div>
           </div>
           <div>
@@ -309,9 +311,10 @@ function Create({
           value={startLocal}
           onChange={(event) => setStartLocal(event.target.value)}
         />
-        <p className="helper">Defaults to three days ago so a mid-stream claim is demoable without waiting.</p>
+        <p className="helper">Defaults to three days ago so a mid-stream claim is demoable without waiting. Settlement is sats. Dollars are display only.</p>
+        {usdPreview && <p className="hint">About {usdPreview} at the current rate.</p>}
         {rateError && (
-          <p className="status err">Couldn’t get the dollar rate. {rateError}</p>
+          <p className="helper">Dollar rate unavailable. You can still open — the stream is funded in sats.</p>
         )}
         <div className="row" style={{ marginTop: 20 }}>
           <button
@@ -323,7 +326,7 @@ function Create({
           </button>
         </div>
         {!(busy || connecting || showInstall) && (
-          <p className="helper">We’ll ask you to approve this in a moment. Default is {DEFAULT_AMOUNT_USD} over {DEFAULT_DURATION_DAYS} days.</p>
+          <p className="helper">We’ll ask you to fund this stream in a moment. Default is {DEFAULT_AMOUNT_SATS.toLocaleString('en-US')} sats over {DEFAULT_DURATION_DAYS} days.</p>
         )}
         {(busy || connecting || showInstall) && <ChromeHint />}
         {showInstall && <InstallPrompt verb="open" onRetry={() => void send()} />}
@@ -469,16 +472,19 @@ function StreamPage({
         <section className="panel">
           <p className="memo">{stream.memo || 'Pay as they work'}</p>
           <p className="lede">{accruedLine(stream, nowMs)}</p>
-          <p className="hint">{dayPhrase(stream, nowMs)}{dailyUsd(stream) ? ` · ${dailyUsd(stream)} / day` : ''}</p>
+          <p className="hint">{dayPhrase(stream, nowMs)}{dailyRate(stream) ? ` · ${dailyRate(stream)} / day` : ''}</p>
           <dl>
             <div><dt>Contractor</dt><dd>{stream.contractorName || '—'}</dd></div>
-            <div><dt>Rate</dt><dd>{dailyUsd(stream) || '—'} / day</dd></div>
-            <div><dt>Accrued</dt><dd>{displaySatsAsUsd(math.earnedSats, stream)}</dd></div>
-            <div><dt>Claimed</dt><dd>{displaySatsAsUsd(stream.claimedSats, stream)}</dd></div>
-            <div><dt>Claimable</dt><dd>{displaySatsAsUsd(math.claimableSats, stream)}</dd></div>
+            <div><dt>Rate</dt><dd>{dailyRate(stream) || '—'} / day</dd></div>
+            <div><dt>Accrued</dt><dd>{displaySats(math.earnedSats, stream)}</dd></div>
+            <div><dt>Claimed</dt><dd>{displaySats(stream.claimedSats, stream)}</dd></div>
+            <div><dt>Claimable</dt><dd>{displaySats(math.claimableSats, stream)}</dd></div>
             <div><dt>Receipt</dt><dd>{humanReceiptId(stream.streamId)}</dd></div>
           </dl>
           <p className="helper">Anyone with this link can see the rate, what’s accrued, and whether it’s frozen. No wallet needed to look.</p>
+          {(stream.satoshis ?? 1) < math.claimableSats && (
+            <p className="helper">This stream isn’t funded. A claim will not invent the missing sats.</p>
+          )}
           <div className="stack-actions">
             <button className="btn copy-link" onClick={() => void copyLink()}>
               {copied ? 'Copied' : 'Copy link'}
@@ -492,7 +498,7 @@ function StreamPage({
                 ? 'Approve in your wallet…'
                 : math.claimableSats < 1
                   ? 'Nothing to claim yet'
-                  : `Claim ${displaySatsAsUsd(math.claimableSats, stream)}`}
+                  : `Claim ${displaySats(math.claimableSats, stream)}`}
             </button>
             <button
               className="btn"
@@ -512,7 +518,7 @@ function StreamPage({
         <section className="panel receipt">
           <div className="paid-hero">
             <span className="stamp paid fat">Claimed</span>
-            <p className="amount-xl">{displaySatsAsUsd(stream.lastClaimSats, stream)}</p>
+            <p className="amount-xl">{displaySats(stream.lastClaimSats, stream)}</p>
           </div>
           <p className="memo">{stream.memo || 'Pay as they work'}</p>
           <dl>

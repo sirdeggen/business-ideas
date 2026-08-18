@@ -1,11 +1,16 @@
 /**
  * StreamPay protocol (PushDrop / BRC-48 fields).
  *
- * A stream is a 1-sat PushDrop snapshot on tm_anytx / ls_anytx. Accrual is
- * client math (not nLockTime). Claim and freeze persist by emitting a new
- * snapshot — the invoices pay pattern that overlay-us-1 actually admits.
- * Field 0 is the tag `streampay`. ls_anytx has no tag filter; clients filter.
+ * Treasurer Open locks `amountSats` in the stream PushDrop (the pot). Accrual
+ * is client math (not nLockTime). Worker Claim spends that UTXO for accrued
+ * sats only, pays BRC-29, and re-emits the remaining pot. Freeze is a 1-sat
+ * treasurer snapshot; it does not move the pot. Field 0 is the tag `streampay`.
+ * ls_anytx has no tag filter; clients filter.
  */
+
+export const UNFUNDED_STREAM_MESSAGE = 'This stream isn’t funded.'
+export const INSUFFICIENT_FUND_MESSAGE = 'Not enough to fund this stream.'
+export const NOTHING_TO_CLAIM_MESSAGE = 'Nothing has accrued to claim yet.'
 
 export const PROTOCOL_ID: [0, string] = [0, 'streampay']
 export const BASKET = 'streampay'
@@ -19,7 +24,8 @@ export const MAX_NAME_CHARS = 80
 export const MIN_AMOUNT_SATS = 1
 export const MAX_AMOUNT_SATS = 1_000_000_000_000
 export const DEFAULT_DURATION_DAYS = 14
-export const DEFAULT_AMOUNT_USD = '400.00'
+export const DEFAULT_AMOUNT_SATS = 100_000
+export const FUNDABLE_MAX_SATS = 1_000_000
 
 export type StreamStatus = 'open' | 'frozen' | 'finished'
 
@@ -139,6 +145,50 @@ export function accrue(
   if (stream.frozen) status = 'frozen'
   else if (nowMs >= endMs) status = 'finished'
   return { startMs: safeStart, endMs, freezeMs: Number.isFinite(freezeMs) ? freezeMs : null, elapsedSec, earnedSats, claimableSats, status }
+}
+
+export function planOpen(amountSats: number): { potSats: number } {
+  assertAmountSats(amountSats)
+  return { potSats: amountSats }
+}
+
+export interface ClaimPlan {
+  claimSats: number
+  remainingSats: number
+  /** createAction output satoshis: claimable, then remaining pot (or 1-sat receipt). */
+  outputSatoshis: number[]
+}
+
+/**
+ * Claim pays accrued-minus-claimed from the funded pot. claimableSats may
+ * equal amountSats when earned is capped (claimed=0 and the clock is done) —
+ * that payment still comes from the pot, never from contractor inputs.
+ * A 1-sat Open (token only) is not funded — refuse before createAction.
+ * The payment output is never omitted in favor of a 1-sat snapshot.
+ */
+export function planClaim(args: {
+  fundedSats: number
+  amountSats: number
+  claimableSats: number
+}): ClaimPlan {
+  assertAmountSats(args.amountSats)
+  if (!Number.isInteger(args.claimableSats) || args.claimableSats < 1) {
+    throw new Error(NOTHING_TO_CLAIM_MESSAGE)
+  }
+  if (args.claimableSats > args.amountSats) {
+    throw new Error(NOTHING_TO_CLAIM_MESSAGE)
+  }
+  if (!Number.isInteger(args.fundedSats) || args.fundedSats < args.claimableSats) {
+    throw new Error(UNFUNDED_STREAM_MESSAGE)
+  }
+  const claimSats = args.claimableSats
+  const remainingSats = args.fundedSats - claimSats
+  const potSats = remainingSats > 0 ? remainingSats : 1
+  return {
+    claimSats,
+    remainingSats,
+    outputSatoshis: [claimSats, potSats]
+  }
 }
 
 export function encodeStreamFields(stream: Omit<StreamPayload, 'tag' | 'rateSatsPerSec'> & { rateSatsPerSec?: number }): number[][] {
@@ -280,11 +330,15 @@ export interface IndexedStream {
   stream: StreamPayload
   txid: string
   outputIndex: number
+  satoshis?: number
+  beef?: number[]
 }
 
 export interface JoinedStream extends StreamPayload {
   txid: string
   outputIndex: number
+  satoshis: number
+  beef?: number[]
 }
 
 function updatedMs(row: IndexedStream): number {
@@ -293,9 +347,25 @@ function updatedMs(row: IndexedStream): number {
   return 0
 }
 
+function rowSatoshis(row: IndexedStream): number {
+  return Number.isInteger(row.satoshis) && (row.satoshis as number) > 0 ? (row.satoshis as number) : 1
+}
+
+/** Spendable pot: latest funded output. Freeze 1-sat snapshots do not replace it. */
+function potRow(group: IndexedStream[]): IndexedStream {
+  const funded = group.filter((row) => rowSatoshis(row) > 1)
+  const pool = funded.length > 0 ? funded : group
+  return pool.slice().sort((a, b) => {
+    const delta = updatedMs(b) - updatedMs(a)
+    if (delta !== 0) return delta
+    return rowSatoshis(b) - rowSatoshis(a)
+  })[0]
+}
+
 /**
  * Latest snapshot per streamId. claimedSats is the max seen (a later claim
- * after a freeze still raises it). Frozen/freezeIso stick once set.
+ * after a freeze still raises it). Frozen/freezeIso stick once set. Outpoint
+ * and satoshis come from the funded pot, not a later 1-sat freeze token.
  */
 export function joinStreamRecords(rows: IndexedStream[]): JoinedStream[] {
   const byId = new Map<string, IndexedStream[]>()
@@ -325,6 +395,7 @@ export function joinStreamRecords(rows: IndexedStream[]): JoinedStream[] {
         const tb = Date.parse(b.stream.lastClaimIso) || updatedMs(b)
         return tb - ta
       })[0]
+    const pot = potRow(group)
     joined.push({
       ...latest.stream,
       contractorIdentity: latest.stream.contractorIdentity || contractor,
@@ -333,8 +404,10 @@ export function joinStreamRecords(rows: IndexedStream[]): JoinedStream[] {
       freezeIso: frozenRow?.stream.freezeIso || latest.stream.freezeIso,
       lastClaimSats: lastClaim?.stream.lastClaimSats ?? latest.stream.lastClaimSats,
       lastClaimIso: lastClaim?.stream.lastClaimIso || latest.stream.lastClaimIso,
-      txid: latest.txid,
-      outputIndex: latest.outputIndex
+      txid: pot.txid,
+      outputIndex: pot.outputIndex,
+      satoshis: rowSatoshis(pot),
+      beef: pot.beef
     })
   }
   return joined

@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_AMOUNT_SATS,
+  DEFAULT_DURATION_DAYS,
   TAG,
+  UNFUNDED_STREAM_MESSAGE,
   accrue,
   encodeStreamFields,
   joinStreamRecords,
   parseStreamFields,
+  planClaim,
+  planOpen,
   rateSatsPerSec,
   satsToUsd,
   type StreamPayload
@@ -49,7 +54,7 @@ describe('accrual math', () => {
     expect(math.status).toBe('open')
   })
 
-  it('earns day-3 of a 14-day $400 stream as 3/14 of the sats', () => {
+  it('earns day-3 of a 14-day stream as 3/14 of the sats', () => {
     const day3 = start + 3 * 86_400_000
     const math = accrue(stream, day3)
     expect(math.earnedSats).toBe(Math.floor(stream.rateSatsPerSec * 3 * 86_400))
@@ -148,6 +153,84 @@ describe('stream fields', () => {
     expect(row.freezeIso).toBe('2026-08-15T12:00:00.000Z')
     expect(row.lastClaimSats).toBe(100)
     expect(row.txid).toBe('cc'.repeat(32))
+    expect(row.satoshis).toBe(1)
+  })
+
+  it('keeps the funded pot outpoint when a later freeze is 1 sat', () => {
+    const id = 'ef'.repeat(16)
+    const open = demoStream({ streamId: id, claimedSats: 0, updatedIso: '2026-08-11T12:00:00.000Z' })
+    const frozen = demoStream({
+      streamId: id,
+      frozen: true,
+      freezeIso: '2026-08-15T12:00:00.000Z',
+      updatedIso: '2026-08-15T12:00:00.000Z'
+    })
+    const [row] = joinStreamRecords([
+      { stream: open, txid: 'aa'.repeat(32), outputIndex: 0, satoshis: open.amountSats },
+      { stream: frozen, txid: 'cc'.repeat(32), outputIndex: 0, satoshis: 1 }
+    ])
+    expect(row.frozen).toBe(true)
+    expect(row.txid).toBe('aa'.repeat(32))
+    expect(row.satoshis).toBe(open.amountSats)
+  })
+})
+
+describe('open and claim plans', () => {
+  it('defaults Open to 100,000 sats over 14 days', () => {
+    expect(DEFAULT_AMOUNT_SATS).toBe(100_000)
+    expect(DEFAULT_DURATION_DAYS).toBe(14)
+    expect(planOpen(DEFAULT_AMOUNT_SATS)).toEqual({ potSats: 100_000 })
+  })
+
+  it('opens by locking the sat pot the treasurer funds, not 1 sat and not a $400 spot conversion', () => {
+    expect(planOpen(DEFAULT_AMOUNT_SATS)).toEqual({ potSats: DEFAULT_AMOUNT_SATS })
+    expect(planOpen(DEFAULT_AMOUNT_SATS).potSats).not.toBe(1)
+    expect(planOpen(DEFAULT_AMOUNT_SATS).potSats).toBeLessThan(1_000_000)
+  })
+
+  it('claims claimable sats when that is less than amountSats', () => {
+    const amountSats = DEFAULT_AMOUNT_SATS
+    const claimableSats = 21_428
+    const plan = planClaim({
+      fundedSats: amountSats,
+      amountSats,
+      claimableSats
+    })
+    expect(plan.claimSats).toBe(claimableSats)
+    expect(plan.claimSats).not.toBe(amountSats)
+    expect(plan.remainingSats).toBe(amountSats - claimableSats)
+    expect(plan.outputSatoshis).toEqual([claimableSats, amountSats - claimableSats])
+    expect(plan.outputSatoshis[0]).toBe(claimableSats)
+  })
+
+  it('still pays claimable when earned is capped at amountSats (claimed=0)', () => {
+    const amountSats = DEFAULT_AMOUNT_SATS
+    const plan = planClaim({
+      fundedSats: amountSats,
+      amountSats,
+      claimableSats: amountSats
+    })
+    expect(plan.claimSats).toBe(amountSats)
+    expect(plan.outputSatoshis[0]).toBe(amountSats)
+    expect(plan.outputSatoshis.length).toBe(2)
+    expect(plan.outputSatoshis[1]).toBe(1)
+  })
+
+  it('refuses the $400 / 1-sat QA mint when claimable equals the old notional', () => {
+    const amountSats = 594_598_868
+    expect(() => planClaim({
+      fundedSats: 1,
+      amountSats,
+      claimableSats: amountSats
+    })).toThrow(UNFUNDED_STREAM_MESSAGE)
+    try {
+      planClaim({ fundedSats: 1, amountSats, claimableSats: amountSats })
+      throw new Error('expected planClaim to throw')
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error)
+      expect((error as Error).message).toBe(UNFUNDED_STREAM_MESSAGE)
+      expect(JSON.stringify(error)).not.toContain(String(amountSats))
+    }
   })
 })
 
