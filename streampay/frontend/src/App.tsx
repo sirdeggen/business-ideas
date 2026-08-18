@@ -20,7 +20,10 @@ import {
 } from './lib/config'
 import {
   FREEZE_HINT,
+  RECEIPT_CARD,
+  STREAM_CARD,
   accruedLine,
+  claimLabel,
   dailyRate,
   datetimeLocalToIso,
   dayPhrase,
@@ -29,6 +32,7 @@ import {
   displaySats,
   formatWhen,
   humanReceiptId,
+  remainingLine,
   remainingPotSats,
   statusLabel
 } from './lib/copy'
@@ -492,16 +496,18 @@ function StreamPage({
 
       {stream && math && (
         <section className="panel">
+          <h2 className="block-title">{STREAM_CARD}</h2>
           <p className="memo">{stream.memo || 'Pay as they work'}</p>
           <p className="lede">{accruedLine(stream, viewedAt)}</p>
+          <p className="remaining">{remainingLine(stream)}</p>
           <p className="hint">{dayPhrase(stream, viewedAt)}{dailyRate(stream) ? ` · ${dailyRate(stream)} / day` : ''}</p>
           <dl>
             <div><dt>Contractor</dt><dd>{stream.contractorName || '—'}</dd></div>
             <div><dt>Rate</dt><dd>{dailyRate(stream) || '—'} / day</dd></div>
-            <div><dt>Accrued</dt><dd>{displaySats(math.earnedSats, stream)}</dd></div>
-            <div><dt>Claimed</dt><dd>{displaySats(stream.claimedSats, stream)}</dd></div>
-            <div><dt>Remaining</dt><dd>{displaySats(remainingPotSats(stream), stream)}</dd></div>
-            <div><dt>Claimable</dt><dd>{displaySats(math.claimableSats, stream)}</dd></div>
+            <div><dt>Accrued</dt><dd>{displaySats(math.earnedSats)}</dd></div>
+            <div><dt>Claimed</dt><dd>{displaySats(stream.claimedSats)}</dd></div>
+            <div><dt>Remaining</dt><dd>{displaySats(remainingPotSats(stream))}</dd></div>
+            <div><dt>Claimable</dt><dd>{displaySats(math.claimableSats)}</dd></div>
             <div><dt>Receipt</dt><dd>{humanReceiptId(stream.streamId)}</dd></div>
           </dl>
           <p className="helper">Anyone with this link can see the rate, what’s accrued, and whether it’s frozen. No wallet needed to look.</p>
@@ -510,15 +516,11 @@ function StreamPage({
           )}
           <div className="stack-actions">
             <button
-              className="btn primary"
+              className="btn primary claim"
               disabled={busy || connecting || math.claimableSats < 1}
               onClick={() => void claim()}
             >
-              {busy && busyVerb === 'claim'
-                ? 'Approve in your wallet…'
-                : math.claimableSats < 1
-                  ? 'Nothing to claim yet'
-                  : `Claim ${displaySats(math.claimableSats, stream)}`}
+              {busy && busyVerb === 'claim' ? 'Approve in your wallet…' : claimLabel(math.claimableSats)}
             </button>
             <button
               className="btn"
@@ -540,10 +542,10 @@ function StreamPage({
 
       {stream && showReceipt && (
         <section className="panel receipt">
-          <h2 className="block-title">Receipt</h2>
+          <h2 className="block-title">{RECEIPT_CARD}</h2>
           <div className="paid-hero">
             <span className="stamp paid fat">Claimed</span>
-            <p className="amount-xl">{displaySats(stream.lastClaimSats, stream)}</p>
+            <p className="amount-xl">{displaySats(stream.lastClaimSats)}</p>
           </div>
           <p className="memo">{stream.memo || 'Pay as they work'}</p>
           <dl>
