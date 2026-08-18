@@ -33,7 +33,7 @@ Rate is `amountSats / durationSec`. Freeze stops the clock. Already-claimable st
 
 1. **Open a stream.** Org name, contractor name, optional contractor identity (can wait until claim), what it’s for, amount in **dollars**, duration (default 14 days), start (a past start is allowed so day 3 is demoable).
 2. Approve in the wallet. A 1-sat PushDrop snapshot is submitted to the public overlay.
-3. Copy the public URL (`/streampay/s/<streamId>`). An auditor can open it with no wallet and see rate, accrued, claimed, and Open / Frozen / Finished.
+3. Copy the public URL (`/streampay/?s=<streamId>`). An auditor can open it with no wallet and see rate, accrued, claimed, and Open / Frozen / Finished.
 
 ## Claim
 
