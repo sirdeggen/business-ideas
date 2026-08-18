@@ -1,0 +1,227 @@
+:root {
+  color-scheme: dark;
+  --bg: #0c1014;
+  --bg-raise: #141a20;
+  --ink: #eef3f1;
+  --muted: #9aa7a1;
+  --paper: #c9d4c4;
+  --paper-dim: #6e7f72;
+  --line: #2a3533;
+  --danger: #e07a5f;
+  --ok: #7dcfb6;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(1000px 480px at 90% -20%, #1a2a24 0%, transparent 55%),
+    var(--bg);
+  color: var(--ink);
+}
+
+button, input, textarea, select {
+  font: inherit;
+}
+
+a { color: var(--paper); }
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+}
+
+.masthead {
+  border-bottom: 1px dashed var(--paper-dim);
+  padding-bottom: 20px;
+  margin-bottom: 28px;
+}
+
+.eyebrow {
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--paper);
+  margin: 0 0 8px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+h1 {
+  font-size: 42px;
+  line-height: 0.95;
+  margin: 0;
+  font-weight: 600;
+}
+
+.lede {
+  color: var(--muted);
+  max-width: 46ch;
+  margin: 10px 0 0;
+}
+
+.btn {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+.btn.primary {
+  background: var(--paper);
+  color: #12180f;
+  border-color: var(--paper);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.panel {
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 22px;
+  margin-bottom: 16px;
+}
+
+.panel h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.panel p, .hint {
+  color: var(--muted);
+  margin-top: 0;
+}
+
+.empty {
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  margin: 16px 0 0;
+}
+
+label {
+  display: block;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 16px 0 6px;
+}
+
+input, textarea, select {
+  width: 100%;
+  background: #101412;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.grow { flex: 1; min-width: 180px; }
+
+.advanced {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 12px 12px;
+}
+
+.advanced summary {
+  cursor: pointer;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 6px 0;
+}
+
+.status {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.status.ok { color: var(--ok); }
+.status.err { color: var(--danger); }
+
+.banner {
+  border: 1px solid var(--paper-dim);
+  background: #121916;
+  padding: 12px 14px;
+  border-radius: 12px;
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 13px;
+}
+
+.invoice {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin: 12px 0;
+  background: #10161a;
+}
+
+.invoice-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.invoice-head h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.pill {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--paper);
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  margin: 14px 0 8px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+}
+
+.meta dt { color: var(--muted); }
+.meta dd { margin: 2px 0 0; color: var(--ink); word-break: break-all; }
+
+footer {
+  margin-top: 40px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (max-width: 700px) {
+  .meta { grid-template-columns: 1fr; }
+  h1 { font-size: 34px; }
+}

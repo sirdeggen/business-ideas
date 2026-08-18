@@ -1,0 +1,417 @@
+import {
+  HTTPSOverlayBroadcastFacilitator,
+  LookupResolver,
+  PushDrop,
+  TopicBroadcaster,
+  Transaction,
+  type LookupAnswer,
+  type OverlayBroadcastFacilitator,
+  type STEAK,
+  type TaggedBEEF
+} from '@bsv/sdk'
+import {
+  LOOKUP_SERVICE,
+  MAGIC,
+  TOPIC,
+  explainRecordParse,
+  parseRecordFields,
+  type RecordPayload
+} from '../../../protocol/record'
+import {
+  PUBLIC_LOOKUP,
+  PUBLIC_TOPIC,
+  isLocalhostUrl
+} from './config'
+
+export interface OverlayRecord extends RecordPayload {
+  txid: string
+  outputIndex: number
+}
+
+export interface SubmitResult {
+  admitted: number[]
+  raw: unknown
+  host: string
+  topic: string
+}
+
+export interface LookupInspection {
+  rows: OverlayRecord[]
+  listed: number
+  parsed: number
+  unparsed: Array<{ reason: string }>
+}
+
+export interface RecordQuery {
+  outpoint?: string
+  hash?: string
+}
+
+function overlayUrl(base: string): string {
+  return base.replace(/\/$/, '')
+}
+
+export function usesPublicAnytx(base: string): boolean {
+  return !isLocalhostUrl(base)
+}
+
+export function overlayTopic(base: string): string {
+  return usesPublicAnytx(base) ? PUBLIC_TOPIC : TOPIC
+}
+
+export function overlayLookupService(base: string): string {
+  return usesPublicAnytx(base) ? PUBLIC_LOOKUP : LOOKUP_SERVICE
+}
+
+class HostPinnedFacilitator implements OverlayBroadcastFacilitator {
+  readonly host: string
+  readonly allowHTTP: boolean
+
+  constructor(host: string, allowHTTP: boolean) {
+    this.host = host
+    this.allowHTTP = allowHTTP
+  }
+
+  async send(_url: string, taggedBEEF: TaggedBEEF): Promise<STEAK> {
+    // Ignore SHIP-discovered URLs (often localhost). Always POST to the pinned host.
+    return new HTTPSOverlayBroadcastFacilitator(undefined, this.allowHTTP).send(this.host, taggedBEEF)
+  }
+}
+
+function createBroadcaster(host: string, topic: string): TopicBroadcaster {
+  const allowHTTP = host.startsWith('http://')
+  return new TopicBroadcaster([topic], {
+    // Skip SHIP discovery; the facilitator always posts to `host`.
+    networkPreset: 'local',
+    facilitator: new HostPinnedFacilitator(host, allowHTTP),
+    requireAcknowledgmentFromAllHostsForTopics: [],
+    requireAcknowledgmentFromAnyHostForTopics: 'any'
+  })
+}
+
+function createResolver(host: string, service: string): LookupResolver {
+  const allowHTTP = host.startsWith('http://')
+  return new LookupResolver({
+    networkPreset: allowHTTP ? 'local' : 'mainnet',
+    hostOverrides: { [service]: [host] }
+  })
+}
+
+export function txFromWalletBeef(beef: number[]): Transaction {
+  try {
+    return Transaction.fromAtomicBEEF(beef)
+  } catch {
+    return Transaction.fromBEEF(beef)
+  }
+}
+
+function standardBeef(tx: Transaction): number[] {
+  try {
+    return tx.toBEEF()
+  } catch {
+    return tx.toBEEF(true)
+  }
+}
+
+function parseScriptFields(lockingScript: Parameters<typeof PushDrop.decode>[0]): {
+  item: ReturnType<typeof parseRecordFields>
+  why?: string
+} {
+  const errors: string[] = []
+  for (const position of ['before', 'after'] as const) {
+    try {
+      const fields = PushDrop.decode(lockingScript, position).fields
+      const item = parseRecordFields(fields)
+      if (item) return { item }
+      errors.push(`${position}: ${explainRecordParse(fields)}`)
+    } catch (error) {
+      errors.push(`${position}: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+  return { item: null, why: errors[0] }
+}
+
+function recordOutputIndexes(tx: Transaction): number[] {
+  const indexes: number[] = []
+  for (const [index, output] of tx.outputs.entries()) {
+    const decoded = parseScriptFields(output.lockingScript)
+    if (decoded?.item) indexes.push(index)
+  }
+  return indexes
+}
+
+function overlayErrorText(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) return error.message
+  if (typeof error === 'string' && error.trim()) return error
+  if (error && typeof error === 'object') {
+    const record = error as { description?: unknown, message?: unknown }
+    const description = typeof record.description === 'string' ? record.description : ''
+    const message = typeof record.message === 'string' ? record.message : ''
+    return [message, description].filter((part) => part.trim()).join(' — ')
+  }
+  return String(error ?? '')
+}
+
+async function submitBeefFallback(host: string, topic: string, beef: number[]): Promise<SubmitResult> {
+  const response = await fetch(`${host}/submit`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/octet-stream',
+      'x-topics': JSON.stringify([topic])
+    },
+    body: Uint8Array.from(beef)
+  })
+  const text = await response.text()
+  if (!response.ok) {
+    throw new Error(
+      `POST ${host}/submit x-topics ${JSON.stringify([topic])} failed (${response.status}): ${text.slice(0, 300)}`
+    )
+  }
+  let raw: unknown = text
+  try {
+    raw = JSON.parse(text) as unknown
+  } catch {
+    // Overlay may return empty or non-JSON on success.
+  }
+  return {
+    admitted: recordOutputIndexes(txFromWalletBeef(beef)),
+    raw,
+    host,
+    topic
+  }
+}
+
+export async function submitRecordTx(base: string, beef: number[]): Promise<SubmitResult> {
+  const host = overlayUrl(base)
+  const topic = overlayTopic(host)
+  const tx = txFromWalletBeef(beef)
+  const beefBytes = standardBeef(tx)
+  try {
+    const overlay = createBroadcaster(host, topic)
+    const result = await txFromWalletBeef(beefBytes).broadcast(overlay)
+    if (result.status === 'success') {
+      return {
+        admitted: recordOutputIndexes(tx),
+        raw: result,
+        host,
+        topic
+      }
+    }
+    const description = 'description' in result ? result.description : ''
+    throw new Error(description || `broadcast status ${result.status}`)
+  } catch (error) {
+    try {
+      return await submitBeefFallback(host, topic, beefBytes)
+    } catch (fallbackError) {
+      const first = overlayErrorText(error)
+      const second = overlayErrorText(fallbackError)
+      throw new Error(
+        `Overlay submit to ${topic} at ${host} failed: ${second || first || 'no message from overlay/facilitator'}`
+      )
+    }
+  }
+}
+
+export async function inspectLookupRecords(
+  base: string,
+  query: RecordQuery = {}
+): Promise<LookupInspection> {
+  const host = overlayUrl(base)
+  const service = overlayLookupService(host)
+  const resolver = createResolver(host, service)
+  const answers = usesPublicAnytx(host)
+    ? await queryAnytx(resolver, service, query)
+    : [await resolver.query({ service, query }, 15000)]
+
+  const inspected = answers.flatMap(inspectAnswer)
+  const rows = inspected
+    .map((entry) => entry.row)
+    .filter((row): row is OverlayRecord => Boolean(row))
+    .filter((row) => matchesRecordQuery(row, query))
+  return {
+    rows,
+    listed: inspected.length,
+    parsed: inspected.filter((entry) => entry.row).length,
+    unparsed: inspected.filter((entry) => !entry.row && entry.reason).map((entry) => ({ reason: entry.reason as string }))
+  }
+}
+
+export async function lookupRecords(
+  base: string,
+  query: RecordQuery = {}
+): Promise<OverlayRecord[]> {
+  return (await inspectLookupRecords(base, query)).rows
+}
+
+export function formatLookupDiagnostic(inspection: LookupInspection, publicAnytx = false): string {
+  if (inspection.parsed > 0) return ''
+  if (inspection.listed === 0) return ''
+  if (publicAnytx && inspection.unparsed.length === 0) return ''
+  const why = inspection.unparsed[0]?.reason
+  return `listed ${inspection.listed}, none parsed as records` + (why ? ` (${why})` : '')
+}
+
+async function queryAnytx(
+  resolver: LookupResolver,
+  service: string,
+  query: RecordQuery
+): Promise<LookupAnswer[]> {
+  if (query.outpoint) {
+    const [txid] = query.outpoint.split('.')
+    return [await resolver.query({ service, query: { txid } }, 20000)]
+  }
+
+  const answers: LookupAnswer[] = []
+  const pageSize = 100
+  for (let page = 0; page < 5; page++) {
+    const answer = await resolver.query({
+      service,
+      query: { limit: pageSize, skip: page * pageSize, sortOrder: 'desc' }
+    }, 20000)
+    answers.push(answer)
+    const count = answer.type === 'output-list' ? answer.outputs.length : 0
+    if (count < pageSize) break
+  }
+  return answers
+}
+
+function inspectAnswer(answer: LookupAnswer): Array<{ row: OverlayRecord | null, reason?: string }> {
+  if (answer.type !== 'output-list' || !Array.isArray(answer.outputs)) return []
+  return answer.outputs.map((output) => {
+    const fromScript = recordFromBeef(output.beef, output.outputIndex)
+    if (fromScript.row || fromScript.reason) return fromScript
+    const fromCtx = fromContext(output.context, output.outputIndex)
+    return fromCtx ? { row: fromCtx } : { row: null }
+  })
+}
+
+function looksLikeRecordAttempt(why?: string): boolean {
+  if (!why) return false
+  return /fields after record|incomplete|invalid contributor|kind must|note is required|timestamp must|hash/i.test(why)
+}
+
+function recordFromBeef(
+  beef: number[] | undefined,
+  outputIndex: number
+): { row: OverlayRecord | null, reason?: string } {
+  if (!beef || beef.length === 0) return { row: null }
+  try {
+    const tx = txFromWalletBeef(beef)
+    const output = tx.outputs[outputIndex]
+    if (!output) return { row: null }
+    const decoded = parseScriptFields(output.lockingScript)
+    if (!decoded.item) {
+      return {
+        row: null,
+        reason: looksLikeRecordAttempt(decoded.why) ? decoded.why : undefined
+      }
+    }
+    return {
+      row: {
+        ...decoded.item,
+        txid: tx.id('hex'),
+        outputIndex
+      }
+    }
+  } catch {
+    return { row: null }
+  }
+}
+
+function matchesRecordQuery(row: OverlayRecord, query: RecordQuery): boolean {
+  if (query.outpoint) {
+    const [txid, vout] = query.outpoint.split('.')
+    if (row.txid !== txid || row.outputIndex !== Number(vout)) return false
+  }
+  if (query.hash && row.hash !== query.hash) return false
+  return true
+}
+
+function stub(partial: Partial<OverlayRecord> & { outputIndex: number }): OverlayRecord {
+  return {
+    magic: MAGIC,
+    schemaVersion: '1',
+    hash: partial.hash ?? '',
+    name: partial.name ?? '',
+    kind: partial.kind ?? 'note',
+    note: partial.note ?? '',
+    time: partial.time ?? '',
+    lat: partial.lat ?? '',
+    lon: partial.lon ?? '',
+    txid: partial.txid ?? '',
+    outputIndex: partial.outputIndex
+  }
+}
+
+function fromContext(context: number[] | undefined, outputIndex: number): OverlayRecord | null {
+  if (!context || context.length === 0) return null
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(Uint8Array.from(context))) as OverlayRecord
+    if (parsed.magic && parsed.magic !== MAGIC) return null
+    return stub({ ...parsed, outputIndex: parsed.outputIndex ?? outputIndex })
+  } catch {
+    return null
+  }
+}
+
+export interface OverlayPing {
+  ok: boolean
+  error?: string
+}
+
+function fetchFailure(path: string, error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (!message.trim() || /failed to fetch/i.test(message)) {
+    return `Failed to fetch ${path}`
+  }
+  return `Failed to fetch ${path}: ${message}`
+}
+
+async function probeGet(host: string, path: string): Promise<OverlayPing> {
+  try {
+    const response = await fetch(`${host}${path}`)
+    if (response.ok) return { ok: true }
+    return { ok: false, error: `GET ${path} failed: ${response.status}` }
+  } catch (error) {
+    return { ok: false, error: fetchFailure(path, error) }
+  }
+}
+
+function isLiveHealthBody(body: unknown): boolean {
+  if (!body || typeof body !== 'object') return false
+  const record = body as { status?: unknown, live?: unknown }
+  return record.status === 'ok' && record.live === true
+}
+
+/**
+ * Pages: /version has no CORS and throws "Failed to fetch". Probe /health/live
+ * first so that throw is not treated as overlay-offline. /version stays a
+ * last-resort fallback for local Docker, isolated so a CORS failure continues.
+ */
+export async function pingOverlay(base: string): Promise<OverlayPing> {
+  const host = overlayUrl(base)
+  const errors: string[] = []
+
+  const live = await probeGet(host, '/health/live')
+  if (live.ok) return { ok: true }
+  if (live.error) errors.push(live.error)
+
+  try {
+    const response = await fetch(`${host}/health`)
+    if (response.ok) {
+      const body = await response.json().catch(() => null)
+      if (isLiveHealthBody(body)) return { ok: true }
+      errors.push('GET /health did not report { status: ok, live: true }')
+    } else {
+      errors.push(`GET /health failed: ${response.status}`)
+    }
+  } catch (error) {
+    errors.push(fetchFailure('/health', error))
+  }
+
+  const version = await probeGet(host, '/version')
+  if (version.ok) return { ok: true }
+  if (version.error) errors.push(version.error)
+
+  return { ok: false, error: errors[0] ?? 'Overlay check failed' }
+}

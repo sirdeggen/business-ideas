@@ -20,6 +20,13 @@ Who do we chase today?
 - Pages UI: https://sirdeggen.github.io/business-ideas/receivables/
 - How to run: [receivable-desk/README.md](./receivable-desk/README.md)
 
+## Signed record desk
+
+Post a signed reading. Pay a little to export the dump.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/records/
+- How to run: [record-desk/README.md](./record-desk/README.md)
+
 ## Event tickets
 
 Tickets you can send, show on a phone, and spend at the door so they can’t be used twice.
