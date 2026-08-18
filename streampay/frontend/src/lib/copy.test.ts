@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_AMOUNT_SATS, TAG, rateSatsPerSec } from '../../../protocol/stream'
-import { displayAmount, displaySats } from './copy'
+import { accruedLine, displayAmount, displaySats, remainingPotSats } from './copy'
 import type { OverlayStream } from './overlay'
 
 function stream(partial: Partial<OverlayStream> = {}): OverlayStream {
@@ -42,5 +42,20 @@ describe('stream copy is sat-first', () => {
   it('shows claimable in sats, not a spot dollar conversion of the notional', () => {
     expect(displaySats(21_428, stream())).toBe('21,428 sats')
     expect(displaySats(21_428, stream())).not.toContain('$86')
+  })
+
+  it('hides $0.00 / $0.01 pennies next to sat amounts', () => {
+    const funded = stream({ amountUsd: '0.07' })
+    expect(displayAmount(funded)).toBe('100,000 sats · $0.07')
+    expect(displaySats(21_428, funded)).toBe('21,428 sats')
+    expect(displaySats(21_428, funded)).not.toContain('$0.01')
+    expect(displaySats(14, funded)).toBe('14 sats')
+    expect(displaySats(14, funded)).not.toContain('$0.00')
+  })
+
+  it('states the remaining pot after a claim', () => {
+    const afterClaim = stream({ satoshis: 78_559, claimedSats: 21_441 })
+    expect(remainingPotSats(afterClaim)).toBe(78_559)
+    expect(accruedLine(afterClaim, Date.parse(afterClaim.startIso) + 3 * 86_400_000)).toContain('78,559 sats remaining')
   })
 })

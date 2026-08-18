@@ -1,10 +1,20 @@
 import { accrue, satsToUsd, type StreamStatus } from '../../../protocol/stream'
-import { formatSats, formatUsd } from './money'
+import { formatMeaningfulUsd, formatSats } from './money'
 import type { OverlayStream } from './overlay'
+
+export const FREEZE_HINT =
+  'Stops new pay from accruing. Already-accrued can still be claimed.'
 
 function optionalUsd(sats: number, stream: OverlayStream): string {
   const usd = satsToUsd(sats, stream.amountSats, stream.amountUsd)
-  return usd > 0 ? ` · ${formatUsd(usd)}` : ''
+  const shown = formatMeaningfulUsd(usd)
+  return shown ? ` · ${shown}` : ''
+}
+
+export function remainingPotSats(stream: OverlayStream): number {
+  const pot = Number(stream.satoshis)
+  if (Number.isInteger(pot) && pot > 1) return pot
+  return Math.max(0, stream.amountSats - stream.claimedSats)
 }
 
 export function humanReceiptId(streamId: string): string {
@@ -63,7 +73,7 @@ export function dayPhrase(stream: OverlayStream, nowMs = Date.now()): string {
 
 export function accruedLine(stream: OverlayStream, nowMs = Date.now()): string {
   const math = accrue(stream, nowMs)
-  return `${displaySats(math.earnedSats, stream)} accrued · ${displaySats(stream.claimedSats, stream)} claimed`
+  return `${displaySats(math.earnedSats, stream)} accrued · ${displaySats(stream.claimedSats, stream)} claimed · ${displaySats(remainingPotSats(stream), stream)} remaining`
 }
 
 export function padLocal(n: number): string {

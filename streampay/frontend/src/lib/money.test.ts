@@ -20,6 +20,7 @@ describe('sat-denominated open amounts', () => {
     expect(formatSats(100_000)).toBe('100,000 sats')
     expect(satsToUsdInput(100_000, 67)).toBe('0.07')
     expect(satsToDisplayUsd(100_000, 67)).toBe('$0.07')
+    expect(satsToDisplayUsd(14, 67)).toBe('')
     expect(satsToDisplayUsd(100_000, null)).toBe('')
   })
 })

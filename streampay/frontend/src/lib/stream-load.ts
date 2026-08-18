@@ -1,7 +1,7 @@
 import { OVERLAY_LOOKUP_FAILED } from './config'
 import { parseStreamLocation } from './route'
 
-export const LOADING_STREAM = 'Loading stream…'
+export const LOADING_STREAM = 'This takes a moment.'
 
 export { OVERLAY_LOOKUP_FAILED }
 

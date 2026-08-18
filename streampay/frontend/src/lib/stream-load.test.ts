@@ -44,4 +44,14 @@ describe('stranger-path stream load', () => {
     expect(ready.loading).toBe(false)
     expect(ready.offerOpen).toBe(false)
   })
+
+  it('loading copy is a human wait, then timeout offers Open', () => {
+    const loading = streamPageState(null, null)
+    expect(loading.loading).toBe(true)
+    expect(loading.message).toBe('This takes a moment.')
+    expect(loading.offerOpen).toBe(false)
+    const timedOut = streamPageState(null, OVERLAY_LOOKUP_FAILED)
+    expect(timedOut.offerOpen).toBe(true)
+    expect(timedOut.message).not.toBe(LOADING_STREAM)
+  })
 })

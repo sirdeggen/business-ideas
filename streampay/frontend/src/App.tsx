@@ -19,6 +19,7 @@ import {
   type ActionVerb
 } from './lib/config'
 import {
+  FREEZE_HINT,
   accruedLine,
   dailyRate,
   datetimeLocalToIso,
@@ -28,6 +29,7 @@ import {
   displaySats,
   formatWhen,
   humanReceiptId,
+  remainingPotSats,
   statusLabel
 } from './lib/copy'
 import { fetchUsdPerBsv, parseSatsAmount, satsToDisplayUsd, satsToUsdInput } from './lib/money'
@@ -362,7 +364,7 @@ function StreamPage({
   const { connect, connecting } = useWallet()
   const [stream, setStream] = useState<OverlayStream | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [nowMs, setNowMs] = useState(() => Date.now())
+  const [asOfMs, setAsOfMs] = useState(0)
   const [busy, setBusy] = useState(false)
   const [busyVerb, setBusyVerb] = useState<ActionVerb>('claim')
   const [showInstall, setShowInstall] = useState(false)
@@ -370,13 +372,9 @@ function StreamPage({
   const [justClaimed, setJustClaimed] = useState(false)
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [])
-
-  useEffect(() => {
     let cancelled = false
     let inflight = false
+    setAsOfMs(0)
     const load = async (): Promise<void> => {
       if (inflight) return
       if (!url) {
@@ -395,6 +393,7 @@ function StreamPage({
         if (cancelled) return
         const row = rows[0] ?? null
         setStream(row)
+        if (row) setAsOfMs((prev) => prev || Date.now())
         setError(row ? null : 'This stream wasn’t found.')
       } catch {
         if (!cancelled) setError(OVERLAY_LOOKUP_FAILED)
@@ -441,6 +440,7 @@ function StreamPage({
         txid: stream.txid || createTxid || undefined
       })
       setStream(rows[0] ?? stream)
+      setAsOfMs(Date.now())
     } catch (err) {
       setError(errorMessage(err, verb))
       setShowInstall(true)
@@ -462,7 +462,8 @@ function StreamPage({
     })
   }
 
-  const math = stream ? accrue(stream, nowMs) : null
+  const viewedAt = asOfMs || undefined
+  const math = stream ? accrue(stream, viewedAt) : null
   const status = math?.status ?? 'open'
   const amount = stream ? displayAmount(stream) : ''
   const showReceipt = Boolean(stream && (justClaimed || stream.lastClaimSats > 0))
@@ -492,13 +493,14 @@ function StreamPage({
       {stream && math && (
         <section className="panel">
           <p className="memo">{stream.memo || 'Pay as they work'}</p>
-          <p className="lede">{accruedLine(stream, nowMs)}</p>
-          <p className="hint">{dayPhrase(stream, nowMs)}{dailyRate(stream) ? ` · ${dailyRate(stream)} / day` : ''}</p>
+          <p className="lede">{accruedLine(stream, viewedAt)}</p>
+          <p className="hint">{dayPhrase(stream, viewedAt)}{dailyRate(stream) ? ` · ${dailyRate(stream)} / day` : ''}</p>
           <dl>
             <div><dt>Contractor</dt><dd>{stream.contractorName || '—'}</dd></div>
             <div><dt>Rate</dt><dd>{dailyRate(stream) || '—'} / day</dd></div>
             <div><dt>Accrued</dt><dd>{displaySats(math.earnedSats, stream)}</dd></div>
             <div><dt>Claimed</dt><dd>{displaySats(stream.claimedSats, stream)}</dd></div>
+            <div><dt>Remaining</dt><dd>{displaySats(remainingPotSats(stream), stream)}</dd></div>
             <div><dt>Claimable</dt><dd>{displaySats(math.claimableSats, stream)}</dd></div>
             <div><dt>Receipt</dt><dd>{humanReceiptId(stream.streamId)}</dd></div>
           </dl>
@@ -507,9 +509,6 @@ function StreamPage({
             <p className="helper">This stream isn’t funded. A claim will not invent the missing sats.</p>
           )}
           <div className="stack-actions">
-            <button className="btn copy-link" onClick={() => void copyLink()}>
-              {copied ? 'Copied' : 'Copy link'}
-            </button>
             <button
               className="btn primary"
               disabled={busy || connecting || math.claimableSats < 1}
@@ -528,6 +527,10 @@ function StreamPage({
             >
               {busy && busyVerb === 'freeze' ? 'Approve in your wallet…' : stream.frozen ? 'Frozen' : 'Freeze'}
             </button>
+            <p className="helper">{FREEZE_HINT}</p>
+            <button className="btn" onClick={() => void copyLink()}>
+              {copied ? 'Copied' : 'Copy link'}
+            </button>
           </div>
           {(busy || connecting || showInstall) && <ChromeHint />}
           {showInstall && <InstallPrompt verb={busyVerb} onRetry={() => void (busyVerb === 'freeze' ? freeze() : claim())} />}
@@ -537,6 +540,7 @@ function StreamPage({
 
       {stream && showReceipt && (
         <section className="panel receipt">
+          <h2 className="block-title">Receipt</h2>
           <div className="paid-hero">
             <span className="stamp paid fat">Claimed</span>
             <p className="amount-xl">{displaySats(stream.lastClaimSats, stream)}</p>

@@ -286,12 +286,11 @@ dd {
   margin-top: 8px;
 }
 
-.btn.copy-link {
-  width: 100%;
-  padding: 14px 16px;
-  font-size: 16px;
-  background: var(--navy);
-  color: #f7f4ec;
+.block-title {
+  margin: 0 0 12px;
+  font-size: 22px;
+  font-weight: 650;
+  color: var(--navy);
 }
 
 .paid-hero {
