@@ -2,21 +2,29 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { PrivateKey, ProtoWallet } from '@bsv/sdk'
 import {
+  ANNOUNCE_KIND_GIFT,
   DEFAULT_PURPOSE,
   DEFAULT_PURPOSE_HASH,
   PROTOCOL_ID,
+  PROTOCOL_TAG,
   buildReceipt,
   canonicalPurpose,
   canonicalReceiptBytes,
   canonicalReceiptJson,
   encodeAnnouncementFields,
+  encodeGiftAnnouncementFields,
+  filterGiftsForOrg,
   parseAnnouncementFields,
+  parseGiftAnnouncementFields,
   purposeHash,
   receiptKeyID,
+  utf8,
+  utf8String,
   verifyPublishedReceipt,
   verifyReceiptPurpose,
   verifyWalletDataSignature,
-  type CanonicalReceipt
+  type CanonicalReceipt,
+  type GiftNotice
 } from './protocol.ts'
 
 const FIXTURE: Omit<CanonicalReceipt, 'donorIdentityKey' | 'orgIdentityKey'> = {
@@ -145,5 +153,85 @@ describe('canonical receipt + ProtoWallet signature', () => {
     assert.ok(parsed)
     assert.equal(verifyPublishedReceipt(parsed.receipt, parsed.signature, parsed.signingKey), true)
     assert.equal(parsed.receipt.purposeHash, DEFAULT_PURPOSE_HASH)
+    assert.equal(parseGiftAnnouncementFields(fields), null)
+  })
+})
+
+function giftNotice(overrides?: Partial<GiftNotice>): GiftNotice {
+  return {
+    v: 1,
+    kind: 'gift',
+    giftId: 'gift-announce-1',
+    purpose: DEFAULT_PURPOSE,
+    purposeHash: DEFAULT_PURPOSE_HASH,
+    amountUsd: '25.00',
+    amountSats: 50_000_000,
+    donorIdentityKey: PrivateKey.fromRandom().toPublicKey().toString(),
+    orgIdentityKey: PrivateKey.fromRandom().toPublicKey().toString(),
+    giftTxid: 'cd'.repeat(32),
+    keyID: 'gift-announce-1',
+    donorName: 'Ada',
+    orgName: 'St Mary’s',
+    at: '2026-08-18T16:00:00.000Z',
+    beef: [1, 2, 3],
+    ...overrides
+  }
+}
+
+describe('gift announcement fields', () => {
+  it('round-trips names and dollars and drops beef', () => {
+    const gift = giftNotice()
+    const fields = encodeGiftAnnouncementFields(gift)
+    assert.equal(utf8String(fields[0]), PROTOCOL_TAG)
+    assert.equal(utf8String(fields[1]), ANNOUNCE_KIND_GIFT)
+    const parsed = parseGiftAnnouncementFields(fields)
+    assert.ok(parsed)
+    assert.equal(parsed.kind, 'gift')
+    assert.equal(parsed.giftId, gift.giftId)
+    assert.equal(parsed.purpose, DEFAULT_PURPOSE)
+    assert.equal(parsed.purposeHash, DEFAULT_PURPOSE_HASH)
+    assert.equal(parsed.amountUsd, '25.00')
+    assert.equal(parsed.amountSats, 50_000_000)
+    assert.equal(parsed.donorName, 'Ada')
+    assert.equal(parsed.orgName, 'St Mary’s')
+    assert.equal(parsed.beef, undefined)
+  })
+
+  it('is not parsed as a receipt announcement', () => {
+    const fields = encodeGiftAnnouncementFields(giftNotice())
+    assert.equal(parseAnnouncementFields(fields), null)
+  })
+
+  it('rejects gift-shaped JSON sitting in the receipt slot', () => {
+    const gift = giftNotice()
+    const fields = [
+      utf8(PROTOCOL_TAG),
+      utf8(JSON.stringify({
+        v: 1,
+        kind: 'gift',
+        giftId: gift.giftId,
+        purpose: gift.purpose,
+        purposeHash: gift.purposeHash,
+        amountUsd: gift.amountUsd,
+        amountSats: gift.amountSats,
+        donorIdentityKey: gift.donorIdentityKey,
+        orgIdentityKey: gift.orgIdentityKey,
+        giftTxid: gift.giftTxid,
+        at: gift.at
+      })),
+      [1, 2, 3, 4, 5, 6, 7, 8]
+    ]
+    assert.equal(parseAnnouncementFields(fields), null)
+    assert.equal(parseGiftAnnouncementFields(fields), null)
+  })
+
+  it('lists every protocol-tagged gift when the desk has no org key yet', () => {
+    const ours = giftNotice()
+    const theirs = giftNotice({ giftId: 'gift-announce-2' })
+    const listed = filterGiftsForOrg([ours, theirs], undefined)
+    assert.equal(listed.length, 2)
+    const filtered = filterGiftsForOrg([ours, theirs], ours.orgIdentityKey)
+    assert.equal(filtered.length, 1)
+    assert.equal(filtered[0].giftId, ours.giftId)
   })
 })

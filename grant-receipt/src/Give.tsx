@@ -5,6 +5,7 @@ import { sendGift, verifyReceiptWithWallet } from './lib/gift'
 import { applyEvent, type GiftRecord } from './lib/machine'
 import { sendDeskMessage, pullDeskMessages } from './lib/messagebox'
 import { displayUsd, fetchUsdPerBsv, formatUsdInput, parseUsdAmount, usdToSats } from './lib/money'
+import { publishGiftAnnouncement } from './lib/overlay'
 import { readGifts, writeGifts } from './lib/persist'
 import { DEFAULT_PURPOSE, isIdentityKey, purposeHash, shortKey, verifyPublishedReceipt } from './lib/protocol'
 
@@ -108,6 +109,11 @@ export function Give({
         orgName: who.trim() || undefined
       })
       await sendDeskMessage(session.wallet, orgKey, gift)
+      try {
+        await publishGiftAnnouncement(session.wallet, gift)
+      } catch {
+        // Stranger desk list is optional. Message Box is first success.
+      }
       setGifts((current) => applyEvent(current, { type: 'gift', gift }))
       setNotice('Gift sent. The desk will acknowledge, then send a receipt bound to this purpose.')
     } catch (err) {

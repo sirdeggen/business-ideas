@@ -18,6 +18,10 @@ not the 2-of-3 policy vault in `treasury/`.
 4. Treasurer **Issue receipt**. The donor sees a signed receipt bound to
    the same purpose.
 
+Incoming gifts on **Desk** list without a wallet. Overlay-us-1 is the
+stranger path. Acknowledge, issue receipt, and copy give link still ask
+for a wallet (the give link needs the org identity).
+
 ## How to give
 
 1. Open the give link from the treasurer (`?give=1&org=…`), or paste the
@@ -26,13 +30,15 @@ not the 2-of-3 policy vault in `treasury/`.
 3. Amount is dollars. The live rate is WhatsOnChain, then CoinGecko. There
    is no invented rate. The wallet is asked for the matching amount only at
    send time.
-4. Send gift. Approve in the wallet. The desk is notified.
+4. Send gift. Approve in the wallet. Message Box notifies the desk first.
+   A 1-sat PushDrop gift announcement is also published on overlay-us-1
+   so a stranger desk can see the gift.
 
 ## How to acknowledge and receipt
 
 On **Desk**, incoming gifts show dollars and a purpose (a name if we have
-one). Acknowledge, then issue the receipt. Identity hex sits under
-Advanced.
+one) with no wallet open. Acknowledge, then issue the receipt — those two
+buttons ask for a wallet. Identity hex sits under Advanced.
 
 ## Purpose hash
 
@@ -61,7 +67,8 @@ The treasurer’s wallet signs those bytes. The donor checks that
 
 ## Message Box
 
-Two-party path (required for first success):
+Two-party path for ack and the signed receipt (and the first-success gift
+notice):
 
 | Thing | Value |
 | --- | --- |
@@ -72,14 +79,25 @@ Two-party path (required for first success):
 The gift notice carries purpose, purpose hash, dollars, the matching send
 amount, donor identity, and the gift transaction if the wallet returned it.
 
-## Public receipt (optional)
+## Public list (overlay-us-1)
 
-If it is cheap, the desk also publishes a small on-chain announcement so a
-stranger can open `?receipt=<txid>` without a wallet. Client-side filter
-tag is `grant receipt` on the public any-transaction list at overlay-us-1.
-That list is optional and can be flaky; last-good copies stay in the
-browser. First success does **not** need it. Gift, ack, and the signed
-receipt travel on Message Box.
+Host `https://overlay-us-1.bsvb.tech`. Topic `tm_anytx`, lookup `ls_anytx`.
+Client-side filter tag is `grant receipt`. Do not invent another topic.
+
+Gift announcements are a 1-sat PushDrop: fields
+`[grant receipt, gift, giftJson]`. Receipt announcements stay
+`[grant receipt, receiptJson, signature, signingKey]`. The `gift` kind
+discriminator means a gift output is never parsed as a receipt.
+
+The desk lists gifts from that public index with no wallet. `ls_anytx` is
+flaky — last-good incoming gifts stay in localStorage, and a failed lookup
+is surfaced instead of pretending the desk is empty. If the desk URL or
+give-link carries `?org=`, the list is filtered to that org; with no org
+key yet, every protocol-tagged gift is listed rather than an empty
+stranger desk.
+
+The public receipt link (`?receipt=<txid>`) is still optional. First
+success for ack and the signed receipt travels on Message Box.
 
 ## How to run
 
@@ -107,10 +125,10 @@ This tree does not bake private keys.
 ## Honest blockers
 
 - A wallet is required to **send**, **acknowledge**, and **issue** a
-  receipt. The desk page itself explains the job first; it does not lead
-  with a dead connect button.
-- Incoming gifts on the desk appear after the treasurer opens a wallet
-  (Message Box).
+  receipt. Copy give link also needs the org identity. The desk page
+  itself lists incoming gifts without a wallet.
+- The public gift list can blink. Last-good stays in the browser; a failed
+  lookup is not shown as an empty desk.
 - The public receipt link is optional. If that list is down, the donor
   still gets the signed receipt in their inbox.
 - Dollar conversion needs WhatsOnChain or CoinGecko. No invented rate.
@@ -120,7 +138,7 @@ This tree does not bake private keys.
 
 ```
 grant-receipt/
-  src/lib/     purpose hash, receipt, state machine, Message Box, optional public list
+  src/lib/     purpose hash, receipt, state machine, Message Box, public list
   src/         Give + Desk on one static app
 ```
 

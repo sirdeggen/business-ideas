@@ -30,6 +30,8 @@ export const DEFAULT_PURPOSE_HASH =
 export const PROTOCOL_ID: [1, string] = [1, 'grant receipt']
 export const ANNOUNCE_PROTOCOL_ID: [0, string] = [0, 'grant receipt']
 export const PROTOCOL_TAG = 'grant receipt'
+/** Second PushDrop field on a public *gift* announcement. Receipts keep JSON there. */
+export const ANNOUNCE_KIND_GIFT = 'gift'
 export const BASKET = 'grant receipt'
 export const MESSAGE_BOX = 'grant receipt'
 export const MESSAGE_BOX_HOST = 'https://gmb.bsvblockchain.tech'
@@ -277,8 +279,11 @@ export function parseAnnouncementFields(fields: number[][]): {
 } | null {
   if (fields.length < 3) return null
   if (utf8String(fields[0]) !== PROTOCOL_TAG) return null
+  const second = utf8String(fields[1])
+  if (second === ANNOUNCE_KIND_GIFT) return null
   try {
-    const parsed = JSON.parse(utf8String(fields[1])) as CanonicalReceipt
+    const parsed = JSON.parse(second) as CanonicalReceipt & { kind?: string }
+    if (parsed && parsed.kind === ANNOUNCE_KIND_GIFT) return null
     const receipt = buildReceipt(parsed)
     const signature = fields[2]
     if (!Array.isArray(signature) || signature.length < 8) return null
@@ -287,6 +292,81 @@ export function parseAnnouncementFields(fields: number[][]): {
   } catch {
     return null
   }
+}
+
+/** Public gift notice. Same protocol tag as receipts; kind field is the discriminator. */
+export function giftAnnouncementJson(gift: GiftNotice): string {
+  const purpose = canonicalPurpose(gift.purpose)
+  const hash = assertPurposeHash(purpose, gift.purposeHash)
+  if (!gift.giftId.trim()) throw new Error('Gift id is required')
+  if (!Number.isInteger(gift.amountSats) || gift.amountSats < 1) {
+    throw new Error('Amount is missing')
+  }
+  const amountUsd = gift.amountUsd.trim()
+  if (!amountUsd) throw new Error('Dollar amount is required')
+  const row: Record<string, unknown> = {
+    v: 1,
+    kind: ANNOUNCE_KIND_GIFT,
+    giftId: gift.giftId.trim(),
+    purpose,
+    purposeHash: hash,
+    amountUsd,
+    amountSats: gift.amountSats,
+    donorIdentityKey: normalizeIdentity(gift.donorIdentityKey),
+    orgIdentityKey: normalizeIdentity(gift.orgIdentityKey),
+    giftTxid: normalizeTxid(gift.giftTxid),
+    keyID: (gift.keyID || gift.giftId).trim(),
+    at: gift.at
+  }
+  if (gift.donorName?.trim()) row.donorName = gift.donorName.trim()
+  if (gift.orgName?.trim()) row.orgName = gift.orgName.trim()
+  return JSON.stringify(row)
+}
+
+export function encodeGiftAnnouncementFields(gift: GiftNotice): number[][] {
+  return [
+    utf8(PROTOCOL_TAG),
+    utf8(ANNOUNCE_KIND_GIFT),
+    utf8(giftAnnouncementJson(gift))
+  ]
+}
+
+export function parseGiftAnnouncementFields(fields: number[][]): GiftNotice | null {
+  if (fields.length < 3) return null
+  if (utf8String(fields[0]) !== PROTOCOL_TAG) return null
+  if (utf8String(fields[1]) !== ANNOUNCE_KIND_GIFT) return null
+  try {
+    const parsed = JSON.parse(utf8String(fields[2])) as unknown
+    if (!isGiftNotice(parsed)) return null
+    const purpose = canonicalPurpose(parsed.purpose)
+    assertPurposeHash(purpose, parsed.purposeHash)
+    return {
+      v: 1,
+      kind: 'gift',
+      giftId: parsed.giftId.trim(),
+      purpose,
+      purposeHash: parsed.purposeHash.trim().toLowerCase(),
+      amountUsd: parsed.amountUsd,
+      amountSats: parsed.amountSats,
+      donorIdentityKey: parsed.donorIdentityKey,
+      orgIdentityKey: parsed.orgIdentityKey,
+      giftTxid: parsed.giftTxid,
+      keyID: parsed.keyID || parsed.giftId,
+      donorName: parsed.donorName,
+      orgName: parsed.orgName,
+      at: parsed.at
+    }
+  } catch {
+    return null
+  }
+}
+
+/** When the desk URL or give-link carries an org key, keep that desk's gifts. */
+export function filterGiftsForOrg(gifts: GiftNotice[], orgIdentityKey?: string): GiftNotice[] {
+  const org = orgIdentityKey?.trim()
+  if (!org || !isIdentityKey(org)) return gifts
+  const want = org.toLowerCase()
+  return gifts.filter((row) => row.orgIdentityKey.trim().toLowerCase() === want)
 }
 
 export function verifyPublishedReceipt(
