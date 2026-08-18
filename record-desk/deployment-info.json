@@ -1,0 +1,25 @@
+{
+  "schema": "bsv-app",
+  "schemaVersion": "1.0",
+  "topicManagers": {
+    "tm_records": "./overlay/src/records/RecordsTopicManager.ts"
+  },
+  "lookupServices": {
+    "ls_records": {
+      "serviceFactory": "./overlay/src/records/RecordsLookupServiceFactory.ts",
+      "hydrateWith": "mongo"
+    }
+  },
+  "frontend": {
+    "language": "react",
+    "sourceDirectory": "./frontend"
+  },
+  "configs": [
+    {
+      "name": "Local LARS",
+      "network": "mainnet",
+      "provider": "LARS",
+      "run": ["backend", "frontend"]
+    }
+  ]
+}
