@@ -13,7 +13,8 @@ import {
   parseStreamFields,
   type JoinedStream
 } from '../../../protocol/stream'
-import { PUBLIC_LOOKUP, PUBLIC_TOPIC } from './config'
+import { OVERLAY_LOOKUP_FAILED, PUBLIC_LOOKUP, PUBLIC_TOPIC } from './config'
+import { withTimeout } from './timeout'
 
 export interface OverlayStream extends JoinedStream {}
 
@@ -127,42 +128,73 @@ export async function submitStreamTx(base: string, beef: number[]): Promise<Subm
   }
 }
 
-export async function lookupStreams(
-  base: string,
-  query: StreamLookupQuery = {}
-): Promise<OverlayStream[]> {
-  const host = overlayUrl(base)
-  const service = overlayLookupService(host)
-  const resolver = createResolver(host, service)
-  const indexed = collectIndexed(await queryAnytx(resolver, service, query), query)
-  const joined = joinStreamRecords(indexed)
-  if (query.streamId) {
-    return joined.filter((row): row is OverlayStream => row.streamId === query.streamId)
-  }
-  return joined
+export const LOOKUP_DEADLINE_MS = 8000
+
+export interface OverlayQueryBody {
+  txid?: string
+  limit?: number
+  skip?: number
+  sortOrder?: 'desc' | 'asc'
 }
 
-async function queryAnytx(
-  resolver: LookupResolver,
-  service: string,
-  query: StreamLookupQuery
-): Promise<LookupAnswer[]> {
+export async function queryOverlayStreams(
+  query: StreamLookupQuery,
+  fetchAnswer: (body: OverlayQueryBody, timeoutMs: number) => Promise<LookupAnswer>,
+  decode: (answers: LookupAnswer[]) => OverlayStream[],
+  options: { deadlineMs?: number } = {}
+): Promise<OverlayStream[]> {
+  const deadlineMs = options.deadlineMs ?? LOOKUP_DEADLINE_MS
+  const started = Date.now()
+  const remaining = (): number => Math.max(0, deadlineMs - (Date.now() - started))
+
+  const timed = async (body: OverlayQueryBody): Promise<LookupAnswer> => {
+    const ms = remaining()
+    if (ms <= 0) throw new Error(OVERLAY_LOOKUP_FAILED)
+    return withTimeout(fetchAnswer(body, ms), ms, OVERLAY_LOOKUP_FAILED)
+  }
+
   const answers: LookupAnswer[] = []
   if (query.txid) {
-    answers.push(await resolver.query({ service, query: { txid: query.txid } }, 20000))
+    answers.push(await timed({ txid: query.txid }))
+    const hit = decode(answers)
+    if (hit.length > 0) return hit
   }
 
   const pageSize = 100
   for (let page = 0; page < 5; page++) {
-    const answer = await resolver.query({
-      service,
-      query: { limit: pageSize, skip: page * pageSize, sortOrder: 'desc' }
-    }, 20000)
+    if (remaining() <= 0) throw new Error(OVERLAY_LOOKUP_FAILED)
+    const answer = await timed({
+      limit: pageSize,
+      skip: page * pageSize,
+      sortOrder: 'desc'
+    })
     answers.push(answer)
     const count = answer.type === 'output-list' ? answer.outputs.length : 0
     if (count < pageSize) break
   }
-  return answers
+  return decode(answers)
+}
+
+export async function lookupStreams(
+  base: string,
+  query: StreamLookupQuery = {},
+  options: { deadlineMs?: number } = {}
+): Promise<OverlayStream[]> {
+  const host = overlayUrl(base)
+  const service = overlayLookupService(host)
+  const resolver = createResolver(host, service)
+  return queryOverlayStreams(
+    query,
+    (body, timeoutMs) => resolver.query({ service, query: body }, timeoutMs),
+    (answers) => {
+      const joined = joinStreamRecords(collectIndexed(answers, query))
+      if (query.streamId) {
+        return joined.filter((row): row is OverlayStream => row.streamId === query.streamId)
+      }
+      return joined
+    },
+    options
+  )
 }
 
 function collectIndexed(

@@ -1,20 +1,13 @@
 import { WalletClient } from '@bsv/sdk'
 import { createWallet } from '@bsv/simple/browser'
 import { CHROME_ALLOW_HINT, originator } from './config'
+import { withTimeout } from './timeout'
 
 export const CONNECT_MS = 8000
 
 export const CONNECT_TIMEOUT_MESSAGE = CHROME_ALLOW_HINT
 
-export function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), ms)
-  })
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timer !== undefined) clearTimeout(timer)
-  })
-}
+export { withTimeout }
 
 async function connectWalletInner(): Promise<{ wallet: WalletClient, identityKey: string }> {
   const pageOriginator = originator()

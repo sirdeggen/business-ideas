@@ -7,6 +7,7 @@ import {
   DECLINED_APPROVAL_OPEN,
   OVERLAY_CLAIM_FAILED,
   OVERLAY_FREEZE_FAILED,
+  OVERLAY_LOOKUP_FAILED,
   OVERLAY_OPEN_FAILED,
   errorMessage
 } from './config'
@@ -101,6 +102,13 @@ describe('errorMessage humanizing', () => {
 
   it('maps a wallet timeout to the Chrome allow sentence', () => {
     expect(errorMessage(new Error('timeout'))).toBe(CHROME_ALLOW_HINT)
+  })
+
+  it('keeps a stream lookup miss as a one-line load failure, not Chrome or host jargon', () => {
+    expect(errorMessage(new Error(OVERLAY_LOOKUP_FAILED))).toBe(OVERLAY_LOOKUP_FAILED)
+    expect(OVERLAY_LOOKUP_FAILED).toBe('Couldn’t load this stream.')
+    expect(OVERLAY_LOOKUP_FAILED).not.toContain('tm_anytx')
+    expect(OVERLAY_LOOKUP_FAILED).not.toContain('STEAK')
   })
 
   it('maps insufficient funds to a human open sentence, never createAction JSON', () => {

@@ -81,6 +81,9 @@ export const OVERLAY_CLAIM_FAILED =
 export const OVERLAY_FREEZE_FAILED =
   'Couldn’t freeze this stream. Try again in a moment.'
 
+export const OVERLAY_LOOKUP_FAILED =
+  'Couldn’t load this stream.'
+
 export type ActionVerb = 'open' | 'claim' | 'freeze'
 
 function peelJsonMessage(text: string): string {
@@ -187,6 +190,7 @@ export function declinedMessage(verb: ActionVerb): string {
 
 export function errorMessage(error: unknown, verb: ActionVerb = 'open'): string {
   const raw = extractErrorText(error).trim()
+  if (raw === OVERLAY_LOOKUP_FAILED) return OVERLAY_LOOKUP_FAILED
   if (looksLikeInsufficientFunds(raw) || raw === INSUFFICIENT_FUND_MESSAGE) {
     return INSUFFICIENT_FUND_MESSAGE
   }

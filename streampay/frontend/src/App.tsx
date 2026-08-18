@@ -12,6 +12,7 @@ import {
 import { claimStream, freezeStream, openStream } from './lib/actions'
 import {
   DESKTOP_INSTALL_URL,
+  OVERLAY_LOOKUP_FAILED,
   errorMessage,
   overlayHint,
   shortKey,
@@ -32,6 +33,7 @@ import {
 import { fetchUsdPerBsv, parseSatsAmount, satsToDisplayUsd, satsToUsdInput } from './lib/money'
 import { lookupStreams, type OverlayStream } from './lib/overlay'
 import { goHome, goToStream, parseStreamLocation, streamPublicUrl } from './lib/route'
+import { streamPageState } from './lib/stream-load'
 
 type View = 'home' | 'create' | 'stream'
 
@@ -94,7 +96,13 @@ function Advanced() {
   )
 }
 
-function Home({ onCreate }: { onCreate: () => void }) {
+function Home({
+  onCreate,
+  notice
+}: {
+  onCreate: () => void
+  notice?: string | null
+}) {
   return (
     <div className="app">
       <header className="masthead">
@@ -113,6 +121,7 @@ function Home({ onCreate }: { onCreate: () => void }) {
           <p className="memo">Legal research week</p>
           <p className="hint">21,428 sats accrued · 0 sats claimed</p>
         </div>
+        {notice && <p className="status err">{notice}</p>}
         <p className="empty-sell">Pay as they work.</p>
         <button className="btn primary" onClick={onCreate}>Open a stream</button>
       </section>
@@ -341,11 +350,13 @@ function Create({
 function StreamPage({
   streamId,
   createTxid,
-  onHome
+  onHome,
+  onCreate
 }: {
   streamId: string
   createTxid: string | null
   onHome: () => void
+  onCreate: () => void
 }) {
   const { url } = useOverlay()
   const { connect, connecting } = useWallet()
@@ -365,14 +376,17 @@ function StreamPage({
 
   useEffect(() => {
     let cancelled = false
+    let inflight = false
     const load = async (): Promise<void> => {
+      if (inflight) return
       if (!url) {
         if (!cancelled) {
           setStream(null)
-          setError('This stream isn’t available right now.')
+          setError(OVERLAY_LOOKUP_FAILED)
         }
         return
       }
+      inflight = true
       try {
         const rows = await lookupStreams(url, {
           streamId,
@@ -382,8 +396,10 @@ function StreamPage({
         const row = rows[0] ?? null
         setStream(row)
         setError(row ? null : 'This stream wasn’t found.')
-      } catch (err) {
-        if (!cancelled) setError(errorMessage(err))
+      } catch {
+        if (!cancelled) setError(OVERLAY_LOOKUP_FAILED)
+      } finally {
+        inflight = false
       }
     }
     void load()
@@ -450,6 +466,11 @@ function StreamPage({
   const status = math?.status ?? 'open'
   const amount = stream ? displayAmount(stream) : ''
   const showReceipt = Boolean(stream && (justClaimed || stream.lastClaimSats > 0))
+  const panel = streamPageState(stream, error)
+
+  if (panel.offerOpen) {
+    return <Home onCreate={onCreate} notice={panel.message} />
+  }
 
   return (
     <div className="app">
@@ -462,9 +483,9 @@ function StreamPage({
         <span className={`stamp ${status} fat`}>{statusLabel(status)}</span>
       </header>
 
-      {!stream && (
+      {panel.loading && (
         <section className="panel">
-          <p className="hint">{error || 'Loading stream…'}</p>
+          <p className="hint">{panel.message}</p>
         </section>
       )}
 
@@ -596,6 +617,12 @@ function Shell() {
         streamId={streamId}
         createTxid={createTxid}
         onHome={() => { goHome(); setView('home') }}
+        onCreate={() => {
+          goHome()
+          setStreamId(null)
+          setCreateTxid(null)
+          setView('create')
+        }}
       />
     )
   }
