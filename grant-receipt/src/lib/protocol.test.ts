@@ -92,7 +92,8 @@ describe('canonical receipt + ProtoWallet signature', () => {
     const { publicKey: signingKey } = await org.getPublicKey({
       protocolID: PROTOCOL_ID,
       keyID: receiptKeyID(receipt),
-      counterparty: receipt.donorIdentityKey
+      counterparty: receipt.donorIdentityKey,
+      forSelf: true
     })
     assert.equal(verifyWalletDataSignature(signingKey, data, signature), true)
 
@@ -136,7 +137,8 @@ describe('canonical receipt + ProtoWallet signature', () => {
     const { publicKey: signingKey } = await org.getPublicKey({
       protocolID: PROTOCOL_ID,
       keyID: receiptKeyID(receipt),
-      counterparty: receipt.donorIdentityKey
+      counterparty: receipt.donorIdentityKey,
+      forSelf: true
     })
     const fields = encodeAnnouncementFields(receipt, signature, signingKey)
     const parsed = parseAnnouncementFields(fields)

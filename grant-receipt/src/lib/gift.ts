@@ -132,7 +132,8 @@ export async function signReceipt(
   const { publicKey: signingKey } = await wallet.getPublicKey({
     protocolID: PROTOCOL_ID,
     keyID: receiptKeyID(built),
-    counterparty: built.donorIdentityKey
+    counterparty: built.donorIdentityKey,
+    forSelf: true
   })
   return { signature, signingKey }
 }
