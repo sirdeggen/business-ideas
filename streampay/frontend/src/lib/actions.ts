@@ -281,6 +281,8 @@ export async function openStream(
     lastClaimSats: 0,
     lastClaimIso: ''
   }
+  // PushDrop.lock(..., contractor, forSelf=false) uses the contractor's derived
+  // pubkey (SDK getPublicKey). They unlock with counterparty = treasurer.
   const { lockingScript, keyID } = await lockStreamToken(wallet, stream, contractorIdentity, false)
   const response = await createStreamAction(wallet, {
     description: `Open stream: ${input.memo.trim()}`,

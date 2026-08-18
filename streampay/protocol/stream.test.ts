@@ -180,7 +180,7 @@ describe('open and claim plans', () => {
     expect(planOpen(amountSats).potSats).not.toBe(1)
   })
 
-  it('claims claimable sats, not the full notional amountSats', () => {
+  it('claims claimable sats when that is less than amountSats', () => {
     const amountSats = 594_598_868
     const claimableSats = 127_414_043
     const plan = planClaim({
@@ -192,19 +192,31 @@ describe('open and claim plans', () => {
     expect(plan.claimSats).not.toBe(amountSats)
     expect(plan.remainingSats).toBe(amountSats - claimableSats)
     expect(plan.outputSatoshis).toEqual([claimableSats, amountSats - claimableSats])
-    expect(plan.outputSatoshis).not.toContain(amountSats)
+    expect(plan.outputSatoshis[0]).toBe(claimableSats)
   })
 
-  it('refuses an unfunded 1-sat stream without requesting huge outputs', () => {
+  it('still pays claimable when earned is capped at amountSats (claimed=0)', () => {
     const amountSats = 594_598_868
-    const claimableSats = 127_414_043
+    const plan = planClaim({
+      fundedSats: amountSats,
+      amountSats,
+      claimableSats: amountSats
+    })
+    expect(plan.claimSats).toBe(amountSats)
+    expect(plan.outputSatoshis[0]).toBe(amountSats)
+    expect(plan.outputSatoshis.length).toBe(2)
+    expect(plan.outputSatoshis[1]).toBe(1)
+  })
+
+  it('refuses an unfunded 1-sat stream when claimable equals amountSats', () => {
+    const amountSats = 594_598_868
     expect(() => planClaim({
       fundedSats: 1,
       amountSats,
-      claimableSats
+      claimableSats: amountSats
     })).toThrow(UNFUNDED_STREAM_MESSAGE)
     try {
-      planClaim({ fundedSats: 1, amountSats, claimableSats })
+      planClaim({ fundedSats: 1, amountSats, claimableSats: amountSats })
       throw new Error('expected planClaim to throw')
     } catch (error) {
       expect(error).toBeInstanceOf(Error)

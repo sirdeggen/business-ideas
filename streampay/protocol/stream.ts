@@ -159,8 +159,11 @@ export interface ClaimPlan {
 }
 
 /**
- * Claim pays accrued-minus-claimed from the funded pot. A 1-sat Open (token
- * only) is not funded — refuse before building a notional-sized output.
+ * Claim pays accrued-minus-claimed from the funded pot. claimableSats may
+ * equal amountSats when earned is capped (claimed=0 and the clock is done) —
+ * that payment still comes from the pot, never from contractor inputs.
+ * A 1-sat Open (token only) is not funded — refuse before createAction.
+ * The payment output is never omitted in favor of a 1-sat snapshot.
  */
 export function planClaim(args: {
   fundedSats: number
