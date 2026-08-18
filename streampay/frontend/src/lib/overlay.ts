@@ -134,7 +134,7 @@ export async function lookupStreams(
   const host = overlayUrl(base)
   const service = overlayLookupService(host)
   const resolver = createResolver(host, service)
-  const indexed = collectIndexed(await queryAnytx(resolver, service, query))
+  const indexed = collectIndexed(await queryAnytx(resolver, service, query), query)
   const joined = joinStreamRecords(indexed)
   if (query.streamId) {
     return joined.filter((row): row is OverlayStream => row.streamId === query.streamId)
@@ -165,47 +165,86 @@ async function queryAnytx(
   return answers
 }
 
-function collectIndexed(answers: LookupAnswer[]): Parameters<typeof joinStreamRecords>[0] {
+function collectIndexed(
+  answers: LookupAnswer[],
+  query: StreamLookupQuery = {}
+): Parameters<typeof joinStreamRecords>[0] {
   const rows: Parameters<typeof joinStreamRecords>[0] = []
   const seen = new Set<string>()
+  // ls_anytx findByTxid returns one arbitrary vout (often change). When the
+  // caller asked for a txid, scan every BEEF output for TAG streampay.
+  const scanAll = Boolean(query.txid)
 
   for (const answer of answers) {
     if (answer.type !== 'output-list' || !Array.isArray(answer.outputs)) continue
     for (const output of answer.outputs) {
-      const decoded = decodeBeefOutput(output.beef, output.outputIndex, output.txid)
-      if (!decoded) continue
-      const key = `${decoded.txid}.${decoded.outputIndex}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      rows.push(decoded)
+      const decodedRows = scanAll
+        ? decodeBeefStreampayOutputs(output.beef, output.txid)
+        : [decodeBeefOutput(output.beef, output.outputIndex, output.txid)]
+      for (const decoded of decodedRows) {
+        if (!decoded) continue
+        const key = `${decoded.txid}.${decoded.outputIndex}`
+        if (seen.has(key)) continue
+        seen.add(key)
+        rows.push(decoded)
+      }
     }
   }
 
   return rows
 }
 
+type IndexedRow = Parameters<typeof joinStreamRecords>[0][number]
+
+function parseLockingScript(
+  lockingScript: Transaction['outputs'][number]['lockingScript'],
+  txid: string,
+  outputIndex: number
+): IndexedRow | null {
+  try {
+    const fields = PushDrop.decode(lockingScript).fields
+    const tag = fields[0] ? new TextDecoder().decode(Uint8Array.from(fields[0])) : ''
+    if (tag !== TAG) return null
+    const stream = parseStreamFields(fields)
+    if (!stream) return null
+    return { stream, txid, outputIndex }
+  } catch {
+    return null
+  }
+}
+
 function decodeBeefOutput(
   beef: number[] | undefined,
   outputIndex: number,
   txidHint?: string
-): Parameters<typeof joinStreamRecords>[0][number] | null {
+): IndexedRow | null {
   if (!beef || beef.length === 0) return null
   try {
     const tx = Transaction.fromBEEF(beef)
     const output = tx.outputs[outputIndex]
     if (!output) return null
-    const fields = PushDrop.decode(output.lockingScript).fields
-    const tag = fields[0] ? new TextDecoder().decode(Uint8Array.from(fields[0])) : ''
-    if (tag !== TAG) return null
-    const stream = parseStreamFields(fields)
-    if (!stream) return null
-    return {
-      stream,
-      txid: txidHint || tx.id('hex'),
-      outputIndex
-    }
+    return parseLockingScript(output.lockingScript, txidHint || tx.id('hex'), outputIndex)
   } catch {
     return null
+  }
+}
+
+function decodeBeefStreampayOutputs(
+  beef: number[] | undefined,
+  txidHint?: string
+): IndexedRow[] {
+  if (!beef || beef.length === 0) return []
+  try {
+    const tx = Transaction.fromBEEF(beef)
+    const txid = txidHint || tx.id('hex')
+    const rows: IndexedRow[] = []
+    for (const [outputIndex, output] of tx.outputs.entries()) {
+      const decoded = parseLockingScript(output.lockingScript, txid, outputIndex)
+      if (decoded) rows.push(decoded)
+    }
+    return rows
+  } catch {
+    return []
   }
 }
 
