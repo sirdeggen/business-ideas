@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   TAG,
+  UNFUNDED_STREAM_MESSAGE,
   accrue,
   encodeStreamFields,
   joinStreamRecords,
   parseStreamFields,
+  planClaim,
+  planOpen,
   rateSatsPerSec,
   satsToUsd,
   type StreamPayload
@@ -148,6 +151,66 @@ describe('stream fields', () => {
     expect(row.freezeIso).toBe('2026-08-15T12:00:00.000Z')
     expect(row.lastClaimSats).toBe(100)
     expect(row.txid).toBe('cc'.repeat(32))
+    expect(row.satoshis).toBe(1)
+  })
+
+  it('keeps the funded pot outpoint when a later freeze is 1 sat', () => {
+    const id = 'ef'.repeat(16)
+    const open = demoStream({ streamId: id, claimedSats: 0, updatedIso: '2026-08-11T12:00:00.000Z' })
+    const frozen = demoStream({
+      streamId: id,
+      frozen: true,
+      freezeIso: '2026-08-15T12:00:00.000Z',
+      updatedIso: '2026-08-15T12:00:00.000Z'
+    })
+    const [row] = joinStreamRecords([
+      { stream: open, txid: 'aa'.repeat(32), outputIndex: 0, satoshis: open.amountSats },
+      { stream: frozen, txid: 'cc'.repeat(32), outputIndex: 0, satoshis: 1 }
+    ])
+    expect(row.frozen).toBe(true)
+    expect(row.txid).toBe('aa'.repeat(32))
+    expect(row.satoshis).toBe(open.amountSats)
+  })
+})
+
+describe('open and claim plans', () => {
+  it('opens by locking amountSats in the pot, not 1 sat', () => {
+    const amountSats = 594_598_868
+    expect(planOpen(amountSats)).toEqual({ potSats: amountSats })
+    expect(planOpen(amountSats).potSats).not.toBe(1)
+  })
+
+  it('claims claimable sats, not the full notional amountSats', () => {
+    const amountSats = 594_598_868
+    const claimableSats = 127_414_043
+    const plan = planClaim({
+      fundedSats: amountSats,
+      amountSats,
+      claimableSats
+    })
+    expect(plan.claimSats).toBe(claimableSats)
+    expect(plan.claimSats).not.toBe(amountSats)
+    expect(plan.remainingSats).toBe(amountSats - claimableSats)
+    expect(plan.outputSatoshis).toEqual([claimableSats, amountSats - claimableSats])
+    expect(plan.outputSatoshis).not.toContain(amountSats)
+  })
+
+  it('refuses an unfunded 1-sat stream without requesting huge outputs', () => {
+    const amountSats = 594_598_868
+    const claimableSats = 127_414_043
+    expect(() => planClaim({
+      fundedSats: 1,
+      amountSats,
+      claimableSats
+    })).toThrow(UNFUNDED_STREAM_MESSAGE)
+    try {
+      planClaim({ fundedSats: 1, amountSats, claimableSats })
+      throw new Error('expected planClaim to throw')
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error)
+      expect((error as Error).message).toBe(UNFUNDED_STREAM_MESSAGE)
+      expect(JSON.stringify(error)).not.toContain(String(amountSats))
+    }
   })
 })
 

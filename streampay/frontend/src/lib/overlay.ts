@@ -199,7 +199,9 @@ type IndexedRow = Parameters<typeof joinStreamRecords>[0][number]
 function parseLockingScript(
   lockingScript: Transaction['outputs'][number]['lockingScript'],
   txid: string,
-  outputIndex: number
+  outputIndex: number,
+  satoshis: number,
+  beef?: number[]
 ): IndexedRow | null {
   try {
     const fields = PushDrop.decode(lockingScript).fields
@@ -207,10 +209,15 @@ function parseLockingScript(
     if (tag !== TAG) return null
     const stream = parseStreamFields(fields)
     if (!stream) return null
-    return { stream, txid, outputIndex }
+    return { stream, txid, outputIndex, satoshis, beef }
   } catch {
     return null
   }
+}
+
+function outputSatoshis(output: Transaction['outputs'][number]): number {
+  const value = Number(output.satoshis ?? 0)
+  return Number.isFinite(value) && value > 0 ? value : 1
 }
 
 function decodeBeefOutput(
@@ -223,7 +230,13 @@ function decodeBeefOutput(
     const tx = Transaction.fromBEEF(beef)
     const output = tx.outputs[outputIndex]
     if (!output) return null
-    return parseLockingScript(output.lockingScript, txidHint || tx.id('hex'), outputIndex)
+    return parseLockingScript(
+      output.lockingScript,
+      txidHint || tx.id('hex'),
+      outputIndex,
+      outputSatoshis(output),
+      beef
+    )
   } catch {
     return null
   }
@@ -239,7 +252,13 @@ function decodeBeefStreampayOutputs(
     const txid = txidHint || tx.id('hex')
     const rows: IndexedRow[] = []
     for (const [outputIndex, output] of tx.outputs.entries()) {
-      const decoded = parseLockingScript(output.lockingScript, txid, outputIndex)
+      const decoded = parseLockingScript(
+        output.lockingScript,
+        txid,
+        outputIndex,
+        outputSatoshis(output),
+        beef
+      )
       if (decoded) rows.push(decoded)
     }
     return rows

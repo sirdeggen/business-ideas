@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { INSUFFICIENT_FUND_MESSAGE } from '../../../protocol/stream'
 import {
   CHROME_ALLOW_HINT,
   DECLINED_APPROVAL_CLAIM,
@@ -100,5 +101,18 @@ describe('errorMessage humanizing', () => {
 
   it('maps a wallet timeout to the Chrome allow sentence', () => {
     expect(errorMessage(new Error('timeout'))).toBe(CHROME_ALLOW_HINT)
+  })
+
+  it('maps insufficient funds to a human open sentence, never createAction JSON', () => {
+    const broke = {
+      call: 'createAction',
+      args: { outputs: [{ satoshis: 594_598_868 }] },
+      message: 'Insufficient funds'
+    }
+    const mapped = errorMessage(broke, 'open')
+    expect(mapped).toBe(INSUFFICIENT_FUND_MESSAGE)
+    expect(mapped).not.toContain('createAction')
+    expect(mapped).not.toContain('594598868')
+    expect(errorMessage(new Error(JSON.stringify(broke)), 'open')).toBe(INSUFFICIENT_FUND_MESSAGE)
   })
 })

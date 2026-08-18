@@ -1,3 +1,5 @@
+import { INSUFFICIENT_FUND_MESSAGE } from '../../../protocol/stream'
+
 export const PUBLIC_OVERLAY_URL = 'https://overlay-us-1.bsvb.tech'
 export const PUBLIC_TOPIC = 'tm_anytx'
 export const PUBLIC_LOOKUP = 'ls_anytx'
@@ -167,6 +169,10 @@ function looksLikeWalletCallJson(text: string): boolean {
   return /"call"\s*:/.test(text) || text.includes('"createAction"') || text.includes('"args"')
 }
 
+function looksLikeInsufficientFunds(text: string): boolean {
+  return /insufficient|not enough (sats|funds|bitcoin|bsv|to)|balance too low|unable to fund|not sufficient/i.test(text)
+}
+
 export function overlayFailureMessage(verb: ActionVerb = 'open'): string {
   if (verb === 'claim') return OVERLAY_CLAIM_FAILED
   if (verb === 'freeze') return OVERLAY_FREEZE_FAILED
@@ -181,6 +187,9 @@ export function declinedMessage(verb: ActionVerb): string {
 
 export function errorMessage(error: unknown, verb: ActionVerb = 'open'): string {
   const raw = extractErrorText(error).trim()
+  if (looksLikeInsufficientFunds(raw) || raw === INSUFFICIENT_FUND_MESSAGE) {
+    return INSUFFICIENT_FUND_MESSAGE
+  }
   if (looksLikeOverlayFailure(raw)) return overlayFailureMessage(verb)
   if (looksLikeRejected(raw)) return declinedMessage(verb)
   if (looksLikeWalletFailure(raw) || looksLikeTimeout(raw)) return CHROME_ALLOW_HINT

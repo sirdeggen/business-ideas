@@ -13,7 +13,7 @@ She opens a 14-day stream (default **$400**) to one contractor, with start set t
 ## Stack
 
 - Wallet: BRC-100 via `createWallet()` from `@bsv/simple/browser` (falls back to `WalletClient('auto', originator)`). Keys never leave the wallet. Protocol `[0, "streampay"]`, basket `streampay`. Wallet is not opened until **Open**, **Claim**, or **Freeze** (~8s timeout).
-- Record: one 1-sat PushDrop snapshot. Field 0 tag `streampay`.
+- Record: one PushDrop whose satoshis are the funded pot (`amountSats` at Open). Field 0 tag `streampay`. The worker unlocks it (PushDrop counterparty = contractor, keyID = streamId). Freeze is a separate 1-sat treasurer snapshot and does not move the pot.
 - Overlay: public `https://overlay-us-1.bsvb.tech`, topic `tm_anytx`, lookup `ls_anytx`. Submit is `HTTPSOverlayBroadcastFacilitator.send` then `POST /submit` (`content-type: application/octet-stream`, `x-topics: ["tm_anytx"]`). Success = STEAK `outputsToAdmit` length &gt; 0. No `TopicBroadcaster` with `networkPreset: 'local'`.
 - Lookup: page `{limit, skip, sortOrder}` and/or `{txid}`. Filter `field[0] === 'streampay'` in the browser. `ls_anytx` has no tag filter.
 - Notify: MessageBoxClient to `https://gmb.bsvblockchain.tech`, box `streampay`. Overlay is source of truth; a Message Box failure does not block open, claim, or freeze.
@@ -31,18 +31,18 @@ Rate is `amountSats / durationSec`. Freeze stops the clock. Already-claimable st
 
 ## Create
 
-1. **Open a stream.** Org name, contractor name, optional contractor identity (can wait until claim), what it’s for, amount in **dollars**, duration (default 14 days), start (a past start is allowed so day 3 is demoable).
-2. Approve in the wallet. A 1-sat PushDrop snapshot is submitted to the public overlay.
+1. **Open a stream.** Org name, contractor name, contractor identity (needed so they can unlock the pot), what it’s for, amount in **dollars**, duration (default 14 days), start (a past start is allowed so day 3 is demoable).
+2. Approve in the wallet. The treasurer **funds** the stream: the PushDrop output is `amountSats`, not 1 sat. If the wallet cannot cover that, you get a human “not enough to fund this stream.”
 3. Copy the public URL (`/streampay/?s=<streamId>`). An auditor can open it with no wallet and see rate, accrued, claimed, and Open / Frozen / Finished.
 
 ## Claim
 
-Claim persists `claimedSats` by emitting a **new** snapshot (the invoices pay pattern). The worker cannot spend the treasurer’s PushDrop — that lock belongs to the treasurer — and notify-only would not show up on `ls_anytx`.
+The worker spends **the stream UTXO** — the sats the treasurer locked at Open. Accrual stays client math: `claimable = accrued − claimed`. The same transaction pays `claimable` **BRC-29** to the contractor and re-emits the PushDrop with `claimedSats += claimable` and the remaining pot.
 
-The same transaction pays the claimable sats **BRC-29** to the contractor (or to the claimant if identity was still blank). The claimant’s wallet funds that output, the same way an invoice payer funds a pay.
+Self-funded pay from the contractor’s pocket is not StreamPay. A 1-sat Open (token only) is not funded; Claim refuses with “this stream isn’t funded” and does not ask the wallet for the full notional.
 
 1. Open the stream link. Accrued ticks on the page.
-2. Click **Claim**. Approve. `claimedSats` goes up on the overlay.
+2. Click **Claim**. Approve. Inputs include the stream UTXO. Outputs are claimable plus remaining pot (and fee/change), not the full notional from contractor funds.
 3. Both parties get a receipt on this page: fat stamp, org, contractor, amount claimed, time, human id. Txid and protocol sit under **Details**. No JSON package.
 
 ## Freeze

@@ -162,8 +162,8 @@ function Create({
       return
     }
     const identity = contractorIdentity.trim()
-    if (identity && !isIdentityKey(identity)) {
-      setError('Contractor identity should be a compressed public key, or leave it blank until they claim.')
+    if (!isIdentityKey(identity)) {
+      setError('Contractor identity is needed to open a funded stream.')
       return
     }
     const durationDays = Number(days)
@@ -242,7 +242,7 @@ function Create({
         <div>
           <button className="text-link" onClick={onBack}>StreamPay</button>
           <h1>Open a stream</h1>
-          <p className="lede">Money accrues with time. They claim what’s earned. You can freeze it.</p>
+          <p className="lede">You fund the stream. They claim what’s accrued from it. You can freeze the clock.</p>
         </div>
       </header>
 
@@ -263,14 +263,15 @@ function Create({
           placeholder="Jordan Lee"
           maxLength={80}
         />
-        <label htmlFor="identity">Contractor identity (optional until claim)</label>
+        <label htmlFor="identity">Contractor identity</label>
         <input
           id="identity"
           value={contractorIdentity}
           onChange={(event) => setContractorIdentity(event.target.value)}
-          placeholder="Leave blank if they haven’t connected yet"
+          placeholder="Their compressed public key"
           autoComplete="off"
         />
+        <p className="helper">Needed so they can claim accrued pay from the stream you fund.</p>
         <label htmlFor="memo">What it’s for</label>
         <input
           id="memo"
@@ -323,7 +324,7 @@ function Create({
           </button>
         </div>
         {!(busy || connecting || showInstall) && (
-          <p className="helper">We’ll ask you to approve this in a moment. Default is {DEFAULT_AMOUNT_USD} over {DEFAULT_DURATION_DAYS} days.</p>
+          <p className="helper">We’ll ask you to fund this stream in a moment. Default is {DEFAULT_AMOUNT_USD} over {DEFAULT_DURATION_DAYS} days.</p>
         )}
         {(busy || connecting || showInstall) && <ChromeHint />}
         {showInstall && <InstallPrompt verb="open" onRetry={() => void send()} />}
@@ -479,6 +480,9 @@ function StreamPage({
             <div><dt>Receipt</dt><dd>{humanReceiptId(stream.streamId)}</dd></div>
           </dl>
           <p className="helper">Anyone with this link can see the rate, what’s accrued, and whether it’s frozen. No wallet needed to look.</p>
+          {(stream.satoshis ?? 1) < math.claimableSats && (
+            <p className="helper">This stream isn’t funded. A claim will not invent the missing sats.</p>
+          )}
           <div className="stack-actions">
             <button className="btn copy-link" onClick={() => void copyLink()}>
               {copied ? 'Copied' : 'Copy link'}
