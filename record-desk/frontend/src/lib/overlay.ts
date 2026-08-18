@@ -212,16 +212,56 @@ export async function submitRecordTx(base: string, beef: number[]): Promise<Subm
   }
 }
 
+async function postLookup(
+  host: string,
+  service: string,
+  query: object
+): Promise<LookupAnswer> {
+  const response = await fetch(`${host}/lookup`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ service, query })
+  })
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(
+      `POST ${host}/lookup failed (${response.status})${text ? `: ${text.slice(0, 200)}` : ''}`
+    )
+  }
+  return await response.json() as LookupAnswer
+}
+
+/** Public overlay: raw POST so lookup never waits on a wallet / SLAP resolver. */
+async function queryLookup(
+  host: string,
+  service: string,
+  query: object,
+  timeoutMs: number
+): Promise<LookupAnswer> {
+  if (usesPublicAnytx(host)) {
+    try {
+      return await postLookup(host, service, query)
+    } catch (error) {
+      const resolver = createResolver(host, service)
+      try {
+        return await resolver.query({ service, query }, timeoutMs)
+      } catch {
+        throw error
+      }
+    }
+  }
+  return createResolver(host, service).query({ service, query }, timeoutMs)
+}
+
 export async function inspectLookupRecords(
   base: string,
   query: RecordQuery = {}
 ): Promise<LookupInspection> {
   const host = overlayUrl(base)
   const service = overlayLookupService(host)
-  const resolver = createResolver(host, service)
   const answers = usesPublicAnytx(host)
-    ? await queryAnytx(resolver, service, query)
-    : [await resolver.query({ service, query }, 15000)]
+    ? await queryAnytx(host, service, query)
+    : [await queryLookup(host, service, query, 15000)]
 
   const inspected = answers.flatMap(inspectAnswer)
   const rows = inspected
@@ -252,21 +292,22 @@ export function formatLookupDiagnostic(inspection: LookupInspection, publicAnytx
 }
 
 async function queryAnytx(
-  resolver: LookupResolver,
+  host: string,
   service: string,
   query: RecordQuery
 ): Promise<LookupAnswer[]> {
   if (query.outpoint) {
     const [txid] = query.outpoint.split('.')
-    return [await resolver.query({ service, query: { txid } }, 20000)]
+    return [await queryLookup(host, service, { txid }, 20000)]
   }
 
   const answers: LookupAnswer[] = []
   const pageSize = 100
-  for (let page = 0; page < 5; page++) {
-    const answer = await resolver.query({
-      service,
-      query: { limit: pageSize, skip: page * pageSize, sortOrder: 'desc' }
+  for (let page = 0; page < 8; page++) {
+    const answer = await queryLookup(host, service, {
+      limit: pageSize,
+      skip: page * pageSize,
+      sortOrder: 'desc'
     }, 20000)
     answers.push(answer)
     const count = answer.type === 'output-list' ? answer.outputs.length : 0
