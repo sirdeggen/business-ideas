@@ -286,12 +286,23 @@ dd {
   margin-top: 8px;
 }
 
-.btn.copy-link {
-  width: 100%;
-  padding: 14px 16px;
-  font-size: 16px;
-  background: var(--navy);
-  color: #f7f4ec;
+.block-title {
+  margin: 0 0 12px;
+  font-size: 22px;
+  font-weight: 650;
+  color: var(--navy);
+}
+
+.remaining {
+  margin: 8px 0 0;
+  font-size: 22px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.stack-actions .btn.claim {
+  padding: 16px 18px;
+  font-size: 20px;
 }
 
 .paid-hero {

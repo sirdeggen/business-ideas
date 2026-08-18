@@ -49,13 +49,20 @@ export function formatSats(sats: number): string {
 
 export function satsToDisplayUsd(sats: number, usdPerBsv: number | null): string {
   if (!usdPerBsv || usdPerBsv <= 0 || !Number.isFinite(sats) || sats < 0) return ''
-  return formatUsd((sats / SATS_PER_BSV) * usdPerBsv)
+  return formatMeaningfulUsd((sats / SATS_PER_BSV) * usdPerBsv)
 }
 
 export function formatUsd(amount: string | number): string {
   const value = typeof amount === 'number' ? amount : Number(amount)
   if (!Number.isFinite(value)) return typeof amount === 'string' && amount ? `$${amount}` : ''
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+}
+
+/** Hide $0.00 / $0.01 pennies. Sats are the settlement. */
+export function formatMeaningfulUsd(amount: number): string {
+  if (!Number.isFinite(amount) || amount <= 0) return ''
+  if (Math.round(amount * 100) <= 1) return ''
+  return formatUsd(amount)
 }
 
 export function formatUsdInput(amount: number): string {

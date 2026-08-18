@@ -1,10 +1,28 @@
-import { accrue, satsToUsd, type StreamStatus } from '../../../protocol/stream'
-import { formatSats, formatUsd } from './money'
+import { accrue, type StreamStatus } from '../../../protocol/stream'
+import { formatSats } from './money'
 import type { OverlayStream } from './overlay'
 
-function optionalUsd(sats: number, stream: OverlayStream): string {
-  const usd = satsToUsd(sats, stream.amountSats, stream.amountUsd)
-  return usd > 0 ? ` · ${formatUsd(usd)}` : ''
+export const STREAM_CARD = 'Stream'
+export const RECEIPT_CARD = 'Receipt'
+
+export const FREEZE_HINT =
+  'Only the person who opened this stream can freeze it. That stops new pay from accruing. Already-accrued can still be claimed.'
+
+export function remainingPotSats(stream: OverlayStream): number {
+  const accounted = Math.max(0, stream.amountSats - stream.claimedSats)
+  if (stream.claimedSats > 0) return accounted
+  const onChain = Number(stream.satoshis)
+  if (Number.isInteger(onChain) && onChain > 1) return onChain
+  return accounted
+}
+
+export function remainingLine(stream: OverlayStream): string {
+  return `${formatSats(remainingPotSats(stream))} remaining`
+}
+
+export function claimLabel(claimableSats: number): string {
+  if (claimableSats < 1) return 'Nothing to claim yet'
+  return `Claim ${formatSats(claimableSats)}`
 }
 
 export function humanReceiptId(streamId: string): string {
@@ -33,11 +51,11 @@ export function statusLabel(status: StreamStatus): string {
 }
 
 export function displayAmount(stream: OverlayStream): string {
-  return `${formatSats(stream.amountSats)}${optionalUsd(stream.amountSats, stream)}`
+  return formatSats(stream.amountSats)
 }
 
-export function displaySats(sats: number, stream: OverlayStream): string {
-  return `${formatSats(sats)}${optionalUsd(sats, stream)}`
+export function displaySats(sats: number): string {
+  return formatSats(sats)
 }
 
 export function dailyRate(stream: OverlayStream): string {
@@ -45,7 +63,7 @@ export function dailyRate(stream: OverlayStream): string {
   if (!(days > 0)) return ''
   const sats = Math.floor(stream.amountSats / days)
   if (!(sats > 0)) return ''
-  return `${formatSats(sats)}${optionalUsd(sats, stream)}`
+  return formatSats(sats)
 }
 
 export function dayPhrase(stream: OverlayStream, nowMs = Date.now()): string {
@@ -63,7 +81,7 @@ export function dayPhrase(stream: OverlayStream, nowMs = Date.now()): string {
 
 export function accruedLine(stream: OverlayStream, nowMs = Date.now()): string {
   const math = accrue(stream, nowMs)
-  return `${displaySats(math.earnedSats, stream)} accrued · ${displaySats(stream.claimedSats, stream)} claimed`
+  return `${displaySats(math.earnedSats)} accrued · ${displaySats(stream.claimedSats)} claimed · ${remainingLine(stream)}`
 }
 
 export function padLocal(n: number): string {

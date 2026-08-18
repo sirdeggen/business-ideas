@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_AMOUNT_SATS, TAG, rateSatsPerSec } from '../../../protocol/stream'
-import { displayAmount, displaySats } from './copy'
+import {
+  FREEZE_HINT,
+  RECEIPT_CARD,
+  STREAM_CARD,
+  accruedLine,
+  claimLabel,
+  displayAmount,
+  displaySats,
+  remainingLine,
+  remainingPotSats
+} from './copy'
 import type { OverlayStream } from './overlay'
 
 function stream(partial: Partial<OverlayStream> = {}): OverlayStream {
@@ -33,14 +43,37 @@ function stream(partial: Partial<OverlayStream> = {}): OverlayStream {
 }
 
 describe('stream copy is sat-first', () => {
-  it('shows the pot in sats, with dollars only as a display sidecar', () => {
+  it('leads with sats and drops paired USD on the stream page', () => {
     expect(displayAmount(stream())).toBe('100,000 sats')
-    expect(displayAmount(stream({ amountUsd: '0.07' }))).toContain('100,000 sats')
-    expect(displayAmount(stream({ amountUsd: '0.07' }))).toContain('$0.07')
+    expect(displayAmount(stream({ amountUsd: '0.07' }))).toBe('100,000 sats')
+    expect(displayAmount(stream({ amountUsd: '0.07' }))).not.toContain('$')
+    expect(displaySats(21_428)).toBe('21,428 sats')
+    expect(displaySats(14)).not.toMatch(/\$0\.0[01]/)
+    expect(claimLabel(14)).toBe('Claim 14 sats')
+    expect(claimLabel(14)).not.toContain('$')
+    expect(claimLabel(0)).toBe('Nothing to claim yet')
   })
 
   it('shows claimable in sats, not a spot dollar conversion of the notional', () => {
-    expect(displaySats(21_428, stream())).toBe('21,428 sats')
-    expect(displaySats(21_428, stream())).not.toContain('$86')
+    expect(displaySats(21_428)).toBe('21,428 sats')
+    expect(displaySats(21_428)).not.toContain('$86')
+  })
+
+  it('writes the remaining pot after a claim (QA 78,559)', () => {
+    const afterClaim = stream({ satoshis: 100_000, claimedSats: 21_441 })
+    expect(remainingPotSats(afterClaim)).toBe(78_559)
+    expect(remainingLine(afterClaim)).toBe('78,559 sats remaining')
+    expect(accruedLine(afterClaim, Date.parse(afterClaim.startIso) + 3 * 86_400_000)).toContain('78,559 sats remaining')
+  })
+
+  it('says who can freeze and what freeze does', () => {
+    expect(FREEZE_HINT).toMatch(/opened this stream/i)
+    expect(FREEZE_HINT).toMatch(/stops new pay from accruing/i)
+    expect(FREEZE_HINT).toMatch(/already-accrued can still be claimed/i)
+  })
+
+  it('names the OPEN stream card and the CLAIMED receipt card', () => {
+    expect(STREAM_CARD).toBe('Stream')
+    expect(RECEIPT_CARD).toBe('Receipt')
   })
 })
