@@ -1,6 +1,12 @@
-import { DESK_STORAGE_KEY, DONOR_STORAGE_KEY, ORG_NAME_KEY, RECEIPT_CACHE_PREFIX } from './config'
+import {
+  DESK_STORAGE_KEY,
+  DONOR_STORAGE_KEY,
+  ORG_NAME_KEY,
+  OVERLAY_GIFTS_KEY,
+  RECEIPT_CACHE_PREFIX
+} from './config'
 import type { GiftRecord } from './machine'
-import type { CanonicalReceipt } from './protocol'
+import type { CanonicalReceipt, GiftNotice } from './protocol'
 
 function readJson<T>(key: string, fallback: T): T {
   if (typeof localStorage === 'undefined') return fallback
@@ -57,4 +63,34 @@ export function readCachedReceipt(txid: string): CachedPublicReceipt | null {
 
 export function writeCachedReceipt(txid: string, value: CachedPublicReceipt): void {
   writeJson(`${RECEIPT_CACHE_PREFIX}${txid}`, value)
+}
+
+export function readCachedOverlayGifts(): GiftNotice[] {
+  return readJson<GiftNotice[]>(OVERLAY_GIFTS_KEY, [])
+}
+
+export function writeCachedOverlayGifts(gifts: GiftNotice[]): void {
+  writeJson(OVERLAY_GIFTS_KEY, gifts)
+}
+
+export function mergeGiftNotices(cached: GiftNotice[], incoming: GiftNotice[]): GiftNotice[] {
+  const byId = new Map<string, GiftNotice>()
+  for (const row of cached) {
+    if (row.giftId) byId.set(row.giftId, row)
+  }
+  for (const row of incoming) {
+    if (row.giftId) byId.set(row.giftId, row)
+  }
+  return [...byId.values()]
+}
+
+/** Empty or failed ls_anytx must not wipe a list the desk already saw. */
+export function keepLastGoodGifts(
+  cached: GiftNotice[],
+  incoming: GiftNotice[],
+  overlayFailedOrEmpty: boolean
+): GiftNotice[] {
+  if (incoming.length > 0) return mergeGiftNotices(cached, incoming)
+  if (overlayFailedOrEmpty && cached.length > 0) return cached
+  return cached
 }

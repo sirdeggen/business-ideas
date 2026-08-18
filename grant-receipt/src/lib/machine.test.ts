@@ -5,6 +5,7 @@ import {
   applyEvent,
   applyMessages,
   giftFromNotice,
+  mergeIncomingGifts,
   pendingAcks,
   pendingReceipts,
   issuedReceipts
@@ -162,5 +163,30 @@ describe('gift → ack → receipt state machine', () => {
 
     const again = applyEvent(gifted, { type: 'gift', gift })
     assert.equal(again.length, 1)
+  })
+
+  it('merges overlay gifts without wiping an acknowledged row', () => {
+    const gift = giftNotice()
+    const acknowledged = applyEvent(
+      applyEvent([], { type: 'gift', gift }),
+      {
+        type: 'ack',
+        ack: {
+          v: 1,
+          kind: 'ack',
+          giftId: gift.giftId,
+          purposeHash: gift.purposeHash,
+          orgIdentityKey: gift.orgIdentityKey,
+          donorIdentityKey: gift.donorIdentityKey,
+          giftTxid: gift.giftTxid,
+          at: '2026-08-18T16:01:00.000Z'
+        }
+      }
+    )
+    const extra = giftNotice({ giftId: 'gift-2', giftTxid: 'ef'.repeat(32), keyID: 'gift-2' })
+    const merged = mergeIncomingGifts(acknowledged, [gift, extra])
+    assert.equal(merged.length, 2)
+    assert.equal(merged[0].status, 'acknowledged')
+    assert.equal(merged[1].status, 'gifted')
   })
 })

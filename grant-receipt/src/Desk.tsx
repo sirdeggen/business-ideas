@@ -3,21 +3,27 @@ import { useWallet } from './context/WalletContext'
 import { DESKTOP_INSTALL_URL, errorMessage, giveHref } from './lib/config'
 import { internalizeGift, signReceipt } from './lib/gift'
 import { displayNameFor } from './lib/identity'
-import { applyEvent, statusLabel, type GiftRecord } from './lib/machine'
+import { applyEvent, mergeIncomingGifts, statusLabel, type GiftRecord } from './lib/machine'
 import { pullDeskMessages, sendDeskMessage } from './lib/messagebox'
 import { displayUsd } from './lib/money'
-import { publishReceiptAnnouncement } from './lib/overlay'
+import { lookupIncomingGifts, publishReceiptAnnouncement, type OverlayLookupStatus } from './lib/overlay'
 import { readGifts, readOrgName, writeGifts, writeOrgName } from './lib/persist'
 import {
   buildReceipt,
   isIdentityKey,
-  shortKey,
   type AckNotice,
   type GiftNotice,
   type ReceiptNotice
 } from './lib/protocol'
 
-export function Desk() {
+function giftsForDesk(gifts: GiftRecord[], orgKey?: string): GiftRecord[] {
+  const org = orgKey?.trim()
+  if (!org || !isIdentityKey(org)) return gifts
+  const want = org.toLowerCase()
+  return gifts.filter((row) => row.orgIdentityKey.trim().toLowerCase() === want)
+}
+
+export function Desk({ orgIdentity = '' }: { orgIdentity?: string }) {
   const { wallet, identityKey, connecting, error, connect } = useWallet()
   const [orgName, setOrgName] = useState(() => readOrgName() || '')
   const [gifts, setGifts] = useState<GiftRecord[]>(() => readGifts('desk'))
@@ -25,6 +31,9 @@ export function Desk() {
   const [notice, setNotice] = useState('')
   const [fail, setFail] = useState('')
   const [names, setNames] = useState<Record<string, string>>({})
+  const [overlayStatus, setOverlayStatus] = useState<OverlayLookupStatus>('checking')
+  const [overlayError, setOverlayError] = useState('')
+  const [usedOverlayCache, setUsedOverlayCache] = useState(false)
 
   useEffect(() => {
     writeGifts('desk', gifts)
@@ -35,8 +44,16 @@ export function Desk() {
   }, [orgName])
 
   useEffect(() => {
-    if (!wallet) return
+    const orgKey = orgIdentity || identityKey || undefined
     const tick = async (): Promise<void> => {
+      const looked = await lookupIncomingGifts(orgKey)
+      setOverlayStatus(looked.status)
+      setOverlayError(looked.error || '')
+      setUsedOverlayCache(looked.usedCache)
+      if (looked.gifts.length > 0) {
+        setGifts((current) => mergeIncomingGifts(current, looked.gifts))
+      }
+      if (!wallet) return
       const incoming = await pullDeskMessages(wallet)
       if (incoming.length === 0) return
       setGifts((current) => {
@@ -58,7 +75,7 @@ export function Desk() {
     void tick()
     const id = window.setInterval(() => { void tick() }, 8000)
     return () => window.clearInterval(id)
-  }, [wallet])
+  }, [wallet, orgIdentity, identityKey])
 
   useEffect(() => {
     const unknown = gifts
@@ -74,6 +91,8 @@ export function Desk() {
   const donorLabel = (gift: GiftRecord): string => {
     return gift.donorName || names[gift.donorIdentityKey] || 'A donor'
   }
+
+  const visibleGifts = giftsForDesk(gifts, orgIdentity || identityKey || undefined)
 
   const copyGiveLink = async (): Promise<void> => {
     setFail('')
@@ -202,12 +221,11 @@ export function Desk() {
             Copy give link
           </button>
           <button className="btn" disabled={connecting} onClick={() => void connect().catch(() => undefined)}>
-            {identityKey ? 'Wallet open' : 'Open wallet to see incoming gifts'}
+            {identityKey ? 'Wallet open' : 'Open wallet'}
           </button>
         </div>
         <p className="hint">
-          Wallet is for acknowledge, receipt, and the give link. Incoming gifts
-          do not show until the wallet is open.
+          Wallet is for acknowledge, receipt, and the give link.
         </p>
         <details className="advanced">
           <summary>Advanced</summary>
@@ -228,14 +246,34 @@ export function Desk() {
 
       <section className="panel">
         <h2>Incoming gifts</h2>
-        {gifts.length === 0 ? (
+        {overlayStatus === 'checking' && visibleGifts.length === 0 && (
+          <p className="hint">Looking up incoming gifts…</p>
+        )}
+        {overlayStatus === 'failed' && visibleGifts.length > 0 && (
+          <p className="status err">
+            Could not reach overlay-us-1. Showing last-good incoming gifts.
+          </p>
+        )}
+        {overlayStatus === 'failed' && visibleGifts.length === 0 && (
+          <p className="status err">
+            Could not reach overlay-us-1. Incoming gifts are not missing because
+            this list failed.
+          </p>
+        )}
+        {usedOverlayCache && overlayStatus === 'online' && visibleGifts.length > 0 && (
+          <p className="hint">Showing last-good incoming gifts.</p>
+        )}
+        {overlayError && overlayStatus === 'failed' && visibleGifts.length > 0 && (
+          <p className="hint">{overlayError}</p>
+        )}
+        {visibleGifts.length === 0 && overlayStatus === 'online' ? (
           <p className="hint">
             Nothing in yet. Share the give link. When a donor sends a
             purpose-restricted gift, it lands here.
           </p>
-        ) : (
+        ) : visibleGifts.length > 0 ? (
           <ul className="gift-list">
-            {gifts.slice().reverse().map((gift) => (
+            {visibleGifts.slice().reverse().map((gift) => (
               <li key={gift.giftId}>
                 <div className="gift-head">
                   <p className="amount">{displayUsd(gift.amountUsd, gift.amountSats, null)}</p>
@@ -259,14 +297,15 @@ export function Desk() {
                 </div>
                 <details className="advanced">
                   <summary>Advanced</summary>
-                  <p>Donor <code>{shortKey(gift.donorIdentityKey)}</code></p>
+                  <p>Donor <code>{gift.donorIdentityKey}</code></p>
+                  <p>Desk <code>{gift.orgIdentityKey}</code></p>
                   <p>Purpose hash <code>{gift.purposeHash}</code></p>
-                  <p>Gift <code>{shortKey(gift.giftTxid)}</code></p>
+                  <p>Gift <code>{gift.giftTxid}</code></p>
                 </details>
               </li>
             ))}
           </ul>
-        )}
+        ) : null}
       </section>
     </>
   )

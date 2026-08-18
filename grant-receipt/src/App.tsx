@@ -44,7 +44,7 @@ function Shell() {
       ) : role === 'give' ? (
         <Give orgIdentity={org} orgName={name} />
       ) : (
-        <Desk />
+        <Desk orgIdentity={org} />
       )}
 
       <p className="fine-print">

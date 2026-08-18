@@ -6,7 +6,14 @@ import {
   type WalletClient
 } from '@bsv/sdk'
 import { originator } from './config'
-import { readCachedReceipt, writeCachedReceipt, type CachedPublicReceipt } from './persist'
+import {
+  keepLastGoodGifts,
+  readCachedOverlayGifts,
+  readCachedReceipt,
+  writeCachedOverlayGifts,
+  writeCachedReceipt,
+  type CachedPublicReceipt
+} from './persist'
 import {
   ANNOUNCE_PROTOCOL_ID,
   BASKET,
@@ -15,8 +22,12 @@ import {
   PROTOCOL_TAG,
   TOPIC,
   encodeAnnouncementFields,
+  encodeGiftAnnouncementFields,
+  filterGiftsForOrg,
   parseAnnouncementFields,
-  type CanonicalReceipt
+  parseGiftAnnouncementFields,
+  type CanonicalReceipt,
+  type GiftNotice
 } from './protocol'
 
 export type OverlayLookupStatus = 'idle' | 'checking' | 'online' | 'failed'
@@ -111,6 +122,46 @@ export async function publishReceiptAnnouncement(
   return response.txid
 }
 
+export async function publishGiftAnnouncement(
+  wallet: WalletClient,
+  gift: GiftNotice
+): Promise<string> {
+  const keyID = `${gift.giftId}:gift:${gift.at}`
+  const token = new PushDrop(wallet, originator())
+  const lockingScript = await token.lock(
+    encodeGiftAnnouncementFields(gift),
+    ANNOUNCE_PROTOCOL_ID,
+    keyID,
+    'self',
+    true,
+    false
+  )
+  const response = await wallet.createAction({
+    description: `Gift notice: ${gift.purpose}`.slice(0, 50),
+    outputs: [{
+      satoshis: 1,
+      lockingScript: lockingScript.toHex(),
+      outputDescription: `${PROTOCOL_TAG} gift`,
+      basket: BASKET,
+      customInstructions: JSON.stringify({
+        protocolID: ANNOUNCE_PROTOCOL_ID,
+        keyID,
+        counterparty: 'self'
+      }),
+      tags: [BASKET, 'gift']
+    }],
+    labels: [BASKET, 'gift'],
+    options: { randomizeOutputs: false }
+  })
+  if (!response.txid || !response.tx) {
+    throw new Error('Wallet did not return a public gift notice')
+  }
+  await broadcastAnnouncement(response.tx as number[])
+  const cached = keepLastGoodGifts(readCachedOverlayGifts(), [gift], false)
+  writeCachedOverlayGifts(cached)
+  return response.txid
+}
+
 function decodeOutput(beef: number[], outputIndex: number): CachedPublicReceipt | null {
   try {
     const tx = Transaction.fromBEEF(beef)
@@ -163,6 +214,68 @@ export async function lookupPublicReceipt(txid: string): Promise<{
       found: cached,
       status: 'failed',
       usedCache: Boolean(cached),
+      error: err instanceof Error ? err.message : String(err)
+    }
+  }
+}
+
+const GIFT_PAGE = 100
+const GIFT_MAX_PAGES = 4
+
+function decodeGiftOutput(beef: number[], outputIndex: number): GiftNotice | null {
+  try {
+    const tx = Transaction.fromBEEF(beef)
+    const output = tx.outputs[outputIndex]
+    if (!output) return null
+    const decoded = PushDrop.decode(output.lockingScript)
+    return parseGiftAnnouncementFields(decoded.fields)
+  } catch {
+    return null
+  }
+}
+
+export async function lookupIncomingGifts(orgIdentityKey?: string): Promise<{
+  gifts: GiftNotice[]
+  status: OverlayLookupStatus
+  usedCache: boolean
+  error?: string
+}> {
+  const cached = readCachedOverlayGifts()
+  try {
+    const resolver = overlayResolver()
+    const live: GiftNotice[] = []
+    const seen = new Set<string>()
+    for (let page = 0; page < GIFT_MAX_PAGES; page++) {
+      const answer = await resolver.query({
+        service: LOOKUP_SERVICE,
+        query: { limit: GIFT_PAGE, skip: page * GIFT_PAGE, sortOrder: 'desc' }
+      }, 15000) as {
+        type?: string
+        outputs?: Array<{ beef: number[]; outputIndex: number }>
+      }
+      if (answer.type !== 'output-list' || !answer.outputs) break
+      for (const output of answer.outputs) {
+        const gift = decodeGiftOutput(output.beef, output.outputIndex)
+        if (!gift || seen.has(gift.giftId)) continue
+        seen.add(gift.giftId)
+        live.push(gift)
+      }
+      if (answer.outputs.length < GIFT_PAGE) break
+    }
+    const kept = keepLastGoodGifts(cached, live, live.length === 0)
+    if (kept.length > 0) writeCachedOverlayGifts(kept)
+    const gifts = filterGiftsForOrg(kept, orgIdentityKey)
+    return {
+      gifts,
+      status: 'online',
+      usedCache: live.length === 0 && kept.length > 0
+    }
+  } catch (err) {
+    const kept = keepLastGoodGifts(cached, [], true)
+    return {
+      gifts: filterGiftsForOrg(kept, orgIdentityKey),
+      status: 'failed',
+      usedCache: kept.length > 0,
       error: err instanceof Error ? err.message : String(err)
     }
   }

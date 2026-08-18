@@ -133,6 +133,18 @@ export function applyMessages(gifts: GiftRecord[], messages: DeskMessage[]): Gif
   return next
 }
 
+export function mergeIncomingGifts(current: GiftRecord[], incoming: GiftNotice[]): GiftRecord[] {
+  let next = current
+  for (const gift of incoming) {
+    try {
+      next = applyEvent(next, { type: 'gift', gift })
+    } catch {
+      // Duplicate or a bad purpose hash is skipped.
+    }
+  }
+  return next
+}
+
 export function pendingAcks(gifts: GiftRecord[]): GiftRecord[] {
   return gifts.filter((row) => row.status === 'gifted')
 }
