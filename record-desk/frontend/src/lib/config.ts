@@ -131,6 +131,16 @@ function looksLikeWalletFailure(text: string): boolean {
   )
 }
 
+/** Wallet-missing is not a list read failure. Strangers can read the overlay. */
+export function isWalletMissingMessage(text: string): boolean {
+  return looksLikeWalletFailure(text)
+}
+
+/** Basket inspect noise — never the Buy-a-dump error when the user only wanted the list. */
+export function isListOutputsFailure(text: string): boolean {
+  return /listoutputs\s*\(/i.test(text)
+}
+
 function looksLikeTimeout(text: string): boolean {
   const lower = text.toLowerCase()
   return lower.includes('timeout') || lower.includes('timed out') || lower.includes('deadline')

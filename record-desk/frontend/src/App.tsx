@@ -17,13 +17,9 @@ import {
   overlayCheckFailed,
   shortKey
 } from './lib/config'
+import { loadRecordsList } from './lib/list'
 import { fetchUsdPerBsv, formatSatsAmount } from './lib/money'
-import {
-  formatLookupDiagnostic,
-  inspectLookupRecords,
-  usesPublicAnytx,
-  type OverlayRecord
-} from './lib/overlay'
+import { type OverlayRecord } from './lib/overlay'
 
 function displayName(name: string): string {
   return isIdentityKey(name) ? shortKey(name) : name
@@ -90,9 +86,10 @@ function Shell() {
     setListError(null)
     setListHint(null)
     try {
-      const inspection = await inspectLookupRecords(url)
-      setRows(inspection.rows)
-      setListHint(formatLookupDiagnostic(inspection, usesPublicAnytx(url)) || null)
+      const result = await loadRecordsList(url, wallet)
+      setRows(result.rows)
+      setListHint(result.hint)
+      setListError(result.error)
     } catch (err) {
       console.error('Lookup failed', err)
       setListError(errorMessage(err))
@@ -103,7 +100,7 @@ function Shell() {
 
   useEffect(() => {
     void refreshList()
-  }, [url])
+  }, [url, wallet])
 
   const post = async (): Promise<void> => {
     if (overlayDown) {
