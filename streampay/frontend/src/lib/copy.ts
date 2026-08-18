@@ -1,6 +1,11 @@
 import { accrue, satsToUsd, type StreamStatus } from '../../../protocol/stream'
-import { formatUsd } from './money'
+import { formatSats, formatUsd } from './money'
 import type { OverlayStream } from './overlay'
+
+function optionalUsd(sats: number, stream: OverlayStream): string {
+  const usd = satsToUsd(sats, stream.amountSats, stream.amountUsd)
+  return usd > 0 ? ` · ${formatUsd(usd)}` : ''
+}
 
 export function humanReceiptId(streamId: string): string {
   const compact = streamId.replace(/[^0-9a-f]/gi, '').slice(0, 8).toUpperCase()
@@ -28,19 +33,19 @@ export function statusLabel(status: StreamStatus): string {
 }
 
 export function displayAmount(stream: OverlayStream): string {
-  if (stream.amountUsd) return formatUsd(stream.amountUsd)
-  return ''
+  return `${formatSats(stream.amountSats)}${optionalUsd(stream.amountSats, stream)}`
 }
 
-export function displaySatsAsUsd(sats: number, stream: OverlayStream): string {
-  return formatUsd(satsToUsd(sats, stream.amountSats, stream.amountUsd))
+export function displaySats(sats: number, stream: OverlayStream): string {
+  return `${formatSats(sats)}${optionalUsd(sats, stream)}`
 }
 
-export function dailyUsd(stream: OverlayStream): string {
+export function dailyRate(stream: OverlayStream): string {
   const days = stream.durationSec / 86_400
-  const usd = Number(stream.amountUsd)
-  if (!(days > 0) || !Number.isFinite(usd)) return ''
-  return formatUsd(usd / days)
+  if (!(days > 0)) return ''
+  const sats = Math.floor(stream.amountSats / days)
+  if (!(sats > 0)) return ''
+  return `${formatSats(sats)}${optionalUsd(sats, stream)}`
 }
 
 export function dayPhrase(stream: OverlayStream, nowMs = Date.now()): string {
@@ -58,7 +63,7 @@ export function dayPhrase(stream: OverlayStream, nowMs = Date.now()): string {
 
 export function accruedLine(stream: OverlayStream, nowMs = Date.now()): string {
   const math = accrue(stream, nowMs)
-  return `${displaySatsAsUsd(math.earnedSats, stream)} accrued · ${displaySatsAsUsd(stream.claimedSats, stream)} claimed`
+  return `${displaySats(math.earnedSats, stream)} accrued · ${displaySats(stream.claimedSats, stream)} claimed`
 }
 
 export function padLocal(n: number): string {

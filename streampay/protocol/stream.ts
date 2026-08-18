@@ -24,7 +24,8 @@ export const MAX_NAME_CHARS = 80
 export const MIN_AMOUNT_SATS = 1
 export const MAX_AMOUNT_SATS = 1_000_000_000_000
 export const DEFAULT_DURATION_DAYS = 14
-export const DEFAULT_AMOUNT_USD = '400.00'
+export const DEFAULT_AMOUNT_SATS = 100_000
+export const FUNDABLE_MAX_SATS = 1_000_000
 
 export type StreamStatus = 'open' | 'frozen' | 'finished'
 

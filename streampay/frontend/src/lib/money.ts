@@ -1,4 +1,4 @@
-const SATS_PER_BSV = 100_000_000
+export const SATS_PER_BSV = 100_000_000
 
 async function readJson(url: string): Promise<unknown> {
   const response = await fetch(url, { signal: AbortSignal.timeout(8000) })
@@ -30,23 +30,26 @@ export async function fetchUsdPerBsv(): Promise<number> {
   throw new Error('Could not fetch a dollar rate')
 }
 
-export function parseUsdAmount(raw: string): number {
-  const trimmed = raw.trim().replace(/^[\$]/, '').replace(/,/g, '')
-  const amount = Number(trimmed)
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new Error('Enter an amount in dollars')
+export function parseSatsAmount(raw: string): number {
+  const trimmed = raw.trim().replace(/,/g, '').replace(/\s*sats?$/i, '')
+  if (!/^\d+$/.test(trimmed)) {
+    throw new Error('Enter an amount in sats')
   }
-  if (amount > 1_000_000) throw new Error('Amount is too large')
-  return Math.round(amount * 100) / 100
-}
-
-export function usdToSats(usd: number, usdPerBsv: number): number {
-  if (!(usdPerBsv > 0)) throw new Error('Could not fetch a dollar rate')
-  const sats = Math.round((usd / usdPerBsv) * SATS_PER_BSV)
+  const sats = Number(trimmed)
   if (!Number.isInteger(sats) || sats < 1) {
-    throw new Error('Amount is too small at the current rate')
+    throw new Error('Enter an amount in sats')
   }
   return sats
+}
+
+export function formatSats(sats: number): string {
+  if (!Number.isFinite(sats)) return ''
+  return `${Math.trunc(sats).toLocaleString('en-US')} sats`
+}
+
+export function satsToDisplayUsd(sats: number, usdPerBsv: number | null): string {
+  if (!usdPerBsv || usdPerBsv <= 0 || !Number.isFinite(sats) || sats < 0) return ''
+  return formatUsd((sats / SATS_PER_BSV) * usdPerBsv)
 }
 
 export function formatUsd(amount: string | number): string {
@@ -57,4 +60,8 @@ export function formatUsd(amount: string | number): string {
 
 export function formatUsdInput(amount: number): string {
   return amount.toFixed(2)
+}
+
+export function satsToUsdInput(sats: number, usdPerBsv: number): string {
+  return formatUsdInput((sats / SATS_PER_BSV) * usdPerBsv)
 }

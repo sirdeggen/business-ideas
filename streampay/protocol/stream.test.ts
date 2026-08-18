@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_AMOUNT_SATS,
   TAG,
   UNFUNDED_STREAM_MESSAGE,
   accrue,
@@ -52,7 +53,7 @@ describe('accrual math', () => {
     expect(math.status).toBe('open')
   })
 
-  it('earns day-3 of a 14-day $400 stream as 3/14 of the sats', () => {
+  it('earns day-3 of a 14-day stream as 3/14 of the sats', () => {
     const day3 = start + 3 * 86_400_000
     const math = accrue(stream, day3)
     expect(math.earnedSats).toBe(Math.floor(stream.rateSatsPerSec * 3 * 86_400))
@@ -174,15 +175,15 @@ describe('stream fields', () => {
 })
 
 describe('open and claim plans', () => {
-  it('opens by locking amountSats in the pot, not 1 sat', () => {
-    const amountSats = 594_598_868
-    expect(planOpen(amountSats)).toEqual({ potSats: amountSats })
-    expect(planOpen(amountSats).potSats).not.toBe(1)
+  it('opens by locking the sat pot the treasurer funds, not 1 sat and not a $400 spot conversion', () => {
+    expect(planOpen(DEFAULT_AMOUNT_SATS)).toEqual({ potSats: DEFAULT_AMOUNT_SATS })
+    expect(planOpen(DEFAULT_AMOUNT_SATS).potSats).not.toBe(1)
+    expect(planOpen(DEFAULT_AMOUNT_SATS).potSats).toBeLessThan(1_000_000)
   })
 
   it('claims claimable sats when that is less than amountSats', () => {
-    const amountSats = 594_598_868
-    const claimableSats = 127_414_043
+    const amountSats = DEFAULT_AMOUNT_SATS
+    const claimableSats = 21_428
     const plan = planClaim({
       fundedSats: amountSats,
       amountSats,
@@ -196,7 +197,7 @@ describe('open and claim plans', () => {
   })
 
   it('still pays claimable when earned is capped at amountSats (claimed=0)', () => {
-    const amountSats = 594_598_868
+    const amountSats = DEFAULT_AMOUNT_SATS
     const plan = planClaim({
       fundedSats: amountSats,
       amountSats,
@@ -208,7 +209,7 @@ describe('open and claim plans', () => {
     expect(plan.outputSatoshis[1]).toBe(1)
   })
 
-  it('refuses an unfunded 1-sat stream when claimable equals amountSats', () => {
+  it('refuses the $400 / 1-sat QA mint when claimable equals the old notional', () => {
     const amountSats = 594_598_868
     expect(() => planClaim({
       fundedSats: 1,

@@ -8,7 +8,7 @@ This folder is exclusive. Do not look here for tickets, desk, invoices, or treas
 
 ## First success
 
-She opens a 14-day stream (default **$400**) to one contractor, with start set three days in the past. He opens the public link, claims day-3 accrued pay, and both see a receipt.
+She opens a 14-day stream (default **100,000 sats**) to one contractor, with start set three days in the past. He opens the public link, claims day-3 accrued pay, and both see a receipt. Settlement is sats. Dollars are display only.
 
 ## Stack
 
@@ -31,15 +31,15 @@ Rate is `amountSats / durationSec`. Freeze stops the clock. Already-claimable st
 
 ## Create
 
-1. **Open a stream.** Org name, contractor name, contractor identity (needed so they can unlock the pot), what it’s for, amount in **dollars**, duration (default 14 days), start (a past start is allowed so day 3 is demoable).
-2. Approve in the wallet. The treasurer **funds** the stream: the PushDrop output is `amountSats`, not 1 sat. If the wallet cannot cover that, you get a human “not enough to fund this stream.”
+1. **Open a stream.** Org name, contractor name, contractor identity (needed so they can unlock the pot), what it’s for, amount in **sats** (default 100,000 — fundable from a ~1.2M sat wallet), duration (default 14 days), start (a past start is allowed so day 3 is demoable).
+2. Approve in the wallet. The treasurer **funds** the stream: the PushDrop output is those sats, not a $400 spot conversion and not 1 sat. If the wallet cannot cover that, you get a human “not enough to fund this stream.”
 3. Copy the public URL (`/streampay/?s=<streamId>`). An auditor can open it with no wallet and see rate, accrued, claimed, and Open / Frozen / Finished.
 
 ## Claim
 
-The worker spends **the stream UTXO** — the sats the treasurer locked at Open. Accrual stays client math: `claimable = accrued − claimed`. The same transaction pays `claimable` **BRC-29** to the contractor and re-emits the PushDrop with `claimedSats += claimable` and the remaining pot.
+The worker spends **the stream UTXO** — the sats the treasurer locked at Open. Accrual stays client math: `claimable = accrued − claimed`. The same transaction pays `claimable` **BRC-29** to the contractor and re-emits the PushDrop with `claimedSats += claimable` and the remaining pot. `createAction` is those accrued sats (plus fee), not a dollar spot amount.
 
-Self-funded pay from the contractor’s pocket is not StreamPay. A 1-sat Open (token only) is not funded; Claim refuses with “this stream isn’t funded” and does not ask the wallet for the full notional.
+Self-funded pay from the contractor’s pocket is not StreamPay. A 1-sat `$400` Open (token only) is demo-broken; Claim refuses with “this stream isn’t funded” and does not invent sats.
 
 1. Open the stream link. Accrued ticks on the page.
 2. Click **Claim**. Approve. Inputs include the stream UTXO. Outputs are claimable plus remaining pot (and fee/change), not the full notional from contractor funds.
@@ -88,6 +88,7 @@ npm test         # accrual math + humanized overlay errors
 | Message Box host | `https://gmb.bsvblockchain.tech` |
 | Message Box | `streampay` |
 | BRC-29 | `[2, "3241645161d8"]` |
+| Default pot | `100,000` sats over 14 days |
 
 ## Layout
 
