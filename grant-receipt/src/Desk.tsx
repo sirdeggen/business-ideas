@@ -32,7 +32,6 @@ export function Desk({ orgIdentity = '' }: { orgIdentity?: string }) {
   const [fail, setFail] = useState('')
   const [names, setNames] = useState<Record<string, string>>({})
   const [overlayStatus, setOverlayStatus] = useState<OverlayLookupStatus>('checking')
-  const [overlayError, setOverlayError] = useState('')
   const [usedOverlayCache, setUsedOverlayCache] = useState(false)
 
   useEffect(() => {
@@ -48,7 +47,6 @@ export function Desk({ orgIdentity = '' }: { orgIdentity?: string }) {
     const tick = async (): Promise<void> => {
       const looked = await lookupIncomingGifts(orgKey)
       setOverlayStatus(looked.status)
-      setOverlayError(looked.error || '')
       setUsedOverlayCache(looked.usedCache)
       if (looked.gifts.length > 0) {
         setGifts((current) => mergeIncomingGifts(current, looked.gifts))
@@ -220,9 +218,6 @@ export function Desk({ orgIdentity = '' }: { orgIdentity?: string }) {
           <button className="btn primary" onClick={() => void copyGiveLink()}>
             Copy give link
           </button>
-          <button className="btn" disabled={connecting} onClick={() => void connect().catch(() => undefined)}>
-            {identityKey ? 'Wallet open' : 'Open wallet'}
-          </button>
         </div>
         <p className="hint">
           Wallet is for acknowledge, receipt, and the give link.
@@ -249,22 +244,16 @@ export function Desk({ orgIdentity = '' }: { orgIdentity?: string }) {
         {overlayStatus === 'checking' && visibleGifts.length === 0 && (
           <p className="hint">Looking up incoming gifts…</p>
         )}
-        {overlayStatus === 'failed' && visibleGifts.length > 0 && (
+        {overlayStatus === 'failed' && (
           <p className="status err">
-            Could not reach overlay-us-1. Showing last-good incoming gifts.
+            {visibleGifts.length === 0
+              ? 'Couldn’t refresh incoming gifts. They are not missing because this list failed.'
+              : 'Couldn’t refresh incoming gifts'}
           </p>
         )}
-        {overlayStatus === 'failed' && visibleGifts.length === 0 && (
-          <p className="status err">
-            Could not reach overlay-us-1. Incoming gifts are not missing because
-            this list failed.
-          </p>
-        )}
-        {usedOverlayCache && overlayStatus === 'online' && visibleGifts.length > 0 && (
+        {((overlayStatus === 'failed' && visibleGifts.length > 0) ||
+          (usedOverlayCache && overlayStatus === 'online' && visibleGifts.length > 0)) && (
           <p className="hint">Showing last-good incoming gifts.</p>
-        )}
-        {overlayError && overlayStatus === 'failed' && visibleGifts.length > 0 && (
-          <p className="hint">{overlayError}</p>
         )}
         {visibleGifts.length === 0 && overlayStatus === 'online' ? (
           <p className="hint">
