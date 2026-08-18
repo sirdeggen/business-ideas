@@ -14,17 +14,12 @@ import {
   CHROME_ALLOW_HINT,
   DESKTOP_INSTALL_URL,
   errorMessage,
-  formatSats,
   overlayCheckFailed,
   shortKey
 } from './lib/config'
-import { fetchUsdPerBsv, formatSatsUsd } from './lib/money'
-import {
-  formatLookupDiagnostic,
-  inspectLookupRecords,
-  usesPublicAnytx,
-  type OverlayRecord
-} from './lib/overlay'
+import { loadRecordsList } from './lib/list'
+import { fetchUsdPerBsv, formatSatsAmount } from './lib/money'
+import { type OverlayRecord } from './lib/overlay'
 
 function displayName(name: string): string {
   return isIdentityKey(name) ? shortKey(name) : name
@@ -91,9 +86,10 @@ function Shell() {
     setListError(null)
     setListHint(null)
     try {
-      const inspection = await inspectLookupRecords(url)
-      setRows(inspection.rows)
-      setListHint(formatLookupDiagnostic(inspection, usesPublicAnytx(url)) || null)
+      const result = await loadRecordsList(url, wallet)
+      setRows(result.rows)
+      setListHint(result.hint)
+      setListError(result.error)
     } catch (err) {
       console.error('Lookup failed', err)
       setListError(errorMessage(err))
@@ -104,7 +100,7 @@ function Shell() {
 
   useEffect(() => {
     void refreshList()
-  }, [url])
+  }, [url, wallet])
 
   const post = async (): Promise<void> => {
     if (overlayDown) {
@@ -176,7 +172,7 @@ function Shell() {
     try {
       const result = await payAndExport(activeWallet, row)
       downloadDump(result.dump)
-      setExportStatus(`Paid ${formatSats(result.paidSats)}. Dump downloaded.`)
+      setExportStatus(`Paid ${formatSatsAmount(result.paidSats)}. Dump downloaded.`)
     } catch (err) {
       console.error('Export failed', err)
       setExportError(errorMessage(err))
@@ -288,12 +284,8 @@ function Shell() {
         </div>
         <p>
           Pay to download the dump. The overlay already holds the fields; payment is the gate here.
-          {usdPerBsv != null && (
-            <>
-              {' '}Export is {formatSats(1)} ({formatSatsUsd(1, usdPerBsv)}) for a name-only reading,
-              or {formatSats(EXPORT_PRICE_SATS)} ({formatSatsUsd(EXPORT_PRICE_SATS, usdPerBsv)}) when an account id is present.
-            </>
-          )}
+          {' '}Export is {formatSatsAmount(1, usdPerBsv)} for a name-only reading,
+          or {formatSatsAmount(EXPORT_PRICE_SATS, usdPerBsv)} when an account id is present.
         </p>
         {listError && <p className="status err">{listError}</p>}
         {listHint && <p className="hint">{listHint}</p>}
@@ -302,7 +294,6 @@ function Shell() {
         )}
         {rows.map((row) => {
           const price = exportPriceSats(row)
-          const dollars = formatSatsUsd(price, usdPerBsv)
           return (
             <article key={`${row.txid}.${row.outputIndex}`} className="invoice">
               <div className="invoice-head">
@@ -327,7 +318,7 @@ function Shell() {
                 >
                   {exportBusy === row.hash
                     ? 'Paying…'
-                    : `Pay ${formatSats(price)}${dollars ? ` (${dollars})` : ''} + Export`}
+                    : `Pay ${formatSatsAmount(price, usdPerBsv)} + Export`}
                 </button>
               </div>
             </article>
