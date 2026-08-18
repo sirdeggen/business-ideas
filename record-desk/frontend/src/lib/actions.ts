@@ -1,5 +1,4 @@
 import {
-  LockingScript,
   P2PKH,
   PublicKey,
   PushDrop,
@@ -15,7 +14,6 @@ import {
   SCHEMA_VERSION,
   encodeRecordFields,
   isIdentityKey,
-  parseRecordFields,
   recordHash,
   validateRecord,
   type RecordKind
@@ -45,71 +43,7 @@ function pushdrop(wallet: WalletClient): PushDrop {
 export interface PostResult {
   txid: string
   hash: string
-  record: OverlayRecord
   overlayError?: string
-}
-
-export interface HeldInspection {
-  held: OverlayRecord[]
-}
-
-const EMPTY_HELD: HeldInspection = { held: [] }
-
-function lockingScriptOf(raw: unknown): LockingScript | null {
-  if (!raw) return null
-  if (typeof raw === 'string') {
-    const hex = raw.trim()
-    if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2 !== 0) return null
-    try {
-      return LockingScript.fromHex(hex)
-    } catch {
-      return null
-    }
-  }
-  if (typeof raw === 'object' && raw !== null && 'toHex' in raw) {
-    return raw as LockingScript
-  }
-  return null
-}
-
-function recordFromScript(script: LockingScript, txid: string, outputIndex: number): OverlayRecord | null {
-  for (const position of ['before', 'after'] as const) {
-    try {
-      const item = parseRecordFields(PushDrop.decode(script, position).fields)
-      if (item) return { ...item, txid, outputIndex }
-    } catch {
-      // Try the other PushDrop field position.
-    }
-  }
-  return null
-}
-
-/** Basket `records` only after a wallet is connected. No wallet → no listOutputs. */
-export async function inspectHeldRecords(wallet?: unknown): Promise<HeldInspection> {
-  if (!wallet) return EMPTY_HELD
-  const client = wallet as WalletClient
-  if (typeof client.listOutputs !== 'function') return EMPTY_HELD
-  const listed = await withTimeout(
-    client.listOutputs({
-      basket: BASKET,
-      include: 'locking scripts',
-      includeCustomInstructions: true,
-      limit: 200
-    }),
-    CONNECT_MS,
-    CONNECT_TIMEOUT_MESSAGE
-  )
-  const held: OverlayRecord[] = []
-  for (const output of listed.outputs ?? []) {
-    const outpoint = typeof output.outpoint === 'string' ? output.outpoint : ''
-    const [txid, vout] = outpoint.split('.')
-    const outputIndex = Number(vout)
-    const script = lockingScriptOf(output.lockingScript)
-    if (!txid || !Number.isFinite(outputIndex) || !script) continue
-    const row = recordFromScript(script, txid, outputIndex)
-    if (row) held.push(row)
-  }
-  return { held }
 }
 
 export async function postRecord(
@@ -127,13 +61,12 @@ export async function postRecord(
   }
   const fields = encodeRecordFields(item)
   const hash = recordHash(item)
-  const payload = {
+  const invalid = validateRecord({
     magic: MAGIC,
     schemaVersion: SCHEMA_VERSION,
     hash,
     ...item
-  } as const
-  const invalid = validateRecord(payload)
+  })
   if (invalid) {
     if (invalid.includes('name')) throw new Error('Name is required (1–80 characters).')
     if (invalid.includes('note')) throw new Error('Write the reading before posting.')
@@ -190,29 +123,21 @@ export async function postRecord(
     throw Object.assign(new Error('createAction returned no txid/tx'), { cause: response })
   }
 
-  const record: OverlayRecord = {
-    ...payload,
-    txid,
-    outputIndex: 0
-  }
-
   try {
     const submitted = await submitRecordTx(overlayUrl, tx)
     if (submitted.admitted.length === 0) {
       return {
         txid,
         hash,
-        record,
         overlayError: `no record outputs parsed after submit to ${submitted.topic} at ${submitted.host}`
       }
     }
-    return { txid, hash, record }
+    return { txid, hash }
   } catch (error) {
     const detail = error instanceof Error && error.message.trim() ? error.message : String(error ?? '')
     return {
       txid,
       hash,
-      record,
       overlayError: detail.trim() || 'overlay submit failed with no message'
     }
   }

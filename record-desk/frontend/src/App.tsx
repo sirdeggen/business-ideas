@@ -17,10 +17,13 @@ import {
   overlayCheckFailed,
   shortKey
 } from './lib/config'
-import { loadRecordsList } from './lib/list'
 import { fetchUsdPerBsv, formatSatsAmount } from './lib/money'
-import { type OverlayRecord } from './lib/overlay'
-import { loadListedRows, rememberListedRow, saveListedRows } from './lib/persist'
+import {
+  formatLookupDiagnostic,
+  inspectLookupRecords,
+  usesPublicAnytx,
+  type OverlayRecord
+} from './lib/overlay'
 
 function displayName(name: string): string {
   return isIdentityKey(name) ? shortKey(name) : name
@@ -87,12 +90,9 @@ function Shell() {
     setListError(null)
     setListHint(null)
     try {
-      const remembered = loadListedRows()
-      const result = await loadRecordsList(url, wallet, remembered)
-      if (result.rows.length > 0) saveListedRows(result.rows)
-      setRows(result.rows)
-      setListHint(result.hint)
-      setListError(result.error)
+      const inspection = await inspectLookupRecords(url)
+      setRows(inspection.rows)
+      setListHint(formatLookupDiagnostic(inspection, usesPublicAnytx(url)) || null)
     } catch (err) {
       console.error('Lookup failed', err)
       setListError(errorMessage(err))
@@ -103,7 +103,7 @@ function Shell() {
 
   useEffect(() => {
     void refreshList()
-  }, [url, wallet])
+  }, [url])
 
   const post = async (): Promise<void> => {
     if (overlayDown) {
@@ -144,7 +144,6 @@ function Shell() {
         lon
       })
       setPostStatus(`Posted. Hash ${shortKey(result.hash)}.`)
-      rememberListedRow(result.record)
       if (result.overlayError) {
         setPostError(`Posted in wallet (txid ${result.txid}). Overlay submit failed: ${result.overlayError}`)
       } else {
