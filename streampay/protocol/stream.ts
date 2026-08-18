@@ -193,6 +193,20 @@ function asBytes(field: number[] | Uint8Array): number[] {
   return Array.from(field)
 }
 
+/**
+ * Blank contractor is allowed at Open. PushDrop.encode writes OP_0 for an
+ * empty field; PushDrop.decode maps that OP_0 to `[0]`, which UTF-8-decodes
+ * as `"\0"` and used to fail `isIdentityKey`.
+ */
+function normalizeContractorIdentity(field: number[] | Uint8Array): string {
+  const bytes = asBytes(field)
+  if (bytes.length === 0) return ''
+  if (bytes.length === 1 && bytes[0] === 0) return ''
+  const text = utf8BytesToString(bytes)
+  if (text === '\0') return ''
+  return text
+}
+
 function parseExtras(raw: string): Pick<StreamPayload, 'amountUsd' | 'memo' | 'updatedIso' | 'lastClaimSats' | 'lastClaimIso' | 'rateSatsPerSec'> {
   try {
     const parsed = JSON.parse(raw) as StreamExtras
@@ -219,7 +233,7 @@ export function parseStreamFields(fields: Array<number[] | Uint8Array>): StreamP
     const streamId = utf8BytesToString(asBytes(fields[1]))
     const org = utf8BytesToString(asBytes(fields[2]))
     const contractorName = utf8BytesToString(asBytes(fields[3]))
-    const contractorIdentity = utf8BytesToString(asBytes(fields[4]))
+    const contractorIdentity = normalizeContractorIdentity(fields[4])
     const treasurerIdentity = utf8BytesToString(asBytes(fields[5]))
     const amountSats = Number(utf8BytesToString(asBytes(fields[6])))
     const startIso = utf8BytesToString(asBytes(fields[7]))

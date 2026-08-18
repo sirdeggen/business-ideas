@@ -107,6 +107,20 @@ describe('stream fields', () => {
     expect(parseStreamFields(fields)).toBeNull()
   })
 
+  it('round-trips an empty contractor identity', () => {
+    const stream = demoStream({ contractorIdentity: '' })
+    const fields = encodeStreamFields(stream)
+    expect(fields[4]).toEqual([])
+    expect(parseStreamFields(fields)).toEqual(stream)
+  })
+
+  it('treats PushDrop OP_0 contractor [0] as blank', () => {
+    const stream = demoStream({ contractorIdentity: '' })
+    const fields = encodeStreamFields(stream)
+    fields[4] = [0]
+    expect(parseStreamFields(fields)).toEqual(stream)
+  })
+
   it('joins snapshots by streamId: max claimed, sticky freeze', () => {
     const id = 'cd'.repeat(16)
     const open = demoStream({ streamId: id, claimedSats: 0, updatedIso: '2026-08-11T12:00:00.000Z' })
