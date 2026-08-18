@@ -106,7 +106,7 @@ describe('errorMessage humanizing', () => {
 
   it('keeps a stream lookup miss as a one-line load failure, not Chrome or host jargon', () => {
     expect(errorMessage(new Error(OVERLAY_LOOKUP_FAILED))).toBe(OVERLAY_LOOKUP_FAILED)
-    expect(OVERLAY_LOOKUP_FAILED).toBe('Couldn’t load this stream.')
+    expect(OVERLAY_LOOKUP_FAILED).toBe('Can’t reach overlay. Retry')
     expect(OVERLAY_LOOKUP_FAILED).not.toContain('tm_anytx')
     expect(OVERLAY_LOOKUP_FAILED).not.toContain('STEAK')
   })

@@ -18,10 +18,34 @@ export function streamPageState(
   error: string | null
 ): {
   loading: boolean
+  keepBoard: boolean
+  offerRetry: boolean
   offerOpen: boolean
   message: string | null
 } {
-  if (stream) return { loading: false, offerOpen: false, message: null }
-  if (error) return { loading: false, offerOpen: true, message: error }
-  return { loading: true, offerOpen: false, message: LOADING_STREAM }
+  if (stream) {
+    return {
+      loading: false,
+      keepBoard: true,
+      offerRetry: Boolean(error),
+      offerOpen: false,
+      message: error
+    }
+  }
+  if (error) {
+    return {
+      loading: false,
+      keepBoard: false,
+      offerRetry: true,
+      offerOpen: false,
+      message: error
+    }
+  }
+  return {
+    loading: true,
+    keepBoard: false,
+    offerRetry: false,
+    offerOpen: false,
+    message: LOADING_STREAM
+  }
 }

@@ -356,13 +356,11 @@ function Create({
 function StreamPage({
   streamId,
   createTxid,
-  onHome,
-  onCreate
+  onHome
 }: {
   streamId: string
   createTxid: string | null
   onHome: () => void
-  onCreate: () => void
 }) {
   const { url } = useOverlay()
   const { connect, connecting } = useWallet()
@@ -374,18 +372,21 @@ function StreamPage({
   const [showInstall, setShowInstall] = useState(false)
   const [copied, setCopied] = useState(false)
   const [justClaimed, setJustClaimed] = useState(false)
+  const [retryTick, setRetryTick] = useState(0)
+
+  useEffect(() => {
+    setStream(null)
+    setError(null)
+    setAsOfMs(0)
+  }, [url, streamId, createTxid])
 
   useEffect(() => {
     let cancelled = false
     let inflight = false
-    setAsOfMs(0)
     const load = async (): Promise<void> => {
       if (inflight) return
       if (!url) {
-        if (!cancelled) {
-          setStream(null)
-          setError(OVERLAY_LOOKUP_FAILED)
-        }
+        if (!cancelled) setError(OVERLAY_LOOKUP_FAILED)
         return
       }
       inflight = true
@@ -414,7 +415,12 @@ function StreamPage({
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', onVis)
     }
-  }, [url, streamId, createTxid])
+  }, [url, streamId, createTxid, retryTick])
+
+  const retryLookup = (): void => {
+    setError(null)
+    setRetryTick((tick) => tick + 1)
+  }
 
   const copyLink = async (): Promise<void> => {
     await navigator.clipboard.writeText(streamPublicUrl(streamId, stream?.txid || createTxid))
@@ -473,10 +479,6 @@ function StreamPage({
   const showReceipt = Boolean(stream && (justClaimed || stream.lastClaimSats > 0))
   const panel = streamPageState(stream, error)
 
-  if (panel.offerOpen) {
-    return <Home onCreate={onCreate} notice={panel.message} />
-  }
-
   return (
     <div className="app">
       <header className="masthead invoice-mast">
@@ -491,6 +493,15 @@ function StreamPage({
       {panel.loading && (
         <section className="panel">
           <p className="hint">{panel.message}</p>
+        </section>
+      )}
+
+      {panel.offerRetry && !panel.keepBoard && (
+        <section className="panel">
+          <p className="status err">{panel.message}</p>
+          <div className="row" style={{ marginTop: 16 }}>
+            <button className="btn primary" onClick={retryLookup}>Retry</button>
+          </div>
         </section>
       )}
 
@@ -537,6 +548,11 @@ function StreamPage({
           {(busy || connecting || showInstall) && <ChromeHint />}
           {showInstall && <InstallPrompt verb={busyVerb} onRetry={() => void (busyVerb === 'freeze' ? freeze() : claim())} />}
           {error && <p className="status err">{error}</p>}
+          {panel.offerRetry && panel.keepBoard && (
+            <div className="row" style={{ marginTop: 12 }}>
+              <button className="btn" onClick={retryLookup}>Retry</button>
+            </div>
+          )}
         </section>
       )}
 
@@ -623,12 +639,6 @@ function Shell() {
         streamId={streamId}
         createTxid={createTxid}
         onHome={() => { goHome(); setView('home') }}
-        onCreate={() => {
-          goHome()
-          setStreamId(null)
-          setCreateTxid(null)
-          setView('create')
-        }}
       />
     )
   }

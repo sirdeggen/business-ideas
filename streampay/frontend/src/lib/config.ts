@@ -82,7 +82,7 @@ export const OVERLAY_FREEZE_FAILED =
   'Couldn’t freeze this stream. Try again in a moment.'
 
 export const OVERLAY_LOOKUP_FAILED =
-  'Couldn’t load this stream.'
+  'Can’t reach overlay. Retry'
 
 export type ActionVerb = 'open' | 'claim' | 'freeze'
 
