@@ -39,9 +39,9 @@ export function parseStreamLocation(
 export function streamHref(streamId: string, createTxid?: string | null): string {
   const base = import.meta.env.BASE_URL || '/'
   const normalized = base.endsWith('/') ? base : `${base}/`
-  const path = `${normalized}s/${streamId}`
-  if (isCreateTxid(createTxid)) return `${path}?tx=${createTxid.toLowerCase()}`
-  return path
+  const query = `?s=${streamId.toLowerCase()}`
+  if (isCreateTxid(createTxid)) return `${normalized}${query}&tx=${createTxid.toLowerCase()}`
+  return `${normalized}${query}`
 }
 
 export function streamPublicUrl(streamId: string, createTxid?: string | null): string {
