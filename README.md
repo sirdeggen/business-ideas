@@ -41,3 +41,17 @@ Shared treasury, two of three must agree. Board at `?treasury=<id>` is lookup on
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/treasury/
 - How to run: [treasury/README.md](./treasury/README.md)
+
+## StreamPay
+
+Pay as they work.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/streampay/
+- How to run: [streampay/README.md](./streampay/README.md)
+
+## Grant receipt
+
+A gift for a purpose. A receipt bound to that purpose.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/grants/
+- How to run: [grant-receipt/README.md](./grant-receipt/README.md)
