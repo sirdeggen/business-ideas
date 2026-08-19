@@ -36,6 +36,43 @@ export async function lockPayeeOutput(
   return script.toHex()
 }
 
+export function giftCreateActionArgs(args: {
+  purpose: string
+  amountSats: number
+  lockingScript: string
+  giftId: string
+  orgIdentityKey: string
+  donorIdentityKey: string
+}): {
+  description: string
+  outputs: Array<{
+    satoshis: number
+    lockingScript: string
+    outputDescription: string
+    customInstructions: string
+  }>
+  labels: string[]
+  options: { randomizeOutputs: boolean }
+} {
+  const purpose = args.purpose.trim()
+  return {
+    description: `Gift: ${purpose}`.slice(0, 50),
+    outputs: [{
+      satoshis: args.amountSats,
+      lockingScript: args.lockingScript,
+      outputDescription: purpose.slice(0, 50),
+      customInstructions: JSON.stringify({
+        protocolID: PROTOCOL_ID,
+        keyID: args.giftId,
+        counterparty: args.orgIdentityKey.trim(),
+        senderIdentityKey: args.donorIdentityKey
+      })
+    }],
+    labels: ['grant receipt', 'gift'],
+    options: { randomizeOutputs: false }
+  }
+}
+
 export async function sendGift(args: {
   wallet: WalletClient
   donorIdentityKey: string
@@ -55,22 +92,15 @@ export async function sendGift(args: {
     args.giftId,
     purpose
   )
-  const response = await args.wallet.createAction({
-    description: `Gift: ${purpose}`.slice(0, 50),
-    outputs: [{
-      satoshis: args.amountSats,
-      lockingScript,
-      outputDescription: purpose.slice(0, 50),
-      customInstructions: JSON.stringify({
-        protocolID: PROTOCOL_ID,
-        keyID: args.giftId,
-        counterparty: args.orgIdentityKey.trim(),
-        senderIdentityKey: args.donorIdentityKey
-      })
-    }],
-    labels: ['grant receipt', 'gift'],
-    options: { randomizeOutputs: false }
+  const action = giftCreateActionArgs({
+    purpose,
+    amountSats: args.amountSats,
+    lockingScript,
+    giftId: args.giftId,
+    orgIdentityKey: args.orgIdentityKey,
+    donorIdentityKey: args.donorIdentityKey
   })
+  const response = await args.wallet.createAction(action)
   if (!response.txid) {
     throw new Error('Wallet did not return a gift transaction')
   }

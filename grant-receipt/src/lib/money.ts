@@ -40,6 +40,48 @@ export function parseUsdAmount(raw: string): number {
   return Math.round(amount * 100) / 100
 }
 
+/**
+ * Live Amount field only. A leftover React default of 25 is never substituted
+ * here — empty or missing input fails in parseUsdAmount.
+ */
+export function readLiveAmountField(source: {
+  value?: string
+  querySelector?: (selector: string) => { value?: string } | null
+  get?: (name: string) => unknown
+} | null | undefined): string {
+  if (!source) return ''
+  if (typeof source.value === 'string') return source.value
+  if (typeof source.get === 'function') {
+    const value = source.get('amount')
+    if (typeof value === 'string') return value
+  }
+  if (typeof source.querySelector === 'function') {
+    const el = source.querySelector('#amount') ?? source.querySelector('[name="amount"]')
+    if (el && typeof el.value === 'string') return el.value
+  }
+  return ''
+}
+
+/** Dollars and sats createAction will ask for, from the typed field. */
+export function resolveGiftSpend(rawField: string, usdPerBsv: number): {
+  amountUsd: string
+  amountSats: number
+} {
+  const usd = parseUsdAmount(rawField)
+  return {
+    amountUsd: formatUsdInput(usd),
+    amountSats: usdToSats(usd, usdPerBsv)
+  }
+}
+
+export function sendGiftLabel(rawField: string): string {
+  try {
+    return `Send ${formatUsd(parseUsdAmount(rawField))}`
+  } catch {
+    return 'Send gift'
+  }
+}
+
 export function usdToSats(usd: number, usdPerBsv: number): number {
   if (!(usdPerBsv > 0)) throw new Error('Could not fetch a dollar rate')
   const sats = Math.round((usd / usdPerBsv) * SATS_PER_BSV)

@@ -27,12 +27,15 @@ for a wallet (the give link needs the org identity).
 1. Open the give link from the treasurer (`?give=1&org=…`), or paste the
    desk identity under Advanced.
 2. Purpose is plain language. Default is `roof repair`.
-3. Amount is dollars. The live rate is WhatsOnChain, then CoinGecko. There
-   is no invented rate. The wallet is asked for the matching amount only at
-   send time.
-4. Send gift. Approve in the wallet. Message Box notifies the desk first.
-   A 1-sat PushDrop gift announcement is also published on overlay-us-1
-   so a stranger desk can see the gift.
+3. Amount is dollars typed in the field. Send reads that live input at
+   click time (not a leftover default of `25.00`). The button shows the
+   dollars that will be requested (`Send $0.01`). The live rate is
+   WhatsOnChain, then CoinGecko. There is no invented rate. The wallet is
+   asked for `usdToSats` of those typed dollars only at send time.
+4. Send gift. Approve in the wallet. Declining the Desktop prompt does not
+   send — the page says so, and it does not dump wallet JSON. Message Box
+   notifies the desk first. A 1-sat PushDrop gift announcement is also
+   published on overlay-us-1 so a stranger desk can see the gift.
 
 ## How to acknowledge and receipt
 
@@ -125,8 +128,10 @@ This tree does not bake private keys.
 ## Honest blockers
 
 - A wallet is required to **send**, **acknowledge**, and **issue** a
-  receipt. Copy give link also needs the org identity. The desk page
-  itself lists incoming gifts without a wallet.
+  receipt. Copy give link also needs the org identity. Give itself can
+  be filled without a wallet — a wallet is needed only to send. Declining
+  the Desktop spend prompt sends nothing. The desk page lists incoming
+  gifts without a wallet.
 - The public gift list can blink. Last-good stays in the browser; a failed
   lookup is not shown as an empty desk.
 - The public receipt link is optional. If that list is down, the donor
