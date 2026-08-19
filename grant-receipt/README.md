@@ -28,10 +28,13 @@ for a wallet (the give link needs the org identity).
    desk identity under Advanced.
 2. Purpose is plain language. Default is `roof repair`.
 3. Amount is dollars typed in the field. Send reads that live input at
-   click time (not a leftover default of `25.00`). The button shows the
-   dollars that will be requested (`Send $0.01`). The live rate is
-   WhatsOnChain, then CoinGecko. There is no invented rate. The wallet is
-   asked for `usdToSats` of those typed dollars only at send time.
+   click time (not a leftover default of `25.00`). The button uses the
+   same `resolveGiftSpend` path as `createAction` and shows dollars and,
+   when a live rate exists, the sats the wallet will ask for
+   (`Send $0.01 (66,733 sats)`). If the rate fetch failed, `Send $0.01`
+   is enough. The live rate is WhatsOnChain, then CoinGecko. There is no
+   invented rate. The wallet is asked for `usdToSats` of those typed
+   dollars only at send time.
 4. Send gift. Approve in the wallet. Declining the Desktop prompt does not
    send — the page says so, and it does not dump wallet JSON. Message Box
    notifies the desk first. A 1-sat PushDrop gift announcement is also
