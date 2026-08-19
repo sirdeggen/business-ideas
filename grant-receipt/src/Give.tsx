@@ -4,7 +4,7 @@ import { DESKTOP_INSTALL_URL, errorMessage, newGiftId } from './lib/config'
 import { sendGift, verifyReceiptWithWallet } from './lib/gift'
 import { applyEvent, type GiftRecord } from './lib/machine'
 import { sendDeskMessage, pullDeskMessages } from './lib/messagebox'
-import { displayUsd, fetchUsdPerBsv, readLiveAmountField, resolveGiftSpend, sendGiftLabel } from './lib/money'
+import { displayUsd, fetchUsdPerBsv, preferOnScreenAmount, readLiveAmountField, resolveGiftSpend, sendGiftLabel } from './lib/money'
 import { publishGiftAnnouncement } from './lib/overlay'
 import { readGifts, writeGifts } from './lib/persist'
 import { DEFAULT_PURPOSE, isIdentityKey, purposeHash, shortKey, verifyPublishedReceipt } from './lib/protocol'
@@ -18,9 +18,8 @@ export function Give({
 }) {
   const { wallet, identityKey, connecting, error, connect } = useWallet()
   const amountRef = useRef<HTMLInputElement>(null)
-  const formRef = useRef<HTMLFormElement>(null)
   const [purpose, setPurpose] = useState(DEFAULT_PURPOSE)
-  const [amountPreview, setAmountPreview] = useState('25.00')
+  const [amountUsd, setAmountUsd] = useState('25.00')
   const [orgKey, setOrgKey] = useState(orgIdentity)
   const [who, setWho] = useState(orgName)
   const [donorName, setDonorName] = useState('')
@@ -83,22 +82,7 @@ export function Give({
 
   const latest = gifts[gifts.length - 1]
 
-  const liveAmountRaw = (): string => {
-    const fromInput = readLiveAmountField(amountRef.current)
-    if (fromInput !== '') return fromInput
-    const form = formRef.current
-    if (form) {
-      const fromForm = readLiveAmountField(new FormData(form))
-      if (fromForm !== '') return fromForm
-      const fromNamed = readLiveAmountField(form)
-      if (fromNamed !== '') return fromNamed
-    }
-    return readLiveAmountField(typeof document !== 'undefined' ? document : null)
-  }
-
   const onSend = async (): Promise<void> => {
-    const rawAmount = liveAmountRaw()
-    setAmountPreview(rawAmount)
     setFail('')
     setNotice('')
     setBusy('Sending the gift…')
@@ -108,7 +92,9 @@ export function Give({
         usdPerBsv = await fetchUsdPerBsv()
         setRate(usdPerBsv)
       }
-      const { amountUsd, amountSats } = resolveGiftSpend(rawAmount, usdPerBsv)
+      const liveField = readLiveAmountField(amountRef.current)
+      const spend = resolveGiftSpend(liveField, usdPerBsv, amountUsd)
+      if (spend.amountUsd !== amountUsd) setAmountUsd(spend.amountUsd)
       if (!isIdentityKey(orgKey)) {
         throw new Error('Open the give link from the treasurer, or paste their desk identity under Advanced.')
       }
@@ -118,8 +104,8 @@ export function Give({
         donorIdentityKey: session.identityKey,
         orgIdentityKey: orgKey,
         purpose,
-        amountUsd,
-        amountSats,
+        amountUsd: spend.amountUsd,
+        amountSats: spend.amountSats,
         giftId: newGiftId(),
         donorName: donorName.trim() || undefined,
         orgName: who.trim() || undefined
@@ -162,7 +148,6 @@ export function Give({
         </p>
         <form
           className="give-form"
-          ref={formRef}
           onSubmit={(event) => {
             event.preventDefault()
             void onSend()
@@ -180,9 +165,8 @@ export function Give({
             id="amount"
             name="amount"
             ref={amountRef}
-            defaultValue="25.00"
-            onInput={(event) => setAmountPreview((event.target as HTMLInputElement).value)}
-            onChange={(event) => setAmountPreview(event.target.value)}
+            value={amountUsd}
+            onChange={(event) => setAmountUsd(event.target.value)}
             inputMode="decimal"
             placeholder="25.00"
           />
@@ -202,7 +186,7 @@ export function Give({
           />
           <div className="row" style={{ marginTop: 16 }}>
             <button className="btn primary" type="submit" disabled={Boolean(busy) || connecting}>
-              {sendGiftLabel(amountRef.current?.value ?? amountPreview)}
+              {sendGiftLabel(preferOnScreenAmount(readLiveAmountField(amountRef.current), amountUsd))}
             </button>
             <a className="btn" href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">
               Need a wallet?
