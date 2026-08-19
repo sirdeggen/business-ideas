@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { useWallet } from './context/WalletContext'
 import { DESKTOP_INSTALL_URL, errorMessage, newGiftId } from './lib/config'
 import { sendGift, verifyReceiptWithWallet } from './lib/gift'
-import { applyEvent, type GiftRecord } from './lib/machine'
+import { applyDonorUpdates, applyEvent, type GiftRecord } from './lib/machine'
 import { sendDeskMessage, pullDeskMessages } from './lib/messagebox'
 import { displayUsd, fetchUsdPerBsv, preferOnScreenAmount, readLiveAmountField, resolveGiftSpend, sendGiftLabel } from './lib/money'
-import { publishGiftAnnouncement } from './lib/overlay'
+import { lookupReceiptAnnouncements, publishGiftAnnouncement } from './lib/overlay'
 import { readGifts, writeGifts } from './lib/persist'
 import { DEFAULT_PURPOSE, isIdentityKey, purposeHash, shortKey, verifyPublishedReceipt } from './lib/protocol'
 
@@ -55,29 +55,23 @@ export function Give({
   }, [])
 
   useEffect(() => {
-    if (!wallet) return
+    let cancelled = false
     const tick = async (): Promise<void> => {
-      const incoming = await pullDeskMessages(wallet)
-      if (incoming.length === 0) return
-      setGifts((current) => {
-        let next = current
-        for (const message of incoming) {
-          try {
-            next = applyEvent(next, message.kind === 'gift'
-              ? { type: 'gift', gift: message }
-              : message.kind === 'ack'
-                ? { type: 'ack', ack: message }
-                : { type: 'receipt', receipt: message })
-          } catch {
-            // Out-of-order inbox rows are ignored.
-          }
-        }
-        return next
-      })
+      const looked = await lookupReceiptAnnouncements()
+      const incoming = wallet ? await pullDeskMessages(wallet) : []
+      if (cancelled) return
+      if (looked.receipts.length === 0 && incoming.length === 0) return
+      setGifts((current) => applyDonorUpdates(current, {
+        messages: incoming,
+        receipts: looked.receipts
+      }))
     }
     void tick()
     const id = window.setInterval(() => { void tick() }, 8000)
-    return () => window.clearInterval(id)
+    return () => {
+      cancelled = true
+      window.clearInterval(id)
+    }
   }, [wallet])
 
   const latest = gifts[gifts.length - 1]
@@ -198,8 +192,8 @@ export function Give({
         {rateError && <p className="status err">{rateError}</p>}
         <p className="hint">
           {rate && giftLabel !== 'Send gift'
-            ? `${giftLabel}. Declining the Desktop prompt does not send. The receipt comes back to this page.`
-            : 'A wallet is needed only to send. Declining the Desktop prompt does not send. The receipt comes back to this page.'}
+            ? `${giftLabel}. Declining the Desktop prompt does not send. The signed receipt comes back here from the public list — a wallet is not needed to see it.`
+            : 'A wallet is needed only to send. Declining the Desktop prompt does not send. The signed receipt comes back here from the public list — a wallet is not needed to see it.'}
         </p>
         <details className="advanced">
           <summary>Advanced</summary>

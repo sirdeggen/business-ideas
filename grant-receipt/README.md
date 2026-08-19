@@ -15,8 +15,9 @@ not the 2-of-3 policy vault in `treasury/`.
 2. Donor opens **Give**, keeps or edits the purpose (default `roof repair`),
    enters dollars, sends the gift.
 3. Treasurer **Acknowledge**s.
-4. Treasurer **Issue receipt**. The donor sees a signed receipt bound to
-   the same purpose.
+4. Treasurer **Issue receipt**. The donor page shows that signed receipt
+   from the public list, bound to the same purpose. A wallet is not
+   required to *see* it.
 
 Incoming gifts on **Desk** list without a wallet. Overlay-us-1 is the
 stranger path. Acknowledge, issue receipt, and copy give link still ask
@@ -102,8 +103,17 @@ give-link carries `?org=`, the list is filtered to that org; with no org
 key yet, every protocol-tagged gift is listed rather than an empty
 stranger desk.
 
-The public receipt link (`?receipt=<txid>`) is still optional. First
-success for ack and the signed receipt travels on Message Box.
+After the desk issues a receipt, **Give** looks that announcement up on
+the same public list (`ls_anytx`, client-filter `grant receipt`) and
+flips the donor’s latest gift to receipted. A wallet is not required to
+*see* it. That path still works when donor and desk are the same
+identity — Message Box send-to-self often never comes back on
+`listMessages`. Last-good receipt announcements stay in localStorage if
+the list flakes; a failed lookup does not wipe a SENT gift back to
+empty.
+
+The public receipt link (`?receipt=<txid>`) is still optional. Message
+Box remains a second path when a wallet is open.
 
 ## How to run
 
@@ -132,13 +142,15 @@ This tree does not bake private keys.
 
 - A wallet is required to **send**, **acknowledge**, and **issue** a
   receipt. Copy give link also needs the org identity. Give itself can
-  be filled without a wallet — a wallet is needed only to send. Declining
-  the Desktop spend prompt sends nothing. The desk page lists incoming
-  gifts without a wallet.
+  be filled without a wallet — a wallet is needed only to send. Seeing
+  the signed receipt after the desk issues it does not need a wallet.
+  Declining the Desktop spend prompt sends nothing. The desk page lists
+  incoming gifts without a wallet.
 - The public gift list can blink. Last-good stays in the browser; a failed
   lookup is not shown as an empty desk.
-- The public receipt link is optional. If that list is down, the donor
-  still gets the signed receipt in their inbox.
+- The public receipt list can blink. Last-good stays in the browser; a
+  failed lookup does not wipe SENT. If the list is down and there is no
+  cache, Message Box is the fallback when a wallet is open.
 - Dollar conversion needs WhatsOnChain or CoinGecko. No invented rate.
 - This receipt is not a tax document.
 

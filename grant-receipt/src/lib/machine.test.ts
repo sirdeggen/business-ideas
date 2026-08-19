@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { PrivateKey } from '@bsv/sdk'
 import {
+  applyDonorUpdates,
   applyEvent,
   applyMessages,
+  applyReceiptAnnouncement,
   giftFromNotice,
   mergeIncomingGifts,
   pendingAcks,
@@ -117,31 +119,72 @@ describe('gift → ack → receipt state machine', () => {
     assert.equal(next[0].status, 'receipted')
   })
 
-  it('refuses receipt before ack and a mismatched purpose hash', () => {
+  it('applies a receipt announcement to a gifted row', () => {
     const gift = giftNotice()
     const gifted = [giftFromNotice(gift)]
-    assert.throws(() => applyEvent(gifted, {
-      type: 'receipt',
+    const announcement = {
       receipt: {
-        v: 1,
-        kind: 'receipt',
-        giftId: gift.giftId,
-        receipt: {
-          v: 1,
-          purpose: gift.purpose,
-          purposeHash: gift.purposeHash,
-          amountUsd: gift.amountUsd,
-          amountSats: gift.amountSats,
-          donorIdentityKey: gift.donorIdentityKey,
-          orgIdentityKey: gift.orgIdentityKey,
-          giftTxid: gift.giftTxid,
-          at: '2026-08-18T16:02:00.000Z'
-        },
-        signature: [1],
+        v: 1 as const,
+        purpose: gift.purpose,
+        purposeHash: gift.purposeHash,
+        amountUsd: gift.amountUsd,
+        amountSats: gift.amountSats,
+        donorIdentityKey: gift.donorIdentityKey,
+        orgIdentityKey: gift.orgIdentityKey,
+        giftTxid: gift.giftTxid,
         at: '2026-08-18T16:02:00.000Z'
-      }
-    }), /Acknowledge/)
+      },
+      signature: [1, 2, 3, 4, 5, 6, 7, 8],
+      signingKey: gift.orgIdentityKey,
+      announceTxid: 'aa'.repeat(32)
+    }
+    const receipted = applyReceiptAnnouncement(gifted, announcement)
+    assert.equal(receipted[0].status, 'receipted')
+    assert.equal(receipted[0].receipt?.giftTxid, gift.giftTxid)
+    assert.equal(receipted[0].announceTxid, announcement.announceTxid)
+    assert.equal(issuedReceipts(receipted).length, 1)
+  })
 
+  it('does not let a Message Box self-miss block an overlay receipt', () => {
+    const self = PrivateKey.fromRandom().toPublicKey().toString()
+    const gift = giftNotice({
+      donorIdentityKey: self,
+      orgIdentityKey: self
+    })
+    const gifted = applyEvent([], { type: 'gift', gift })
+    assert.equal(gifted[0].status, 'gifted')
+
+    const announcement = {
+      receipt: {
+        v: 1 as const,
+        purpose: gift.purpose,
+        purposeHash: gift.purposeHash,
+        amountUsd: gift.amountUsd,
+        amountSats: gift.amountSats,
+        donorIdentityKey: self,
+        orgIdentityKey: self,
+        giftTxid: gift.giftTxid,
+        at: '2026-08-18T16:02:00.000Z'
+      },
+      signature: [9, 8, 7, 6, 5, 4, 3, 2],
+      signingKey: self,
+      announceTxid: 'bb'.repeat(32)
+    }
+
+    const afterMiss = applyDonorUpdates(gifted, { messages: [] })
+    assert.equal(afterMiss[0].status, 'gifted')
+
+    const receipted = applyDonorUpdates(afterMiss, {
+      messages: [],
+      receipts: [announcement]
+    })
+    assert.equal(receipted[0].status, 'receipted')
+    assert.equal(receipted[0].receipt?.purpose, gift.purpose)
+  })
+
+  it('refuses a mismatched purpose hash', () => {
+    const gift = giftNotice()
+    const gifted = [giftFromNotice(gift)]
     assert.throws(() => applyEvent(gifted, {
       type: 'ack',
       ack: {

@@ -4,12 +4,20 @@ import {
   isGiftNotice,
   isReceiptNotice,
   purposeHash,
+  receiptMatchesGift,
   type AckNotice,
   type CanonicalReceipt,
   type DeskMessage,
   type GiftNotice,
   type ReceiptNotice
 } from './protocol.ts'
+
+export interface ReceiptAnnouncement {
+  receipt: CanonicalReceipt
+  signature: number[]
+  signingKey: string
+  announceTxid?: string
+}
 
 export const GIFT_STATUSES = ['gifted', 'acknowledged', 'receipted'] as const
 export type GiftStatus = (typeof GIFT_STATUSES)[number]
@@ -77,6 +85,33 @@ function findGift(gifts: GiftRecord[], giftId: string): GiftRecord | undefined {
   return gifts.find((row) => row.giftId === giftId)
 }
 
+export function matchGiftForReceipt(
+  gifts: GiftRecord[],
+  receipt: CanonicalReceipt
+): GiftRecord | undefined {
+  const txid = receipt.giftTxid.trim().toLowerCase()
+  const byTxid = gifts.find((row) => row.giftTxid.trim().toLowerCase() === txid)
+  if (byTxid) return byTxid
+  const matches = gifts.filter((row) => receiptMatchesGift(receipt, row))
+  return matches.find((row) => row.status !== 'receipted') ?? matches[matches.length - 1]
+}
+
+export function receiptNoticeFromAnnouncement(
+  announcement: ReceiptAnnouncement,
+  gift: GiftRecord
+): ReceiptNotice {
+  return {
+    v: 1,
+    kind: 'receipt',
+    giftId: gift.giftId,
+    receipt: announcement.receipt,
+    signature: announcement.signature,
+    signingKey: announcement.signingKey,
+    announceTxid: announcement.announceTxid,
+    at: announcement.receipt.at
+  }
+}
+
 export function applyEvent(gifts: GiftRecord[], event: MachineEvent): GiftRecord[] {
   if (event.type === 'gift') {
     const existing = findGift(gifts, event.gift.giftId)
@@ -99,15 +134,14 @@ export function applyEvent(gifts: GiftRecord[], event: MachineEvent): GiftRecord
   }
 
   const notice = event.receipt
-  const current = findGift(gifts, notice.giftId)
+  const current = findGift(gifts, notice.giftId) ?? matchGiftForReceipt(gifts, notice.receipt)
   if (!current) throw new Error('No gift for this receipt')
-  if (current.status === 'gifted') throw new Error('Acknowledge the gift before issuing a receipt')
   if (current.status === 'receipted') throw new Error('Receipt already issued')
   const receipt = buildReceipt(notice.receipt)
   if (receipt.purposeHash !== current.purposeHash) {
     throw new Error('Receipt purpose does not match the gift')
   }
-  if (receipt.giftTxid !== current.giftTxid.trim().toLowerCase()) {
+  if (!receiptMatchesGift(receipt, current)) {
     throw new Error('Receipt is not bound to this gift')
   }
   return gifts.map((row) => (
@@ -129,6 +163,56 @@ export function applyMessages(gifts: GiftRecord[], messages: DeskMessage[]): Gif
   let next = gifts
   for (const message of messages) {
     next = applyEvent(next, eventFromMessage(message))
+  }
+  return next
+}
+
+/** A public receipt announcement can flip a gifted row. Inbox ack is not required. */
+export function applyReceiptAnnouncement(
+  gifts: GiftRecord[],
+  announcement: ReceiptAnnouncement
+): GiftRecord[] {
+  const match = matchGiftForReceipt(gifts, announcement.receipt)
+  if (!match) throw new Error('No gift for this receipt')
+  return applyEvent(gifts, {
+    type: 'receipt',
+    receipt: receiptNoticeFromAnnouncement(announcement, match)
+  })
+}
+
+/**
+ * Donor page: Message Box may be empty (send-to-self often misses listMessages).
+ * Overlay receipt announcements still apply.
+ */
+export function applyDonorUpdates(
+  gifts: GiftRecord[],
+  incoming: {
+    messages?: DeskMessage[]
+    receipts?: ReceiptAnnouncement[]
+    acks?: AckNotice[]
+  }
+): GiftRecord[] {
+  let next = gifts
+  for (const message of incoming.messages ?? []) {
+    try {
+      next = applyEvent(next, eventFromMessage(message))
+    } catch {
+      // Out-of-order inbox rows are ignored.
+    }
+  }
+  for (const ack of incoming.acks ?? []) {
+    try {
+      next = applyEvent(next, { type: 'ack', ack })
+    } catch {
+      // Overlay ack is optional. Receipt is enough.
+    }
+  }
+  for (const announcement of incoming.receipts ?? []) {
+    try {
+      next = applyReceiptAnnouncement(next, announcement)
+    } catch {
+      // No matching gift, or already receipted.
+    }
   }
   return next
 }

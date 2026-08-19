@@ -361,6 +361,24 @@ export function parseGiftAnnouncementFields(fields: number[][]): GiftNotice | nu
   }
 }
 
+export function receiptMatchesGift(
+  receipt: CanonicalReceipt,
+  gift: {
+    giftTxid: string
+    purposeHash: string
+    donorIdentityKey: string
+    orgIdentityKey: string
+  }
+): boolean {
+  const txid = gift.giftTxid.trim().toLowerCase()
+  if (txid && receipt.giftTxid.trim().toLowerCase() === txid) return true
+  return (
+    receipt.purposeHash.trim().toLowerCase() === gift.purposeHash.trim().toLowerCase() &&
+    receipt.donorIdentityKey.trim().toLowerCase() === gift.donorIdentityKey.trim().toLowerCase() &&
+    receipt.orgIdentityKey.trim().toLowerCase() === gift.orgIdentityKey.trim().toLowerCase()
+  )
+}
+
 /** When the desk URL or give-link carries an org key, keep that desk's gifts. */
 export function filterGiftsForOrg(gifts: GiftNotice[], orgIdentityKey?: string): GiftNotice[] {
   const org = orgIdentityKey?.trim()
