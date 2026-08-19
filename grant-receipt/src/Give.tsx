@@ -81,6 +81,8 @@ export function Give({
   }, [wallet])
 
   const latest = gifts[gifts.length - 1]
+  const onScreenAmount = preferOnScreenAmount(readLiveAmountField(amountRef.current), amountUsd)
+  const giftLabel = sendGiftLabel(onScreenAmount, rate, amountUsd)
 
   const onSend = async (): Promise<void> => {
     setFail('')
@@ -186,7 +188,7 @@ export function Give({
           />
           <div className="row" style={{ marginTop: 16 }}>
             <button className="btn primary" type="submit" disabled={Boolean(busy) || connecting}>
-              {sendGiftLabel(preferOnScreenAmount(readLiveAmountField(amountRef.current), amountUsd))}
+              {giftLabel}
             </button>
             <a className="btn" href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">
               Need a wallet?
@@ -195,8 +197,9 @@ export function Give({
         </form>
         {rateError && <p className="status err">{rateError}</p>}
         <p className="hint">
-          A wallet is needed only to send. Declining the Desktop prompt does
-          not send. The receipt comes back to this page.
+          {rate && giftLabel !== 'Send gift'
+            ? `${giftLabel}. Declining the Desktop prompt does not send. The receipt comes back to this page.`
+            : 'A wallet is needed only to send. Declining the Desktop prompt does not send. The receipt comes back to this page.'}
         </p>
         <details className="advanced">
           <summary>Advanced</summary>

@@ -77,14 +77,13 @@ function looksLikeOverlayFailure(text: string): boolean {
 function looksLikeRejected(text: string): boolean {
   const lower = text.toLowerCase()
   if (looksLikeOverlayFailure(lower)) return false
+  // Explicit user cancel / deny only. A generic "Spending Request"
+  // prompt (Authorize still open) is not a decline.
   return (
     lower.includes('permission denied') ||
-    lower.includes('reject') ||
-    lower.includes('denied') ||
-    lower.includes('cancelled') ||
-    lower.includes('canceled') ||
     lower.includes('user declined') ||
-    lower.includes('spending request')
+    /\bdeny(?:ing|ied)?\b/.test(lower) ||
+    /\bcancel(?:led|ed|s|ling|ing)?\b/.test(lower)
   )
 }
 

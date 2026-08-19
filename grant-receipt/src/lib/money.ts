@@ -78,9 +78,26 @@ export function resolveGiftSpend(
   }
 }
 
-export function sendGiftLabel(rawField: string): string {
+export function formatSats(sats: number): string {
+  return `${sats.toLocaleString('en-US')} sats`
+}
+
+/**
+ * Send button / hint. Same resolveGiftSpend path as createAction.
+ * Dollars always; sats only when a live rate exists. No invented rate.
+ */
+export function sendGiftLabel(
+  rawField: string,
+  usdPerBsv?: number | null,
+  controlledState = ''
+): string {
   try {
-    return `Send ${formatUsd(parseUsdAmount(rawField))}`
+    if (typeof usdPerBsv === 'number' && usdPerBsv > 0) {
+      const spend = resolveGiftSpend(rawField, usdPerBsv, controlledState)
+      return `Send ${formatUsd(spend.amountUsd)} (${formatSats(spend.amountSats)})`
+    }
+    const usd = parseUsdAmount(preferOnScreenAmount(rawField, controlledState))
+    return `Send ${formatUsd(usd)}`
   } catch {
     return 'Send gift'
   }

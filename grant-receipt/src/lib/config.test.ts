@@ -35,6 +35,17 @@ describe('declined spend copy', () => {
     assert.equal(errorMessage(new Error('User cancelled the Spending Request.')), DECLINED_SPEND)
     assert.equal(errorMessage(new Error('The request was canceled.')), DECLINED_SPEND)
     assert.equal(errorMessage('user declined'), DECLINED_SPEND)
+    assert.equal(formatWalletError('Permission denied'), DECLINED_SPEND)
+    assert.equal(formatWalletError('user declined'), DECLINED_SPEND)
+  })
+
+  it('does not treat a generic Spending Request prompt as a decline', () => {
+    assert.notEqual(formatWalletError('Spending Request'), DECLINED_SPEND)
+    assert.notEqual(formatWalletError(new Error('Spending Request')), DECLINED_SPEND)
+    assert.notEqual(errorMessage('Waiting for Spending Request'), DECLINED_SPEND)
+    assert.equal(formatWalletError('Spending Request').includes('You declined the spend'), false)
+    assert.equal(formatWalletError('Permission denied'), DECLINED_SPEND)
+    assert.equal(formatWalletError('user declined'), DECLINED_SPEND)
   })
 
   it('keeps other wallet errors readable and does not dump objects', () => {

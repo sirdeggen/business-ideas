@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   displayUsd,
+  formatSats,
   formatUsd,
   formatUsdInput,
   parseUsdAmount,
@@ -64,5 +65,27 @@ describe('dollars (fixture rate, no network)', () => {
     assert.equal(sendGiftLabel(preferOnScreenAmount('0.01', '25.00')), 'Send $0.01')
     assert.equal(preferOnScreenAmount('', ''), '')
     assert.throws(() => resolveGiftSpend('', FIXTURE_RATE, ''), /dollars/)
+  })
+
+  it('usdToSats(0.01, 14.985) is ~66,733, not the $25 default', () => {
+    const live = 14.985
+    const oneCent = usdToSats(0.01, live)
+    const twentyFive = usdToSats(25, live)
+    assert.equal(oneCent, 66_733)
+    assert.notEqual(oneCent, twentyFive)
+    assert.ok(twentyFive > 160_000_000)
+    assert.equal(resolveGiftSpend('0.01', live).amountSats, oneCent)
+    assert.notEqual(resolveGiftSpend('0.01', live).amountSats, twentyFive)
+  })
+
+  it('sendGiftLabel includes sats when a live rate exists', () => {
+    const live = 14.985
+    assert.equal(sendGiftLabel('0.01', live), `Send $0.01 (${formatSats(66_733)})`)
+    assert.equal(sendGiftLabel('0.01', live), 'Send $0.01 (66,733 sats)')
+    assert.equal(sendGiftLabel('0.01', live, '25.00'), 'Send $0.01 (66,733 sats)')
+    assert.notEqual(sendGiftLabel('0.01', live), sendGiftLabel('25.00', live))
+    assert.equal(sendGiftLabel('0.01'), 'Send $0.01')
+    assert.equal(sendGiftLabel('0.01', null), 'Send $0.01')
+    assert.equal(sendGiftLabel('0.01', 0), 'Send $0.01')
   })
 })
