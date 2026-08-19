@@ -5,6 +5,7 @@ import {
   formatUsd,
   formatUsdInput,
   parseUsdAmount,
+  preferOnScreenAmount,
   readLiveAmountField,
   resolveGiftSpend,
   satsToUsd,
@@ -41,18 +42,27 @@ describe('dollars (fixture rate, no network)', () => {
   })
 
   it('send uses the live Amount field, never a leftover 25', () => {
-    const field = readLiveAmountField({
-      querySelector: (selector: string) => selector === '#amount' ? { value: '0.01' } : null
-    })
+    const field = readLiveAmountField({ value: '0.01' })
     assert.equal(field, '0.01')
-    const spend = resolveGiftSpend(field, FIXTURE_RATE)
+    const spend = resolveGiftSpend(field, FIXTURE_RATE, '25.00')
     const defaultSpend = resolveGiftSpend('25.00', FIXTURE_RATE)
     assert.equal(spend.amountUsd, '0.01')
     assert.equal(spend.amountSats, usdToSats(0.01, FIXTURE_RATE))
     assert.notEqual(spend.amountSats, defaultSpend.amountSats)
-    assert.equal(sendGiftLabel('0.01'), 'Send $0.01')
+    assert.equal(sendGiftLabel(spend.amountUsd), 'Send $0.01')
     assert.equal(sendGiftLabel('25.00'), 'Send $25.00')
     assert.throws(() => resolveGiftSpend('', FIXTURE_RATE), /dollars/)
+    assert.throws(() => resolveGiftSpend('', FIXTURE_RATE, ''), /dollars/)
     assert.throws(() => resolveGiftSpend('25.00 leftover ignored', FIXTURE_RATE), /dollars/)
+  })
+
+  it('typed 0.01 wins over defaultValue/preview 25; empty never becomes 25', () => {
+    assert.equal(preferOnScreenAmount('0.01', '25.00'), '0.01')
+    const stalePreview = resolveGiftSpend('0.01', FIXTURE_RATE, '25.00')
+    assert.equal(stalePreview.amountSats, usdToSats(0.01, FIXTURE_RATE))
+    assert.notEqual(stalePreview.amountSats, usdToSats(25, FIXTURE_RATE))
+    assert.equal(sendGiftLabel(preferOnScreenAmount('0.01', '25.00')), 'Send $0.01')
+    assert.equal(preferOnScreenAmount('', ''), '')
+    assert.throws(() => resolveGiftSpend('', FIXTURE_RATE, ''), /dollars/)
   })
 })

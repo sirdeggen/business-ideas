@@ -1,5 +1,6 @@
 import { PushDrop, type WalletClient } from '@bsv/sdk'
 import { originator } from './config'
+import { formatUsd } from './money'
 import {
   BASKET,
   PROTOCOL_ID,
@@ -38,6 +39,7 @@ export async function lockPayeeOutput(
 
 export function giftCreateActionArgs(args: {
   purpose: string
+  amountUsd: string
   amountSats: number
   lockingScript: string
   giftId: string
@@ -56,7 +58,7 @@ export function giftCreateActionArgs(args: {
 } {
   const purpose = args.purpose.trim()
   return {
-    description: `Gift: ${purpose}`.slice(0, 50),
+    description: `Gift ${formatUsd(args.amountUsd)}: ${purpose}`.slice(0, 50),
     outputs: [{
       satoshis: args.amountSats,
       lockingScript: args.lockingScript,
@@ -94,6 +96,7 @@ export async function sendGift(args: {
   )
   const action = giftCreateActionArgs({
     purpose,
+    amountUsd: args.amountUsd,
     amountSats: args.amountSats,
     lockingScript,
     giftId: args.giftId,

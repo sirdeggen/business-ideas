@@ -41,33 +41,37 @@ export function parseUsdAmount(raw: string): number {
 }
 
 /**
- * Live Amount field only. A leftover React default of 25 is never substituted
- * here — empty or missing input fails in parseUsdAmount.
+ * Live Amount input `.value` only. Does not invent 25 when the field is empty.
  */
 export function readLiveAmountField(source: {
   value?: string
-  querySelector?: (selector: string) => { value?: string } | null
-  get?: (name: string) => unknown
 } | null | undefined): string {
   if (!source) return ''
-  if (typeof source.value === 'string') return source.value
-  if (typeof source.get === 'function') {
-    const value = source.get('amount')
-    if (typeof value === 'string') return value
-  }
-  if (typeof source.querySelector === 'function') {
-    const el = source.querySelector('#amount') ?? source.querySelector('[name="amount"]')
-    if (el && typeof el.value === 'string') return el.value
-  }
-  return ''
+  return typeof source.value === 'string' ? source.value : ''
+}
+
+/**
+ * One spend path. Prefer the on-screen input when it differs from React state.
+ * Empty/invalid throws in parseUsdAmount — never substitutes 25.
+ */
+export function preferOnScreenAmount(liveField: string, controlledState: string): string {
+  const live = liveField.trim()
+  const controlled = controlledState.trim()
+  if (live !== '' && live !== controlled) return live
+  if (live !== '') return live
+  return controlled
 }
 
 /** Dollars and sats createAction will ask for, from the typed field. */
-export function resolveGiftSpend(rawField: string, usdPerBsv: number): {
+export function resolveGiftSpend(
+  liveField: string,
+  usdPerBsv: number,
+  controlledState = ''
+): {
   amountUsd: string
   amountSats: number
 } {
-  const usd = parseUsdAmount(rawField)
+  const usd = parseUsdAmount(preferOnScreenAmount(liveField, controlledState))
   return {
     amountUsd: formatUsdInput(usd),
     amountSats: usdToSats(usd, usdPerBsv)
