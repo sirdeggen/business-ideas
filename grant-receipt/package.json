@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "tsx --test src/lib/protocol.test.ts src/lib/machine.test.ts src/lib/money.test.ts src/lib/persist.test.ts",
+    "test": "tsx --test src/lib/*.test.ts",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {

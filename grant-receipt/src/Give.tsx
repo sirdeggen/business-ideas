@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useWallet } from './context/WalletContext'
 import { DESKTOP_INSTALL_URL, errorMessage, newGiftId } from './lib/config'
 import { sendGift, verifyReceiptWithWallet } from './lib/gift'
 import { applyEvent, type GiftRecord } from './lib/machine'
 import { sendDeskMessage, pullDeskMessages } from './lib/messagebox'
-import { displayUsd, fetchUsdPerBsv, formatUsdInput, parseUsdAmount, usdToSats } from './lib/money'
+import { displayUsd, fetchUsdPerBsv, readLiveAmountField, resolveGiftSpend, sendGiftLabel } from './lib/money'
 import { publishGiftAnnouncement } from './lib/overlay'
 import { readGifts, writeGifts } from './lib/persist'
 import { DEFAULT_PURPOSE, isIdentityKey, purposeHash, shortKey, verifyPublishedReceipt } from './lib/protocol'
@@ -17,8 +17,10 @@ export function Give({
   orgName: string
 }) {
   const { wallet, identityKey, connecting, error, connect } = useWallet()
+  const amountRef = useRef<HTMLInputElement>(null)
+  const formRef = useRef<HTMLFormElement>(null)
   const [purpose, setPurpose] = useState(DEFAULT_PURPOSE)
-  const [amountUsd, setAmountUsd] = useState('25.00')
+  const [amountPreview, setAmountPreview] = useState('25.00')
   const [orgKey, setOrgKey] = useState(orgIdentity)
   const [who, setWho] = useState(orgName)
   const [donorName, setDonorName] = useState('')
@@ -81,18 +83,32 @@ export function Give({
 
   const latest = gifts[gifts.length - 1]
 
+  const liveAmountRaw = (): string => {
+    const fromInput = readLiveAmountField(amountRef.current)
+    if (fromInput !== '') return fromInput
+    const form = formRef.current
+    if (form) {
+      const fromForm = readLiveAmountField(new FormData(form))
+      if (fromForm !== '') return fromForm
+      const fromNamed = readLiveAmountField(form)
+      if (fromNamed !== '') return fromNamed
+    }
+    return readLiveAmountField(typeof document !== 'undefined' ? document : null)
+  }
+
   const onSend = async (): Promise<void> => {
+    const rawAmount = liveAmountRaw()
+    setAmountPreview(rawAmount)
     setFail('')
     setNotice('')
     setBusy('Sending the gift…')
     try {
-      if (!rate) {
-        const live = await fetchUsdPerBsv()
-        setRate(live)
+      let usdPerBsv = rate
+      if (!usdPerBsv) {
+        usdPerBsv = await fetchUsdPerBsv()
+        setRate(usdPerBsv)
       }
-      const usdPerBsv = rate ?? await fetchUsdPerBsv()
-      const usd = parseUsdAmount(amountUsd)
-      const sats = usdToSats(usd, usdPerBsv)
+      const { amountUsd, amountSats } = resolveGiftSpend(rawAmount, usdPerBsv)
       if (!isIdentityKey(orgKey)) {
         throw new Error('Open the give link from the treasurer, or paste their desk identity under Advanced.')
       }
@@ -102,8 +118,8 @@ export function Give({
         donorIdentityKey: session.identityKey,
         orgIdentityKey: orgKey,
         purpose,
-        amountUsd: formatUsdInput(usd),
-        amountSats: sats,
+        amountUsd,
+        amountSats,
         giftId: newGiftId(),
         donorName: donorName.trim() || undefined,
         orgName: who.trim() || undefined
@@ -144,46 +160,59 @@ export function Give({
           State a purpose. Send a gift in dollars. The desk acknowledges, then
           you get a signed receipt bound to that purpose.
         </p>
-        <label htmlFor="purpose">Purpose</label>
-        <input
-          id="purpose"
-          value={purpose}
-          onChange={(event) => setPurpose(event.target.value)}
-          placeholder="roof repair"
-        />
-        <label htmlFor="amount">Amount</label>
-        <input
-          id="amount"
-          value={amountUsd}
-          onChange={(event) => setAmountUsd(event.target.value)}
-          inputMode="decimal"
-          placeholder="25.00"
-        />
-        <label htmlFor="who">This gift is for</label>
-        <input
-          id="who"
-          value={who}
-          onChange={(event) => setWho(event.target.value)}
-          placeholder="The church, the foundation, the hall"
-        />
-        <label htmlFor="donor-name">Your name (optional)</label>
-        <input
-          id="donor-name"
-          value={donorName}
-          onChange={(event) => setDonorName(event.target.value)}
-          placeholder="Shown on the desk"
-        />
-        <div className="row" style={{ marginTop: 16 }}>
-          <button className="btn primary" disabled={Boolean(busy) || connecting} onClick={() => void onSend()}>
-            Send gift
-          </button>
-          <a className="btn" href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">
-            Need a wallet?
-          </a>
-        </div>
+        <form
+          className="give-form"
+          ref={formRef}
+          onSubmit={(event) => {
+            event.preventDefault()
+            void onSend()
+          }}
+        >
+          <label htmlFor="purpose">Purpose</label>
+          <input
+            id="purpose"
+            value={purpose}
+            onChange={(event) => setPurpose(event.target.value)}
+            placeholder="roof repair"
+          />
+          <label htmlFor="amount">Amount</label>
+          <input
+            id="amount"
+            name="amount"
+            ref={amountRef}
+            defaultValue="25.00"
+            onInput={(event) => setAmountPreview((event.target as HTMLInputElement).value)}
+            onChange={(event) => setAmountPreview(event.target.value)}
+            inputMode="decimal"
+            placeholder="25.00"
+          />
+          <label htmlFor="who">This gift is for</label>
+          <input
+            id="who"
+            value={who}
+            onChange={(event) => setWho(event.target.value)}
+            placeholder="The church, the foundation, the hall"
+          />
+          <label htmlFor="donor-name">Your name (optional)</label>
+          <input
+            id="donor-name"
+            value={donorName}
+            onChange={(event) => setDonorName(event.target.value)}
+            placeholder="Shown on the desk"
+          />
+          <div className="row" style={{ marginTop: 16 }}>
+            <button className="btn primary" type="submit" disabled={Boolean(busy) || connecting}>
+              {sendGiftLabel(amountRef.current?.value ?? amountPreview)}
+            </button>
+            <a className="btn" href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">
+              Need a wallet?
+            </a>
+          </div>
+        </form>
         {rateError && <p className="status err">{rateError}</p>}
         <p className="hint">
-          A wallet is needed only to send. The receipt comes back to this page.
+          A wallet is needed only to send. Declining the Desktop prompt does
+          not send. The receipt comes back to this page.
         </p>
         <details className="advanced">
           <summary>Advanced</summary>

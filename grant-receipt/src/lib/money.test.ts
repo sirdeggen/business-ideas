@@ -5,7 +5,10 @@ import {
   formatUsd,
   formatUsdInput,
   parseUsdAmount,
+  readLiveAmountField,
+  resolveGiftSpend,
   satsToUsd,
+  sendGiftLabel,
   usdToSats
 } from './money.ts'
 
@@ -23,5 +26,33 @@ describe('dollars (fixture rate, no network)', () => {
     assert.equal(satsToUsd(50_000_000, FIXTURE_RATE), 25)
     assert.equal(displayUsd('25.00'), '$25.00')
     assert.equal(displayUsd(undefined, 12_000, null), 'a gift')
+  })
+
+  it('parses and converts 0.01 differently from the 25 default', () => {
+    assert.equal(parseUsdAmount('0.01'), 0.01)
+    assert.equal(parseUsdAmount('25.00'), 25)
+    const oneCent = usdToSats(0.01, FIXTURE_RATE)
+    const twentyFive = usdToSats(25, FIXTURE_RATE)
+    assert.equal(oneCent, 20_000)
+    assert.equal(twentyFive, 50_000_000)
+    assert.notEqual(oneCent, twentyFive)
+    assert.equal(resolveGiftSpend('0.01', FIXTURE_RATE).amountSats, oneCent)
+    assert.notEqual(resolveGiftSpend('0.01', FIXTURE_RATE).amountSats, twentyFive)
+  })
+
+  it('send uses the live Amount field, never a leftover 25', () => {
+    const field = readLiveAmountField({
+      querySelector: (selector: string) => selector === '#amount' ? { value: '0.01' } : null
+    })
+    assert.equal(field, '0.01')
+    const spend = resolveGiftSpend(field, FIXTURE_RATE)
+    const defaultSpend = resolveGiftSpend('25.00', FIXTURE_RATE)
+    assert.equal(spend.amountUsd, '0.01')
+    assert.equal(spend.amountSats, usdToSats(0.01, FIXTURE_RATE))
+    assert.notEqual(spend.amountSats, defaultSpend.amountSats)
+    assert.equal(sendGiftLabel('0.01'), 'Send $0.01')
+    assert.equal(sendGiftLabel('25.00'), 'Send $25.00')
+    assert.throws(() => resolveGiftSpend('', FIXTURE_RATE), /dollars/)
+    assert.throws(() => resolveGiftSpend('25.00 leftover ignored', FIXTURE_RATE), /dollars/)
   })
 })
