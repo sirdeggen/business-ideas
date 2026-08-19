@@ -13,7 +13,6 @@ import {
 } from './money.ts'
 
 const FIXTURE_RATE = 50
-const LIVE_QA_RATE = 37.36
 
 describe('dollars (fixture rate, no network)', () => {
   it('parses and formats the way invoices does', () => {
@@ -37,11 +36,8 @@ describe('dollars (fixture rate, no network)', () => {
     assert.equal(oneCent, 20_000)
     assert.equal(twentyFive, 50_000_000)
     assert.notEqual(oneCent, twentyFive)
-    const qaOneCent = usdToSats(0.01, LIVE_QA_RATE)
-    const qaTwentyFive = usdToSats(25, LIVE_QA_RATE)
-    assert.ok(qaOneCent < 100)
-    assert.ok(qaTwentyFive > 60_000)
-    assert.notEqual(qaOneCent, qaTwentyFive)
+    assert.equal(resolveGiftSpend('0.01', FIXTURE_RATE).amountSats, oneCent)
+    assert.notEqual(resolveGiftSpend('0.01', FIXTURE_RATE).amountSats, twentyFive)
   })
 
   it('send uses the live Amount field, never a leftover 25', () => {
