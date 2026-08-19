@@ -8,9 +8,12 @@ import {
 import { originator } from './config'
 import {
   keepLastGoodGifts,
+  keepLastGoodReceipts,
   readCachedOverlayGifts,
+  readCachedOverlayReceipts,
   readCachedReceipt,
   writeCachedOverlayGifts,
+  writeCachedOverlayReceipts,
   writeCachedReceipt,
   type CachedPublicReceipt
 } from './persist'
@@ -26,6 +29,7 @@ import {
   filterGiftsForOrg,
   parseAnnouncementFields,
   parseGiftAnnouncementFields,
+  receiptMatchesGift,
   type CanonicalReceipt,
   type GiftNotice
 } from './protocol'
@@ -113,12 +117,15 @@ export async function publishReceiptAnnouncement(
     throw new Error('Wallet did not return a public receipt')
   }
   await broadcastAnnouncement(response.tx as number[])
-  writeCachedReceipt(response.txid, {
+  const announced: CachedPublicReceipt = {
     receipt,
     signature,
     signingKey,
     announceTxid: response.txid
-  })
+  }
+  writeCachedReceipt(response.txid, announced)
+  const cached = keepLastGoodReceipts(readCachedOverlayReceipts(), [announced], false)
+  writeCachedOverlayReceipts(cached)
   return response.txid
 }
 
@@ -222,6 +229,24 @@ export async function lookupPublicReceipt(txid: string): Promise<{
 const GIFT_PAGE = 100
 const GIFT_MAX_PAGES = 4
 
+async function queryOverlayPages(): Promise<Array<{ beef: number[]; outputIndex: number }>> {
+  const resolver = overlayResolver()
+  const outputs: Array<{ beef: number[]; outputIndex: number }> = []
+  for (let page = 0; page < GIFT_MAX_PAGES; page++) {
+    const answer = await resolver.query({
+      service: LOOKUP_SERVICE,
+      query: { limit: GIFT_PAGE, skip: page * GIFT_PAGE, sortOrder: 'desc' }
+    }, 15000) as {
+      type?: string
+      outputs?: Array<{ beef: number[]; outputIndex: number }>
+    }
+    if (answer.type !== 'output-list' || !answer.outputs) break
+    outputs.push(...answer.outputs)
+    if (answer.outputs.length < GIFT_PAGE) break
+  }
+  return outputs
+}
+
 function decodeGiftOutput(beef: number[], outputIndex: number): GiftNotice | null {
   try {
     const tx = Transaction.fromBEEF(beef)
@@ -242,25 +267,13 @@ export async function lookupIncomingGifts(orgIdentityKey?: string): Promise<{
 }> {
   const cached = readCachedOverlayGifts()
   try {
-    const resolver = overlayResolver()
     const live: GiftNotice[] = []
     const seen = new Set<string>()
-    for (let page = 0; page < GIFT_MAX_PAGES; page++) {
-      const answer = await resolver.query({
-        service: LOOKUP_SERVICE,
-        query: { limit: GIFT_PAGE, skip: page * GIFT_PAGE, sortOrder: 'desc' }
-      }, 15000) as {
-        type?: string
-        outputs?: Array<{ beef: number[]; outputIndex: number }>
-      }
-      if (answer.type !== 'output-list' || !answer.outputs) break
-      for (const output of answer.outputs) {
-        const gift = decodeGiftOutput(output.beef, output.outputIndex)
-        if (!gift || seen.has(gift.giftId)) continue
-        seen.add(gift.giftId)
-        live.push(gift)
-      }
-      if (answer.outputs.length < GIFT_PAGE) break
+    for (const output of await queryOverlayPages()) {
+      const gift = decodeGiftOutput(output.beef, output.outputIndex)
+      if (!gift || seen.has(gift.giftId)) continue
+      seen.add(gift.giftId)
+      live.push(gift)
     }
     const kept = keepLastGoodGifts(cached, live, live.length === 0)
     if (kept.length > 0) writeCachedOverlayGifts(kept)
@@ -278,5 +291,75 @@ export async function lookupIncomingGifts(orgIdentityKey?: string): Promise<{
       usedCache: kept.length > 0,
       error: err instanceof Error ? err.message : String(err)
     }
+  }
+}
+
+export function filterReceiptsForGift(
+  receipts: CachedPublicReceipt[],
+  gift: {
+    giftTxid: string
+    purposeHash: string
+    donorIdentityKey: string
+    orgIdentityKey: string
+  }
+): CachedPublicReceipt[] {
+  return receipts.filter((row) => receiptMatchesGift(row.receipt, gift))
+}
+
+/** ls_anytx client-filter on `grant receipt` receipt announcements. No wallet. */
+export async function lookupReceiptAnnouncements(): Promise<{
+  receipts: CachedPublicReceipt[]
+  status: OverlayLookupStatus
+  usedCache: boolean
+  error?: string
+}> {
+  const cached = readCachedOverlayReceipts()
+  try {
+    const live: CachedPublicReceipt[] = []
+    const seen = new Set<string>()
+    for (const output of await queryOverlayPages()) {
+      const decoded = decodeOutput(output.beef, output.outputIndex)
+      if (!decoded) continue
+      const key = decoded.announceTxid || decoded.receipt.giftTxid
+      if (seen.has(key)) continue
+      seen.add(key)
+      live.push(decoded)
+    }
+    const kept = keepLastGoodReceipts(cached, live, live.length === 0)
+    if (kept.length > 0) writeCachedOverlayReceipts(kept)
+    return {
+      receipts: kept,
+      status: 'online',
+      usedCache: live.length === 0 && kept.length > 0
+    }
+  } catch (err) {
+    const kept = keepLastGoodReceipts(cached, [], true)
+    return {
+      receipts: kept,
+      status: 'failed',
+      usedCache: kept.length > 0,
+      error: err instanceof Error ? err.message : String(err)
+    }
+  }
+}
+
+export async function lookupDonorReceipt(gift: {
+  giftTxid: string
+  purposeHash: string
+  donorIdentityKey: string
+  orgIdentityKey: string
+}): Promise<{
+  found: CachedPublicReceipt | null
+  status: OverlayLookupStatus
+  usedCache: boolean
+  error?: string
+}> {
+  const looked = await lookupReceiptAnnouncements()
+  const found = filterReceiptsForGift(looked.receipts, gift)[0] ?? null
+  return {
+    found,
+    status: looked.status,
+    usedCache: looked.usedCache,
+    error: looked.error
   }
 }

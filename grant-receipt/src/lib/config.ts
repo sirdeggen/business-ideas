@@ -4,6 +4,7 @@ export const DONOR_STORAGE_KEY = 'grant-receipt.donor'
 export const ORG_NAME_KEY = 'grant-receipt.orgName'
 export const RECEIPT_CACHE_PREFIX = 'grant-receipt.public.'
 export const OVERLAY_GIFTS_KEY = 'grant-receipt.overlay-gifts'
+export const OVERLAY_RECEIPTS_KEY = 'grant-receipt.overlay-receipts'
 
 export const CHROME_ALLOW_HINT =
   'Chrome may ask to allow this site to talk to apps on this device. Allow, then try again, with Desktop unlocked.'

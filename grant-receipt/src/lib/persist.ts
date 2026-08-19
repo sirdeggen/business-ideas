@@ -3,6 +3,7 @@ import {
   DONOR_STORAGE_KEY,
   ORG_NAME_KEY,
   OVERLAY_GIFTS_KEY,
+  OVERLAY_RECEIPTS_KEY,
   RECEIPT_CACHE_PREFIX
 } from './config'
 import type { GiftRecord } from './machine'
@@ -91,6 +92,41 @@ export function keepLastGoodGifts(
   overlayFailedOrEmpty: boolean
 ): GiftNotice[] {
   if (incoming.length > 0) return mergeGiftNotices(cached, incoming)
+  if (overlayFailedOrEmpty && cached.length > 0) return cached
+  return cached
+}
+
+export function readCachedOverlayReceipts(): CachedPublicReceipt[] {
+  return readJson<CachedPublicReceipt[]>(OVERLAY_RECEIPTS_KEY, [])
+}
+
+export function writeCachedOverlayReceipts(receipts: CachedPublicReceipt[]): void {
+  writeJson(OVERLAY_RECEIPTS_KEY, receipts)
+}
+
+export function mergeReceiptAnnouncements(
+  cached: CachedPublicReceipt[],
+  incoming: CachedPublicReceipt[]
+): CachedPublicReceipt[] {
+  const byKey = new Map<string, CachedPublicReceipt>()
+  const keyOf = (row: CachedPublicReceipt): string =>
+    row.announceTxid || row.receipt.giftTxid
+  for (const row of cached) {
+    if (keyOf(row)) byKey.set(keyOf(row), row)
+  }
+  for (const row of incoming) {
+    if (keyOf(row)) byKey.set(keyOf(row), row)
+  }
+  return [...byKey.values()]
+}
+
+/** Empty or failed ls_anytx must not wipe a receipt the donor already saw. */
+export function keepLastGoodReceipts(
+  cached: CachedPublicReceipt[],
+  incoming: CachedPublicReceipt[],
+  overlayFailedOrEmpty: boolean
+): CachedPublicReceipt[] {
+  if (incoming.length > 0) return mergeReceiptAnnouncements(cached, incoming)
   if (overlayFailedOrEmpty && cached.length > 0) return cached
   return cached
 }

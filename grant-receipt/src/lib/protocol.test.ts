@@ -16,6 +16,7 @@ import {
   filterGiftsForOrg,
   parseAnnouncementFields,
   parseGiftAnnouncementFields,
+  receiptMatchesGift,
   purposeHash,
   receiptKeyID,
   utf8,
@@ -233,5 +234,27 @@ describe('gift announcement fields', () => {
     const filtered = filterGiftsForOrg([ours, theirs], ours.orgIdentityKey)
     assert.equal(filtered.length, 1)
     assert.equal(filtered[0].giftId, ours.giftId)
+  })
+})
+
+describe('receipt announcement match', () => {
+  it('matches giftTxid or purposeHash plus donor and org keys', () => {
+    const gift = giftNotice()
+    const receipt = buildReceipt({
+      purpose: gift.purpose,
+      purposeHash: gift.purposeHash,
+      amountUsd: gift.amountUsd,
+      amountSats: gift.amountSats,
+      donorIdentityKey: gift.donorIdentityKey,
+      orgIdentityKey: gift.orgIdentityKey,
+      giftTxid: gift.giftTxid
+    })
+    assert.equal(receiptMatchesGift(receipt, gift), true)
+    assert.equal(receiptMatchesGift(receipt, { ...gift, giftTxid: '00'.repeat(32) }), true)
+    assert.equal(receiptMatchesGift(receipt, {
+      ...gift,
+      giftTxid: '00'.repeat(32),
+      purposeHash: '11'.repeat(32)
+    }), false)
   })
 })
