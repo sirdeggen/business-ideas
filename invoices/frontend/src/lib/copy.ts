@@ -63,12 +63,30 @@ export function statusLabel(status: UiStatus): string {
   return 'Overdue'
 }
 
+export function statusWordClass(status: UiStatus | 'draft' | 'missing'): string {
+  if (status === 'paid') return 'status-word paid'
+  if (status === 'overdue') return 'status-word overdue'
+  if (status === 'processing') return 'status-word processing'
+  if (status === 'draft') return 'status-word draft'
+  if (status === 'missing') return 'status-word'
+  return 'status-word unpaid'
+}
+
 export function displayAmount(invoice: OverlayInvoice): string {
   if (invoice.amountUsd) return formatUsd(invoice.amountUsd)
   return ''
 }
 
+export function moneyActionLabel(verb: 'Send' | 'Pay', usd: number | null | undefined): string {
+  if (usd == null || !Number.isFinite(usd)) return verb
+  return `${verb} ${formatUsd(usd)}`
+}
+
+/** Due line only. Do not repeat billed-to — that name already lives in the body. */
 export function unpaidHeadline(invoice: OverlayInvoice, status: UiStatus): string {
-  if (status === 'overdue') return `Waiting on ${invoice.billedTo || 'the payer'}. ${duePhrase(invoice.dueDate)}.`
-  return `Still open · ${duePhrase(invoice.dueDate)}`
+  const due = duePhrase(invoice.dueDate)
+  if (status === 'overdue' && !invoice.billedTo) {
+    return `Waiting on the payer. ${due}.`
+  }
+  return due
 }
