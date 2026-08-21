@@ -9,9 +9,21 @@ import { overlayCheckFailed } from './lib/config'
 
 type Role = 'organizer' | 'attendee' | 'door'
 
+const TABS: { id: Role, label: string }[] = [
+  { id: 'organizer', label: 'Make tickets' },
+  { id: 'attendee', label: 'Your tickets' },
+  { id: 'door', label: 'At the door' }
+]
+
 function Shell() {
   const { url, setUrl, online, probeError } = useOverlay()
   const [role, setRole] = useState<Role>('organizer')
+
+  const banner = online === false
+    ? `${overlayCheckFailed(probeError, url)} This page is pointed at ${url}.`
+    : online === null
+      ? 'Checking the door list…'
+      : null
 
   return (
     <div className="app">
@@ -25,24 +37,22 @@ function Shell() {
         </div>
       </header>
 
-      <p className="banner">
-        {online === false
-          ? `${overlayCheckFailed(probeError, url)} This page is pointed at ${url}.`
-          : online === true
-            ? 'Ready.'
-            : 'Checking…'}
-      </p>
+      {banner && <p className="banner">{banner}</p>}
 
       <nav className="tabs">
-        {(['organizer', 'attendee', 'door'] as Role[]).map((item) => (
-          <button key={item} className={role === item ? 'active' : ''} onClick={() => setRole(item)}>
-            {item}
+        {TABS.map((item) => (
+          <button
+            key={item.id}
+            className={role === item.id ? 'active' : ''}
+            onClick={() => setRole(item.id)}
+          >
+            {item.label}
           </button>
         ))}
       </nav>
 
       {role === 'organizer' && <Organizer />}
-      {role === 'attendee' && <Attendee />}
+      {role === 'attendee' && <Attendee onMakeTickets={() => setRole('organizer')} />}
       {role === 'door' && <Door />}
 
       <details className="advanced">
@@ -52,7 +62,7 @@ function Shell() {
       </details>
 
       <footer>
-        Needs BSV Desktop. Keys stay in the wallet.
+        Keys stay in the wallet.
       </footer>
     </div>
   )
