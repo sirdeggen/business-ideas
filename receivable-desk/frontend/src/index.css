@@ -357,6 +357,40 @@ input:focus, textarea:focus {
   box-shadow: 0 0 0 1px var(--navy);
 }
 
+.dollar {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0 12px;
+  background: #fff;
+  gap: 6px;
+}
+
+.dollar span {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.dollar input {
+  height: 38px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.dollar input:focus {
+  box-shadow: none;
+}
+
+.dollar:focus-within {
+  border-color: var(--navy);
+  box-shadow: 0 0 0 1px var(--navy);
+}
+
 .row {
   display: flex;
   gap: 12px;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { SAMPLE_PARTIES } from '../../../protocol/samples'
 import { agePhrase, partyName, rowStatus, rowStatusLabel, workRowTitle } from './display'
-import { formatInvoiceAmount, formatUsd, satsToUsd } from './money'
+import { formatInvoiceAmount, formatUsd, parseUsdAmount, satsToUsd, usdToSats } from './money'
 
 const HEX = '0212d02d' + 'ab'.repeat(26) + 'b1a418'
 
@@ -26,6 +26,10 @@ describe('chase display', () => {
     expect(formatInvoiceAmount(1, null)).toBe('')
     expect(formatInvoiceAmount(245, 50)).not.toMatch(/sats/i)
     expect(formatInvoiceAmount(1, 50)).not.toMatch(/sats/i)
+    expect(parseUsdAmount('50.00')).toBe(50)
+    expect(parseUsdAmount('$2.45')).toBe(2.45)
+    expect(usdToSats(50, 50)).toBe(100_000_000)
+    expect(() => parseUsdAmount('0')).toThrow(/dollars/)
   })
 
   it('speaks age as a phrase and uses one honest status word', () => {

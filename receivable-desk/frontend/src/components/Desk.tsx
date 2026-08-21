@@ -203,7 +203,7 @@ export function Desk() {
                     <div className="work-amount">{amountLabel(row)}</div>
                     <div className="work-actions">
                       <button className="row-action" onClick={() => void sendReminder(row)}>
-                        {copied === row.invoiceId ? 'Copied' : 'Send reminder'}
+                        {copied === row.invoiceId ? 'Copied' : 'Copy reminder'}
                       </button>
                       <button
                         className="row-action mark"

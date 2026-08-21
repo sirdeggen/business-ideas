@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   DISPLAY_NAME_MAX,
   isIdentityKey,
@@ -13,6 +13,13 @@ import {
   errorMessage,
   overlayCheckFailed
 } from '../lib/config'
+import {
+  fetchUsdPerBsv,
+  formatUsdInput,
+  parseUsdAmount,
+  tryParseUsdAmount,
+  usdToSats
+} from '../lib/money'
 
 function nameTooLong(value: string): boolean {
   const trimmed = value.trim()
@@ -27,12 +34,31 @@ export function Register() {
   const [debtorName, setDebtorName] = useState('')
   const [creditorHex, setCreditorHex] = useState('')
   const [debtorHex, setDebtorHex] = useState('')
-  const [amountSats, setAmountSats] = useState(1000)
+  const [amount, setAmount] = useState('50.00')
   const [dueDate, setDueDate] = useState('2026-09-30')
   const [memo, setMemo] = useState('')
+  const [usdPerBsv, setUsdPerBsv] = useState<number | null>(null)
+  const [rateError, setRateError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [lastTxid, setLastTxid] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void fetchUsdPerBsv()
+      .then((rate) => {
+        if (cancelled) return
+        setUsdPerBsv(rate)
+        setRateError(null)
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return
+        setUsdPerBsv(null)
+        setRateError(errorMessage(err))
+      })
+    return () => { cancelled = true }
+  }, [])
 
   const overlayDown = online === false
   const resolvedCreditor = resolvePartyIdentity(creditorName, creditorHex, identityKey)
@@ -42,6 +68,7 @@ export function Register() {
   const advancedDebtorBad = debtorHex.trim().length > 0 && !isIdentityKey(debtorHex)
   const sameParty = resolvedCreditor !== null && resolvedDebtor !== null && resolvedCreditor === resolvedDebtor
   const namesTooLong = nameTooLong(creditorName) || nameTooLong(debtorName)
+  const parsedAmount = tryParseUsdAmount(amount)
   const registerDisabled =
     busy || connecting || overlayDown || debtorMissing || advancedCreditorBad || advancedDebtorBad || sameParty || namesTooLong
   const registerTitle = overlayDown
@@ -57,6 +84,10 @@ export function Register() {
             : connecting
               ? 'Connecting wallet…'
               : 'Record this invoice on the overlay'
+
+  const commitAmount = (): void => {
+    if (parsedAmount != null) setAmount(formatUsdInput(parsedAmount))
+  }
 
   const submit = async (): Promise<void> => {
     if (overlayDown) {
@@ -79,6 +110,37 @@ export function Register() {
       setError('Names must be 80 characters or fewer.')
       return
     }
+
+    let usd: number
+    try {
+      usd = parseUsdAmount(amount)
+    } catch (err) {
+      setError(errorMessage(err))
+      return
+    }
+
+    let rate = usdPerBsv
+    if (!rate) {
+      try {
+        rate = await fetchUsdPerBsv()
+        setUsdPerBsv(rate)
+        setRateError(null)
+      } catch (err) {
+        const message = errorMessage(err)
+        setRateError(message)
+        setError(`Could not fetch a dollar rate. ${message}`)
+        return
+      }
+    }
+
+    let amountSats: number
+    try {
+      amountSats = usdToSats(usd, rate)
+    } catch (err) {
+      setError(errorMessage(err))
+      return
+    }
+    setAmount(formatUsdInput(usd))
 
     let activeWallet = wallet
     let activeIdentity = identityKey
@@ -103,6 +165,7 @@ export function Register() {
     setBusy(true)
     setError(null)
     setStatus(null)
+    setLastTxid(null)
     const silent = window.setTimeout(() => {
       setBusy(false)
       setError(CHROME_ALLOW_HINT)
@@ -117,9 +180,10 @@ export function Register() {
         memo
       })
       window.clearTimeout(silent)
-      setStatus(`Recorded ${result.invoiceId} (txid ${result.txid}).`)
+      setStatus('Recorded.')
+      setLastTxid(result.txid)
       if (result.overlayError) {
-        setError(`Recorded in wallet (txid ${result.txid}). Overlay submit failed: ${result.overlayError}`)
+        setError(`Recorded. Overlay submit failed: ${result.overlayError}`)
       } else {
         setError(null)
       }
@@ -171,13 +235,16 @@ export function Register() {
         <div className="row">
           <div className="grow field">
             <label htmlFor="amount">Amount</label>
-            <input
-              id="amount"
-              type="number"
-              min={1}
-              value={amountSats}
-              onChange={(event) => setAmountSats(Number(event.target.value))}
-            />
+            <div className="dollar">
+              <span>$</span>
+              <input
+                id="amount"
+                inputMode="decimal"
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                onBlur={commitAmount}
+              />
+            </div>
           </div>
           <div className="grow field">
             <label htmlFor="due">Due date</label>
@@ -189,6 +256,9 @@ export function Register() {
           <input id="memo" value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="What is owed" />
         </div>
       </div>
+      {rateError && (
+        <p className="status err">Couldn’t get the dollar rate. {rateError}</p>
+      )}
       <details className="advanced">
         <summary>Advanced</summary>
         <p className="hint">
@@ -212,6 +282,9 @@ export function Register() {
           spellCheck={false}
           autoComplete="off"
         />
+        {lastTxid && (
+          <p className="hint">txid <code>{lastTxid}</code></p>
+        )}
       </details>
       <div className="actions">
         <button
