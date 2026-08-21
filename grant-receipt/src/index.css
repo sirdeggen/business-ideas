@@ -59,6 +59,14 @@ a { color: var(--navy); }
   margin-bottom: 32px;
 }
 
+.eyebrow {
+  margin: 0 0 8px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
 .roles {
   display: flex;
   gap: 16px;

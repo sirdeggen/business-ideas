@@ -1,4 +1,4 @@
-# Grant Receipt Desk (v0)
+# Grant receipt
 
 A gift for a purpose. A receipt bound to that purpose.
 
@@ -20,22 +20,24 @@ not the 2-of-3 policy vault in `treasury/`.
    required to *see* it.
 
 Incoming gifts on **Desk** list without a wallet. Overlay-us-1 is the
-stranger path. Acknowledge, issue receipt, and copy give link still ask
-for a wallet (the give link needs the org identity).
+stranger path. A bare Desk (no org, no wallet) lists every
+protocol-tagged gift — the public incoming list. Copy a give link to
+bind a desk. Do not hide those gifts. Acknowledge, issue receipt, and
+copy give link still ask for a wallet (the give link needs the org
+identity).
 
 ## How to give
 
 1. Open the give link from the treasurer (`?give=1&org=…`), or paste the
    desk identity under Advanced.
 2. Purpose is plain language. Default is `roof repair`.
-3. Amount is dollars typed in the field. Send reads that live input at
-   click time (not a leftover default of `25.00`). The button uses the
-   same `resolveGiftSpend` path as `createAction` and shows dollars and,
-   when a live rate exists, the sats the wallet will ask for
-   (`Send $0.01 (66,733 sats)`). If the rate fetch failed, `Send $0.01`
-   is enough. The live rate is WhatsOnChain, then CoinGecko. There is no
-   invented rate. The wallet is asked for `usdToSats` of those typed
-   dollars only at send time.
+3. Amount is dollars typed in the field. The field opens empty with
+   placeholder `25.00`. Send reads that live input at click time and
+   never substitutes `25.00`. The button is dollars only (`Send $0.01`
+   or `Send gift` when the field is empty). Sats stay under Advanced
+   when a live rate exists. The live rate is WhatsOnChain, then
+   CoinGecko. There is no invented rate. The wallet is asked for
+   `usdToSats` of those typed dollars only at send time.
 4. Send gift. Approve in the wallet. Declining the Desktop prompt does not
    send — the page says so, and it does not dump wallet JSON. Message Box
    notifies the desk first. A 1-sat PushDrop gift announcement is also

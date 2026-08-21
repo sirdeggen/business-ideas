@@ -83,23 +83,32 @@ export function formatSats(sats: number): string {
 }
 
 /**
- * Send button / hint. Same resolveGiftSpend path as createAction.
- * Dollars always; sats only when a live rate exists. No invented rate.
+ * Send button. Dollars only. Sats stay off the primary button and the hint.
+ * Empty / invalid field is "Send gift" — never substitutes 25.
  */
 export function sendGiftLabel(
   rawField: string,
-  usdPerBsv?: number | null,
   controlledState = ''
 ): string {
   try {
-    if (typeof usdPerBsv === 'number' && usdPerBsv > 0) {
-      const spend = resolveGiftSpend(rawField, usdPerBsv, controlledState)
-      return `Send ${formatUsd(spend.amountUsd)} (${formatSats(spend.amountSats)})`
-    }
     const usd = parseUsdAmount(preferOnScreenAmount(rawField, controlledState))
     return `Send ${formatUsd(usd)}`
   } catch {
     return 'Send gift'
+  }
+}
+
+/** Sats the wallet will ask for. Advanced only. No invented rate. */
+export function advancedSatsLine(
+  rawField: string,
+  usdPerBsv?: number | null,
+  controlledState = ''
+): string {
+  if (!(typeof usdPerBsv === 'number' && usdPerBsv > 0)) return ''
+  try {
+    return formatSats(resolveGiftSpend(rawField, usdPerBsv, controlledState).amountSats)
+  } catch {
+    return ''
   }
 }
 

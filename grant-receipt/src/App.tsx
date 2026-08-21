@@ -34,6 +34,7 @@ function Shell() {
               </button>
             </nav>
           )}
+          <p className="eyebrow">Grant receipt</p>
           <h1>{title}</h1>
           {!receiptTxid && (
             <p className="lede">A gift for a purpose. A receipt bound to that purpose.</p>

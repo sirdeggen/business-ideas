@@ -5,7 +5,7 @@ import { clerkReceiptId, formatWhen } from './lib/copy'
 import { sendGift, verifyReceiptWithWallet } from './lib/gift'
 import { applyDonorUpdates, applyEvent, type GiftRecord } from './lib/machine'
 import { sendDeskMessage, pullDeskMessages } from './lib/messagebox'
-import { displayUsd, fetchUsdPerBsv, preferOnScreenAmount, readLiveAmountField, resolveGiftSpend, sendGiftLabel } from './lib/money'
+import { advancedSatsLine, displayUsd, fetchUsdPerBsv, preferOnScreenAmount, readLiveAmountField, resolveGiftSpend, sendGiftLabel } from './lib/money'
 import { lookupReceiptAnnouncements, publishGiftAnnouncement } from './lib/overlay'
 import { readGifts, writeGifts } from './lib/persist'
 import { DEFAULT_PURPOSE, isIdentityKey, purposeHash, shortKey, verifyPublishedReceipt } from './lib/protocol'
@@ -20,7 +20,7 @@ export function Give({
   const { wallet, identityKey, connecting, error, connect } = useWallet()
   const amountRef = useRef<HTMLInputElement>(null)
   const [purpose, setPurpose] = useState(DEFAULT_PURPOSE)
-  const [amountUsd, setAmountUsd] = useState('25.00')
+  const [amountUsd, setAmountUsd] = useState('')
   const [orgKey, setOrgKey] = useState(orgIdentity)
   const [who, setWho] = useState(orgName)
   const [donorName, setDonorName] = useState('')
@@ -77,7 +77,9 @@ export function Give({
 
   const latest = gifts[gifts.length - 1]
   const onScreenAmount = preferOnScreenAmount(readLiveAmountField(amountRef.current), amountUsd)
-  const giftLabel = sendGiftLabel(onScreenAmount, rate, amountUsd)
+  const giftLabel = sendGiftLabel(onScreenAmount, amountUsd)
+  const satsLine = advancedSatsLine(onScreenAmount, rate, amountUsd)
+  const missingOrg = !isIdentityKey(orgKey)
 
   const onSend = async (): Promise<void> => {
     setFail('')
@@ -182,6 +184,11 @@ export function Give({
             placeholder="Shown on the desk"
           />
         </div>
+        {missingOrg && (
+          <p className="helper">
+            Open the give link from the treasurer, or paste their desk identity under Advanced.
+          </p>
+        )}
         <div className="actions">
           <button className="btn primary" type="submit" disabled={Boolean(busy) || connecting}>
             {giftLabel}
@@ -253,6 +260,7 @@ export function Give({
           <p>Your identity <code>{shortKey(identityKey)}</code></p>
         )}
         <p>Purpose hash <code>{purpose.trim() ? purposeHash(purpose) : '—'}</code></p>
+        {satsLine && <p>Wallet will ask for {satsLine}.</p>}
       </details>
     </>
   )

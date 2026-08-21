@@ -98,6 +98,7 @@ export function Desk({ orgIdentity = '' }: { orgIdentity?: string }) {
   }
 
   const visibleGifts = giftsForDesk(gifts, orgIdentity || identityKey || undefined)
+  const boundDesk = isIdentityKey(orgIdentity || identityKey || '')
 
   const copyGiveLink = async (): Promise<void> => {
     setFail('')
@@ -214,6 +215,11 @@ export function Desk({ orgIdentity = '' }: { orgIdentity?: string }) {
       </p>
 
       <h2>Incoming gifts</h2>
+      {!boundDesk && (
+        <p className="helper">
+          This is the public incoming list. Copy a give link to bind a desk.
+        </p>
+      )}
       {overlayStatus === 'checking' && visibleGifts.length === 0 && (
         <p className="helper">Looking up incoming gifts…</p>
       )}
