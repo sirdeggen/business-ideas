@@ -14,48 +14,44 @@ function Shell() {
 
   return (
     <div className="app">
-      <header className="masthead">
-        <div>
+      <article className="sheet">
+        <header className="sheet-head">
           <p className="eyebrow">Invoices · collections</p>
           <h1>Who do we chase today?</h1>
           <p className="lede">
-            The paper that proves an invoice — same treasurer, after a few real
-            invoices exist. Not a second product. Not a bank.
+            Open invoices still owed. Not a bank. Wallet is not required to read
+            the list.
           </p>
-        </div>
-      </header>
+        </header>
 
-      <p className="banner">
-        {online === false
-          ? `${overlayCheckFailed(probeError, url)} This page is pointed at ${url}.`
-          : 'Not a bank. Not a lender. Wallet is not required to read the list.'}
-      </p>
+        {online === false && (
+          <p className="banner">
+            {`${overlayCheckFailed(probeError, url)} This page is pointed at ${url}. Wallet is not required to read the list.`}
+          </p>
+        )}
 
-      <nav className="tabs">
-        {([
-          ['desk', 'Chase'],
-          ['owe', 'You owe us'],
-          ['register', 'Record invoice']
-        ] as Array<[Tab, string]>).map(([id, label]) => (
-          <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
-            {label}
-          </button>
-        ))}
-      </nav>
+        <nav className="tabs">
+          {([
+            ['desk', 'Chase'],
+            ['owe', 'You owe us'],
+            ['register', 'Record invoice']
+          ] as Array<[Tab, string]>).map(([id, label]) => (
+            <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
+              {label}
+            </button>
+          ))}
+        </nav>
 
-      {tab === 'desk' && <Desk />}
-      {tab === 'owe' && <Registry />}
-      {tab === 'register' && <Register />}
+        {tab === 'desk' && <Desk />}
+        {tab === 'owe' && <Registry />}
+        {tab === 'register' && <Register />}
+      </article>
 
       <details className="advanced">
         <summary>Overlay URL</summary>
         <p>Operators can point this at a local indexer.</p>
         <input value={url} onChange={(event) => setUrl(event.target.value)} />
       </details>
-
-      <footer>
-        This desk does not lend.
-      </footer>
     </div>
   )
 }

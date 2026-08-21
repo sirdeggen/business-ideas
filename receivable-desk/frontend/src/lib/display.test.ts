@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { SAMPLE_PARTIES } from '../../../protocol/samples'
-import { partyName, workRowTitle } from './display'
+import { agePhrase, partyName, rowStatus, rowStatusLabel, workRowTitle } from './display'
 import { formatInvoiceAmount, formatUsd, satsToUsd } from './money'
 
 const HEX = '0212d02d' + 'ab'.repeat(26) + 'b1a418'
@@ -26,5 +26,19 @@ describe('chase display', () => {
     expect(formatInvoiceAmount(1, null)).toBe('')
     expect(formatInvoiceAmount(245, 50)).not.toMatch(/sats/i)
     expect(formatInvoiceAmount(1, 50)).not.toMatch(/sats/i)
+  })
+
+  it('speaks age as a phrase and uses one honest status word', () => {
+    expect(agePhrase('2026-08-09', '2026-08-21')).toBe('12 days overdue')
+    expect(agePhrase('2026-08-20', '2026-08-21')).toBe('1 day overdue')
+    expect(agePhrase('2026-08-21', '2026-08-21')).toBe('Due today')
+    expect(agePhrase('2026-08-22', '2026-08-21')).toBe('Due tomorrow')
+    expect(agePhrase('2026-08-28', '2026-08-21')).toBe('Due Fri')
+    expect(rowStatus('open', '2026-08-09', '2026-08-21')).toBe('overdue')
+    expect(rowStatus('open', '2026-09-30', '2026-08-21')).toBe('open')
+    expect(rowStatus('approved', '2026-09-30', '2026-08-21')).toBe('approved')
+    expect(rowStatus('paid', '2026-08-01', '2026-08-21')).toBe('paid')
+    expect(rowStatusLabel('overdue')).toBe('Overdue')
+    expect(rowStatusLabel('open')).toBe('Open')
   })
 })
