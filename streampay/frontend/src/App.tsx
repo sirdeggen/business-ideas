@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import type { WalletClient } from '@bsv/sdk'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
@@ -7,7 +7,8 @@ import {
   DEFAULT_DURATION_DAYS,
   FUNDABLE_MAX_SATS,
   accrue,
-  isIdentityKey
+  isIdentityKey,
+  rateSatsPerSec
 } from '../../protocol/stream'
 import { claimStream, freezeStream, openStream } from './lib/actions'
 import {
@@ -19,7 +20,9 @@ import {
   type ActionVerb
 } from './lib/config'
 import {
+  CLOCK_STOPPED,
   FREEZE_HINT,
+  GHOST_MEMO,
   RECEIPT_CARD,
   STREAM_CARD,
   accruedLine,
@@ -28,13 +31,13 @@ import {
   datetimeLocalToIso,
   dayPhrase,
   defaultStartLocal,
-  displayAmount,
+  displayMoney,
   displaySats,
   formatWhen,
   humanReceiptId,
-  remainingLine,
-  remainingPotSats,
-  statusLabel
+  showStatusStamp,
+  statusLabel,
+  streamHeading
 } from './lib/copy'
 import { fetchUsdPerBsv, parseSatsAmount, satsToDisplayUsd, satsToUsdInput } from './lib/money'
 import { lookupStreams, type OverlayStream } from './lib/overlay'
@@ -74,13 +77,31 @@ function InstallPrompt({
   )
 }
 
-function Advanced() {
+function Page({
+  variant,
+  advanced,
+  children
+}: {
+  variant: 'create' | 'stream'
+  advanced?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <div className={`app ${variant}`}>
+      {children}
+      {advanced}
+    </div>
+  )
+}
+
+function Advanced({ children }: { children?: ReactNode }) {
   const { url, setUrl, online } = useOverlay()
   const { identityKey } = useWallet()
 
   return (
     <details className="advanced">
       <summary>Advanced</summary>
+      {children}
       <label htmlFor="overlay-url">Overlay URL</label>
       <input
         id="overlay-url"
@@ -89,16 +110,37 @@ function Advanced() {
         placeholder="https://…"
         autoComplete="off"
       />
-      <p className="hint">
+      <p className="meta">
         {online === true ? 'Reachable.' : online === false ? 'Not reachable from this browser.' : 'Checking…'}
         {' '}{overlayHint(url)}
       </p>
       {identityKey && (
-        <p className="hint">
+        <p className="meta">
           Wallet key <code>{shortKey(identityKey, 8)}</code>
         </p>
       )}
     </details>
+  )
+}
+
+function GhostCard() {
+  const [startIso] = useState(() => new Date(Date.now() - 3 * 86_400_000).toISOString())
+  const durationSec = DEFAULT_DURATION_DAYS * 86_400
+  const elapsed = dayPhrase({
+    amountSats: DEFAULT_AMOUNT_SATS,
+    startIso,
+    durationSec,
+    frozen: false,
+    claimedSats: 0,
+    freezeIso: '',
+    rateSatsPerSec: rateSatsPerSec(DEFAULT_AMOUNT_SATS, durationSec)
+  })
+
+  return (
+    <div className="ghost" aria-hidden="true">
+      <p className="memo">{GHOST_MEMO}</p>
+      <p className="meta">{elapsed}</p>
+    </div>
   )
 }
 
@@ -110,30 +152,17 @@ function Home({
   notice?: string | null
 }) {
   return (
-    <div className="app">
-      <header className="masthead">
-        <div>
+    <Page variant="create" advanced={<Advanced />}>
+      <article className="sheet">
+        <header className="sheet-head">
           <h1>StreamPay</h1>
-          <p className="lede">Open a stream. They claim what’s accrued. You can freeze it.</p>
-        </div>
-      </header>
-
-      <section className="panel ghost-wrap">
-        <div className="ghost" aria-hidden="true">
-          <div className="ghost-head">
-            <span className="stamp open fat">Open</span>
-            <strong>100,000 sats</strong>
-          </div>
-          <p className="memo">Legal research week</p>
-          <p className="hint">21,428 sats accrued · 0 sats claimed</p>
-        </div>
+          <p className="lede">Pay as they work.</p>
+        </header>
+        <GhostCard />
         {notice && <p className="status err">{notice}</p>}
-        <p className="empty-sell">Pay as they work.</p>
         <button className="btn primary" onClick={onCreate}>Open a stream</button>
-      </section>
-
-      <Advanced />
-    </div>
+      </article>
+    </Page>
   )
 }
 
@@ -149,12 +178,11 @@ function Create({
   const [orgName, setOrgName] = useState('')
   const [contractorName, setContractorName] = useState('')
   const [contractorIdentity, setContractorIdentity] = useState('')
-  const [memo, setMemo] = useState('Legal research week')
+  const [memo, setMemo] = useState(GHOST_MEMO)
   const [amount, setAmount] = useState(String(DEFAULT_AMOUNT_SATS))
   const [days, setDays] = useState(String(DEFAULT_DURATION_DAYS))
   const [startLocal, setStartLocal] = useState(defaultStartLocal)
   const [usdPerBsv, setUsdPerBsv] = useState<number | null>(null)
-  const [rateError, setRateError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showInstall, setShowInstall] = useState(false)
@@ -165,12 +193,10 @@ function Create({
       .then((rate) => {
         if (cancelled) return
         setUsdPerBsv(rate)
-        setRateError(null)
       })
-      .catch((err: unknown) => {
+      .catch(() => {
         if (cancelled) return
         setUsdPerBsv(null)
-        setRateError(errorMessage(err))
       })
     return () => { cancelled = true }
   }, [])
@@ -179,12 +205,12 @@ function Create({
     setError(null)
     setShowInstall(false)
     if (!orgName.trim() || !contractorName.trim() || !memo.trim()) {
-      setError('Fill in org name, contractor, and what it’s for.')
+      setError('Fill in what it’s for, contractor, and org.')
       return
     }
     const identity = contractorIdentity.trim()
     if (!isIdentityKey(identity)) {
-      setError('Contractor identity is needed to open a funded stream.')
+      setError('Contractor identity is needed to open a funded stream. Open Advanced.')
       return
     }
     const durationDays = Number(days)
@@ -253,85 +279,97 @@ function Create({
   }
 
   return (
-    <div className="app">
-      <header className="masthead">
-        <div>
+    <Page
+      variant="create"
+      advanced={(
+        <Advanced>
+          <label htmlFor="identity">Contractor identity</label>
+          <input
+            id="identity"
+            value={contractorIdentity}
+            onChange={(event) => setContractorIdentity(event.target.value)}
+            placeholder="Their compressed public key"
+            autoComplete="off"
+          />
+          <p className="helper">Needed so they can claim accrued pay from the stream you fund.</p>
+          <p className="helper">Defaults to three days ago so a mid-stream claim is demoable without waiting.</p>
+          <p className="helper">Settlement is sats. Dollars are display only.</p>
+        </Advanced>
+      )}
+    >
+      <article className="sheet">
+        <header className="sheet-head">
           <button className="text-link" onClick={onBack}>StreamPay</button>
           <h1>Open a stream</h1>
           <p className="lede">You fund the stream. They claim what’s accrued from it. You can freeze the clock.</p>
-        </div>
-      </header>
+        </header>
 
-      <section className="panel">
-        <label htmlFor="org">Org name</label>
-        <input
-          id="org"
-          value={orgName}
-          onChange={(event) => setOrgName(event.target.value)}
-          placeholder="Harbor Legal Aid"
-          maxLength={80}
-        />
-        <label htmlFor="contractor">Contractor</label>
-        <input
-          id="contractor"
-          value={contractorName}
-          onChange={(event) => setContractorName(event.target.value)}
-          placeholder="Jordan Lee"
-          maxLength={80}
-        />
-        <label htmlFor="identity">Contractor identity</label>
-        <input
-          id="identity"
-          value={contractorIdentity}
-          onChange={(event) => setContractorIdentity(event.target.value)}
-          placeholder="Their compressed public key"
-          autoComplete="off"
-        />
-        <p className="helper">Needed so they can claim accrued pay from the stream you fund.</p>
-        <label htmlFor="memo">What it’s for</label>
-        <input
-          id="memo"
-          value={memo}
-          onChange={(event) => setMemo(event.target.value)}
-          placeholder="Legal research week"
-          maxLength={200}
-        />
-        <div className="grid">
-          <div>
-            <label htmlFor="amount">Amount (sats)</label>
-            <div className="dollar">
+        <div className="fields">
+          <div className="field">
+            <label htmlFor="memo">What it’s for</label>
+            <input
+              id="memo"
+              value={memo}
+              onChange={(event) => setMemo(event.target.value)}
+              placeholder={GHOST_MEMO}
+              maxLength={200}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="contractor">Contractor name</label>
+            <input
+              id="contractor"
+              value={contractorName}
+              onChange={(event) => setContractorName(event.target.value)}
+              placeholder="Jordan Lee"
+              maxLength={80}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="org">Org</label>
+            <input
+              id="org"
+              value={orgName}
+              onChange={(event) => setOrgName(event.target.value)}
+              placeholder="Harbor Legal Aid"
+              maxLength={80}
+            />
+          </div>
+          <div className="grid">
+            <div className="field">
+              <label htmlFor="days">Duration</label>
               <input
-                id="amount"
+                id="days"
                 inputMode="numeric"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
+                value={days}
+                onChange={(event) => setDays(event.target.value)}
               />
-              <span>sats</span>
+            </div>
+            <div className="field">
+              <label htmlFor="amount">Amount</label>
+              <div className="dollar">
+                <input
+                  id="amount"
+                  inputMode="numeric"
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value)}
+                />
+                <span>sats</span>
+              </div>
+              {usdPreview && <p className="helper">About {usdPreview}</p>}
             </div>
           </div>
-          <div>
-            <label htmlFor="days">Duration (days)</label>
+          <div className="field">
+            <label htmlFor="start">Start</label>
             <input
-              id="days"
-              inputMode="numeric"
-              value={days}
-              onChange={(event) => setDays(event.target.value)}
+              id="start"
+              type="datetime-local"
+              value={startLocal}
+              onChange={(event) => setStartLocal(event.target.value)}
             />
           </div>
         </div>
-        <label htmlFor="start">Start</label>
-        <input
-          id="start"
-          type="datetime-local"
-          value={startLocal}
-          onChange={(event) => setStartLocal(event.target.value)}
-        />
-        <p className="helper">Defaults to three days ago so a mid-stream claim is demoable without waiting. Settlement is sats. Dollars are display only.</p>
-        {usdPreview && <p className="hint">About {usdPreview} at the current rate.</p>}
-        {rateError && (
-          <p className="helper">Dollar rate unavailable. You can still open — the stream is funded in sats.</p>
-        )}
-        <div className="row" style={{ marginTop: 20 }}>
+        <div className="actions">
           <button
             className="btn primary"
             disabled={busy || connecting}
@@ -341,15 +379,13 @@ function Create({
           </button>
         </div>
         {!(busy || connecting || showInstall) && (
-          <p className="helper">We’ll ask you to fund this stream in a moment. Default is {DEFAULT_AMOUNT_SATS.toLocaleString('en-US')} sats over {DEFAULT_DURATION_DAYS} days.</p>
+          <p className="helper">We’ll ask you to fund this stream in a moment.</p>
         )}
         {(busy || connecting || showInstall) && <ChromeHint />}
         {showInstall && <InstallPrompt verb="open" onRetry={() => void send()} />}
         {error && <p className="status err">{error}</p>}
-      </section>
-
-      <Advanced />
-    </div>
+      </article>
+    </Page>
   )
 }
 
@@ -362,7 +398,7 @@ function StreamPage({
   createTxid: string | null
   onHome: () => void
 }) {
-  const { url } = useOverlay()
+  const { url, markReachable } = useOverlay()
   const { connect, connecting } = useWallet()
   const [stream, setStream] = useState<OverlayStream | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -381,6 +417,11 @@ function StreamPage({
   }, [url, streamId, createTxid])
 
   useEffect(() => {
+    const id = window.setInterval(() => setAsOfMs(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [streamId])
+
+  useEffect(() => {
     let cancelled = false
     let inflight = false
     const load = async (): Promise<void> => {
@@ -396,6 +437,7 @@ function StreamPage({
           txid: createTxid || undefined
         })
         if (cancelled) return
+        markReachable()
         const row = rows[0] ?? null
         setStream(row)
         if (row) setAsOfMs((prev) => prev || Date.now())
@@ -415,7 +457,7 @@ function StreamPage({
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', onVis)
     }
-  }, [url, streamId, createTxid, retryTick])
+  }, [url, streamId, createTxid, retryTick, markReachable])
 
   const retryLookup = (): void => {
     setError(null)
@@ -449,6 +491,7 @@ function StreamPage({
         streamId,
         txid: stream.txid || createTxid || undefined
       })
+      markReachable()
       setStream(rows[0] ?? stream)
       setAsOfMs(Date.now())
     } catch (err) {
@@ -475,93 +518,92 @@ function StreamPage({
   const viewedAt = asOfMs || undefined
   const math = stream ? accrue(stream, viewedAt) : null
   const status = math?.status ?? 'open'
-  const amount = stream ? displayAmount(stream) : ''
   const showReceipt = Boolean(stream && (justClaimed || stream.lastClaimSats > 0))
   const panel = streamPageState(stream, error)
+  const rate = stream ? dailyRate(stream) : ''
+  const clockStopped = Boolean(stream && (status === 'frozen' || status === 'finished'))
 
   return (
-    <div className="app">
-      <header className="masthead invoice-mast">
-        <div>
+    <Page variant="stream">
+      <article className="sheet">
+        <header className="sheet-head">
           <button className="text-link" onClick={onHome}>StreamPay</button>
-          <h1>{stream?.org || 'Stream'}</h1>
-          {amount && <p className="amount-xl">{amount}</p>}
-        </div>
-        <span className={`stamp ${status} fat`}>{statusLabel(status)}</span>
-      </header>
-
-      {panel.loading && (
-        <section className="panel">
-          <p className="hint">{panel.message}</p>
-        </section>
-      )}
-
-      {panel.offerRetry && !panel.keepBoard && (
-        <section className="panel">
-          <p className="status err">{panel.message}</p>
-          <div className="row" style={{ marginTop: 16 }}>
-            <button className="btn primary" onClick={retryLookup}>Retry</button>
+          <div className="title-row">
+            <h1>{streamHeading(stream)}</h1>
+            {showStatusStamp(stream) && (
+              <span className={`stamp ${status} fat`}>{statusLabel(status)}</span>
+            )}
           </div>
-        </section>
-      )}
+        </header>
 
-      {stream && math && (
-        <section className="panel">
-          <h2 className="block-title">{STREAM_CARD}</h2>
-          <p className="memo">{stream.memo || 'Pay as they work'}</p>
-          <p className="lede">{accruedLine(stream, viewedAt)}</p>
-          <p className="remaining">{remainingLine(stream)}</p>
-          <p className="hint">{dayPhrase(stream, viewedAt)}{dailyRate(stream) ? ` · ${dailyRate(stream)} / day` : ''}</p>
-          <dl>
-            <div><dt>Contractor</dt><dd>{stream.contractorName || '—'}</dd></div>
-            <div><dt>Rate</dt><dd>{dailyRate(stream) || '—'} / day</dd></div>
-            <div><dt>Accrued</dt><dd>{displaySats(math.earnedSats)}</dd></div>
-            <div><dt>Claimed</dt><dd>{displaySats(stream.claimedSats)}</dd></div>
-            <div><dt>Remaining</dt><dd>{displaySats(remainingPotSats(stream))}</dd></div>
-            <div><dt>Claimable</dt><dd>{displaySats(math.claimableSats)}</dd></div>
-            <div><dt>Receipt</dt><dd>{humanReceiptId(stream.streamId)}</dd></div>
-          </dl>
-          <p className="helper">Anyone with this link can see the rate, what’s accrued, and whether it’s frozen. No wallet needed to look.</p>
-          {(stream.satoshis ?? 1) < math.claimableSats && (
-            <p className="helper">This stream isn’t funded. A claim will not invent the missing sats.</p>
-          )}
-          <div className="stack-actions">
-            <button
-              className="btn primary claim"
-              disabled={busy || connecting || math.claimableSats < 1}
-              onClick={() => void claim()}
-            >
-              {busy && busyVerb === 'claim' ? 'Approve in your wallet…' : claimLabel(math.claimableSats)}
-            </button>
-            <button
-              className="btn"
-              disabled={busy || connecting || stream.frozen}
-              onClick={() => void freeze()}
-            >
-              {busy && busyVerb === 'freeze' ? 'Approve in your wallet…' : stream.frozen ? 'Frozen' : 'Freeze'}
-            </button>
-            <p className="helper">{FREEZE_HINT}</p>
-            <button className="btn" onClick={() => void copyLink()}>
-              {copied ? 'Copied' : 'Copy link'}
-            </button>
-          </div>
-          {(busy || connecting || showInstall) && <ChromeHint />}
-          {showInstall && <InstallPrompt verb={busyVerb} onRetry={() => void (busyVerb === 'freeze' ? freeze() : claim())} />}
-          {error && <p className="status err">{error}</p>}
-          {panel.offerRetry && panel.keepBoard && (
-            <div className="row" style={{ marginTop: 12 }}>
-              <button className="btn" onClick={retryLookup}>Retry</button>
+        {panel.loading && (
+          <p className="meta">{panel.message}</p>
+        )}
+
+        {panel.offerRetry && !panel.keepBoard && (
+          <>
+            <p className="status err">{panel.message}</p>
+            <div className="actions">
+              <button className="btn primary" onClick={retryLookup}>Retry</button>
             </div>
-          )}
-        </section>
-      )}
+          </>
+        )}
+
+        {stream && math && (
+          <>
+            <h2 className="block-title">{STREAM_CARD}</h2>
+            <p className="memo">{stream.memo || 'Pay as they work'}</p>
+            <p className="meta">
+              {dayPhrase(stream, viewedAt)}
+              {rate ? ` · ${rate} / day` : ''}
+            </p>
+            <p className="lede">{accruedLine(stream, viewedAt)}</p>
+            <p className="meta">Claimable {displayMoney(math.claimableSats, stream)}</p>
+            <p className="helper">Anyone with this link can see the rate, what’s accrued, and whether it’s frozen. No wallet needed to look.</p>
+            {clockStopped && <p className="helper">{CLOCK_STOPPED}</p>}
+            {(stream.satoshis ?? 1) < math.claimableSats && (
+              <p className="helper">This stream isn’t funded. A claim will not invent the missing sats.</p>
+            )}
+            <div className="stack-actions">
+              <div className="row taxi">
+                <button
+                  className="btn primary"
+                  disabled={busy || connecting || math.claimableSats < 1}
+                  onClick={() => void claim()}
+                >
+                  {busy && busyVerb === 'claim' ? 'Approve in your wallet…' : claimLabel(math.claimableSats, stream)}
+                </button>
+                <button
+                  className="btn"
+                  disabled={busy || connecting || stream.frozen}
+                  onClick={() => void freeze()}
+                >
+                  {busy && busyVerb === 'freeze' ? 'Approve in your wallet…' : stream.frozen ? 'Frozen' : 'Freeze'}
+                </button>
+              </div>
+              <p className="helper">{FREEZE_HINT}</p>
+              <button className="btn" onClick={() => void copyLink()}>
+                {copied ? 'Copied' : 'Copy link'}
+              </button>
+            </div>
+            {(busy || connecting || showInstall) && <ChromeHint />}
+            {showInstall && <InstallPrompt verb={busyVerb} onRetry={() => void (busyVerb === 'freeze' ? freeze() : claim())} />}
+            {error && <p className="status err">{error}</p>}
+            {panel.offerRetry && panel.keepBoard && (
+              <div className="row" style={{ marginTop: 12 }}>
+                <button className="btn" onClick={retryLookup}>Retry</button>
+              </div>
+            )}
+          </>
+        )}
+      </article>
 
       {stream && showReceipt && (
-        <section className="panel receipt">
+        <article className="sheet">
           <h2 className="block-title">{RECEIPT_CARD}</h2>
           <div className="paid-hero">
             <span className="stamp paid fat">Claimed</span>
-            <p className="amount-xl">{displaySats(stream.lastClaimSats)}</p>
+            <p className="amount-xl money">{displayMoney(stream.lastClaimSats, stream)}</p>
           </div>
           <p className="memo">{stream.memo || 'Pay as they work'}</p>
           <dl>
@@ -578,12 +620,13 @@ function StreamPage({
                 <div><dt>Transaction</dt><dd><code>{stream.txid}</code></dd></div>
               )}
               <div><dt>Stream id</dt><dd><code>{stream.streamId}</code></dd></div>
+              <div><dt>Claimed</dt><dd>{displaySats(stream.lastClaimSats)}</dd></div>
               <div><dt>Protocol</dt><dd>streampay</dd></div>
             </dl>
           </details>
-        </section>
+        </article>
       )}
-    </div>
+    </Page>
   )
 }
 

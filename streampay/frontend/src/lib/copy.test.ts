@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_AMOUNT_SATS, TAG, rateSatsPerSec } from '../../../protocol/stream'
 import {
+  CLOCK_STOPPED,
   FREEZE_HINT,
   RECEIPT_CARD,
   STREAM_CARD,
   accruedLine,
   claimLabel,
   displayAmount,
+  displayMoney,
   displaySats,
   remainingLine,
-  remainingPotSats
+  remainingPotSats,
+  showStatusStamp,
+  streamHeading
 } from './copy'
 import type { OverlayStream } from './overlay'
 
@@ -42,21 +46,24 @@ function stream(partial: Partial<OverlayStream> = {}): OverlayStream {
   }
 }
 
-describe('stream copy is sat-first', () => {
-  it('leads with sats and drops paired USD on the stream page', () => {
+describe('stream copy is sats unless dollars are meaningful', () => {
+  it('forbids paired pennies on the default pot; sats stay the settlement', () => {
     expect(displayAmount(stream())).toBe('100,000 sats')
-    expect(displayAmount(stream({ amountUsd: '0.07' }))).toBe('100,000 sats')
-    expect(displayAmount(stream({ amountUsd: '0.07' }))).not.toContain('$')
+    expect(displayAmount(stream({ amountUsd: '0.07' }))).toBe('$0.07')
+    expect(displayMoney(21_428, stream({ amountUsd: '0.07' }))).toBe('21,428 sats')
+    expect(displayMoney(21_428, stream({ amountUsd: '0.07' }))).not.toMatch(/\$0\.0[01]/)
     expect(displaySats(21_428)).toBe('21,428 sats')
     expect(displaySats(14)).not.toMatch(/\$0\.0[01]/)
-    expect(claimLabel(14)).toBe('Claim 14 sats')
-    expect(claimLabel(14)).not.toContain('$')
+    expect(claimLabel(14, stream({ amountUsd: '0.07' }))).toBe('Claim 14 sats')
+    expect(claimLabel(14, stream({ amountUsd: '0.07' }))).not.toMatch(/\$0\.0[01]/)
+    expect(claimLabel(21_428, stream({ amountUsd: '0.07' }))).toBe('Claim 21,428 sats')
     expect(claimLabel(0)).toBe('Nothing to claim yet')
   })
 
   it('shows claimable in sats, not a spot dollar conversion of the notional', () => {
     expect(displaySats(21_428)).toBe('21,428 sats')
     expect(displaySats(21_428)).not.toContain('$86')
+    expect(displayMoney(21_428, stream({ amountUsd: '0.07' }))).not.toContain('$86')
   })
 
   it('writes the remaining pot after a claim (QA 78,559)', () => {
@@ -70,10 +77,17 @@ describe('stream copy is sat-first', () => {
     expect(FREEZE_HINT).toMatch(/opened this stream/i)
     expect(FREEZE_HINT).toMatch(/stops new pay from accruing/i)
     expect(FREEZE_HINT).toMatch(/already-accrued can still be claimed/i)
+    expect(CLOCK_STOPPED).toMatch(/clock is stopped/i)
   })
 
   it('names the OPEN stream card and the CLAIMED receipt card', () => {
     expect(STREAM_CARD).toBe('Stream')
     expect(RECEIPT_CARD).toBe('Receipt')
+  })
+
+  it('never titles a missing stream Stream or stamps OPEN', () => {
+    expect(streamHeading(null)).toBe('StreamPay')
+    expect(showStatusStamp(null)).toBe(false)
+    expect(streamHeading(stream())).toBe('Harbor Legal Aid')
   })
 })

@@ -311,13 +311,31 @@ export function streamOutputIndex(tx: Transaction): number {
   return 0
 }
 
-export async function pingOverlay(base: string): Promise<boolean> {
+async function probeGet(host: string, path: string): Promise<boolean> {
   try {
-    const response = await fetch(`${overlayUrl(base)}/version`)
-    if (response.ok) return true
-    const health = await fetch(`${overlayUrl(base)}/health/live`)
-    return health.ok
+    const response = await fetch(`${host}${path}`)
+    return response.ok
   } catch {
     return false
   }
+}
+
+/**
+ * Pages: /version has no CORS and throws "Failed to fetch". Probe /health/live
+ * first so that throw is not treated as overlay-offline. /version stays a
+ * last-resort fallback, isolated so a CORS failure continues.
+ */
+export async function pingOverlay(base: string): Promise<boolean> {
+  const host = overlayUrl(base)
+  if (await probeGet(host, '/health/live')) return true
+  try {
+    const response = await fetch(`${host}/health`)
+    if (response.ok) {
+      const body = await response.json().catch(() => null) as { status?: unknown, live?: unknown } | null
+      if (body?.status === 'ok' && body.live === true) return true
+    }
+  } catch {
+    // Isolated; continue to /version.
+  }
+  return probeGet(host, '/version')
 }

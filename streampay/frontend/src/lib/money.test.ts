@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { FUNDABLE_MAX_SATS } from '../../../protocol/stream'
-import { formatSats, parseSatsAmount, satsToDisplayUsd, satsToUsdInput } from './money'
+import { formatMeaningfulUsd, formatSats, parseSatsAmount, satsToDisplayUsd, satsToUsdInput } from './money'
 
 describe('sat-denominated open amounts', () => {
   it('parses sats and never converts a dollar figure at spot', () => {
@@ -16,11 +16,14 @@ describe('sat-denominated open amounts', () => {
     expect(() => parseSatsAmount('400.00')).toThrow(/sats/)
   })
 
-  it('formats sats as the settlement unit; USD is display only', () => {
+  it('formats sats as the settlement unit; pennies stay hidden', () => {
     expect(formatSats(100_000)).toBe('100,000 sats')
     expect(satsToUsdInput(100_000, 67)).toBe('0.07')
     expect(satsToDisplayUsd(100_000, 67)).toBe('$0.07')
     expect(satsToDisplayUsd(14, 67)).toBe('')
     expect(satsToDisplayUsd(100_000, null)).toBe('')
+    expect(formatMeaningfulUsd(0.01)).toBe('')
+    expect(formatMeaningfulUsd(0)).toBe('')
+    expect(formatMeaningfulUsd(0.07)).toBe('$0.07')
   })
 })
