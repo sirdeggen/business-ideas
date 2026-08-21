@@ -1,12 +1,19 @@
-import { accrue, type StreamStatus } from '../../../protocol/stream'
-import { formatSats } from './money'
+import { accrue, satsToUsd, type StreamStatus } from '../../../protocol/stream'
+import { formatSats, formatStreamUsd, formatUsd } from './money'
 import type { OverlayStream } from './overlay'
 
 export const STREAM_CARD = 'Stream'
 export const RECEIPT_CARD = 'Receipt'
 
+/** Documented display of the default 100,000 sat pot. Settlement is still sats. */
+export const GHOST_AMOUNT_USD = '0.07'
+export const GHOST_MEMO = 'Legal research week'
+
 export const FREEZE_HINT =
   'Only the person who opened this stream can freeze it. That stops new pay from accruing. Already-accrued can still be claimed.'
+
+export const CLOCK_STOPPED =
+  'The clock is stopped. Already-accrued can still be claimed. The remaining pot does not earn.'
 
 export function remainingPotSats(stream: OverlayStream): number {
   const accounted = Math.max(0, stream.amountSats - stream.claimedSats)
@@ -16,12 +23,31 @@ export function remainingPotSats(stream: OverlayStream): number {
   return accounted
 }
 
-export function remainingLine(stream: OverlayStream): string {
-  return `${formatSats(remainingPotSats(stream))} remaining`
+function hasUsdSnapshot(stream: Pick<OverlayStream, 'amountSats' | 'amountUsd'>): boolean {
+  const usd = Number(stream.amountUsd)
+  return stream.amountSats > 0 && Number.isFinite(usd) && usd >= 0 && String(stream.amountUsd).trim() !== ''
 }
 
-export function claimLabel(claimableSats: number): string {
+export function displayMoney(
+  sats: number,
+  stream: Pick<OverlayStream, 'amountSats' | 'amountUsd'>
+): string {
+  if (!hasUsdSnapshot(stream)) return formatSats(sats)
+  const usd = satsToUsd(sats, stream.amountSats, stream.amountUsd)
+  if (sats === 0) return formatUsd(0)
+  return formatStreamUsd(usd) || formatUsd(0)
+}
+
+export function remainingLine(stream: OverlayStream): string {
+  return `${displayMoney(remainingPotSats(stream), stream)} remaining`
+}
+
+export function claimLabel(
+  claimableSats: number,
+  stream?: Pick<OverlayStream, 'amountSats' | 'amountUsd'>
+): string {
   if (claimableSats < 1) return 'Nothing to claim yet'
+  if (stream) return `Claim ${displayMoney(claimableSats, stream)}`
   return `Claim ${formatSats(claimableSats)}`
 }
 
@@ -51,6 +77,7 @@ export function statusLabel(status: StreamStatus): string {
 }
 
 export function displayAmount(stream: OverlayStream): string {
+  if (hasUsdSnapshot(stream)) return formatUsd(stream.amountUsd)
   return formatSats(stream.amountSats)
 }
 
@@ -58,15 +85,25 @@ export function displaySats(sats: number): string {
   return formatSats(sats)
 }
 
-export function dailyRate(stream: OverlayStream): string {
+export function dailyRate(stream: Pick<OverlayStream, 'amountSats' | 'amountUsd' | 'durationSec'>): string {
   const days = stream.durationSec / 86_400
   if (!(days > 0)) return ''
+  if (hasUsdSnapshot(stream)) {
+    const usd = Number(stream.amountUsd) / days
+    return formatStreamUsd(usd)
+  }
   const sats = Math.floor(stream.amountSats / days)
   if (!(sats > 0)) return ''
   return formatSats(sats)
 }
 
-export function dayPhrase(stream: OverlayStream, nowMs = Date.now()): string {
+export function dayPhrase(
+  stream: Pick<
+    OverlayStream,
+    'startIso' | 'durationSec' | 'amountSats' | 'frozen' | 'claimedSats' | 'freezeIso' | 'rateSatsPerSec'
+  >,
+  nowMs = Date.now()
+): string {
   const math = accrue(stream, nowMs)
   const day = Math.min(
     Math.max(1, Math.ceil(math.elapsedSec / 86_400)),
@@ -81,7 +118,7 @@ export function dayPhrase(stream: OverlayStream, nowMs = Date.now()): string {
 
 export function accruedLine(stream: OverlayStream, nowMs = Date.now()): string {
   const math = accrue(stream, nowMs)
-  return `${displaySats(math.earnedSats)} accrued · ${displaySats(stream.claimedSats)} claimed · ${remainingLine(stream)}`
+  return `${displayMoney(math.earnedSats, stream)} accrued · ${displayMoney(stream.claimedSats, stream)} claimed · ${remainingLine(stream)}`
 }
 
 export function padLocal(n: number): string {
