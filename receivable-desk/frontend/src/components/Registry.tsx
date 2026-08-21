@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { sampleReceivables } from '../../../protocol/samples'
 import { useOverlay } from '../context/OverlayContext'
-import { errorMessage, overlayCheckFailed, overlayHint } from '../lib/config'
-import { agePhrase, partyName, rowStatus, rowStatusLabel } from '../lib/display'
+import { errorMessage, overlayCheckFailed } from '../lib/config'
+import { agePhrase, rowStatus, rowStatusLabel, workRowTitle } from '../lib/display'
 import { fetchUsdPerBsv, formatInvoiceAmount } from '../lib/money'
 import { lookupReceivables, usesPublicAnytx, type OverlayReceivable } from '../lib/overlay'
 
@@ -18,6 +18,7 @@ export function Registry() {
   const [preview, setPreview] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [loaded, setLoaded] = useState(false)
   const [usdPerBsv, setUsdPerBsv] = useState<number | null>(null)
 
   const refresh = async (): Promise<void> => {
@@ -33,6 +34,7 @@ export function Registry() {
       setError(errorMessage(err))
     } finally {
       setBusy(false)
+      setLoaded(true)
     }
     if (usesPublicAnytx(url)) {
       setRows([])
@@ -54,6 +56,7 @@ export function Registry() {
   }, [])
 
   const overlayDown = online === false || Boolean(error)
+  const allEmpty = loaded && rows.length === 0 && !preview
 
   return (
     <section className="pane">
@@ -68,19 +71,28 @@ export function Registry() {
         <p className="status err">{error || overlayCheckFailed(probeError, url)}</p>
       )}
       {preview && (
-        <p className="hint">
-          Sample invoices — local index is not running.
-          {` ${overlayHint(url)}`}
-        </p>
+        <p className="hint">Sample invoices — local index is not running.</p>
       )}
-      <p className="hint">{rows.length} open invoice{rows.length === 1 ? '' : 's'}.</p>
+      {rows.length > 0 && (
+        <p className="hint">{rows.length} open invoice{rows.length === 1 ? '' : 's'}.</p>
+      )}
+      {allEmpty && (
+        <div className="empty">
+          <h2 className="empty-title">No Open Invoices</h2>
+          <p>
+            Create an invoice when someone owes the organization. It will show up
+            here until it’s paid.
+          </p>
+          <a className="btn primary" href="../invoices/">Create Invoice</a>
+        </div>
+      )}
       <div className="list">
         {rows.map((row) => {
           const badge = rowStatus(row.status, row.dueDate)
           return (
             <article key={`${row.txid}.${row.outputIndex}`} className="work-row registry-row">
               <div className="work-who">
-                <strong>{partyName(row.debtor) || row.invoiceId}</strong>
+                <strong>{workRowTitle(row.debtor, row.invoiceId)}</strong>
               </div>
               <span className="work-id">{row.invoiceId}</span>
               <span className={`work-age${badge === 'overdue' ? ' overdue' : ''}`}>
