@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { sampleReceivables } from '../../../protocol/samples'
 import { useOverlay } from '../context/OverlayContext'
-import { errorMessage, formatSats, overlayCheckFailed, overlayHint } from '../lib/config'
+import { errorMessage, overlayCheckFailed, overlayHint } from '../lib/config'
+import { agePhrase, partyName, rowStatus, rowStatusLabel } from '../lib/display'
+import { fetchUsdPerBsv, formatInvoiceAmount } from '../lib/money'
 import { lookupReceivables, usesPublicAnytx, type OverlayReceivable } from '../lib/overlay'
-import { partyName } from './InvoiceCard'
 
 function previewUnpaid(): OverlayReceivable[] {
   return sampleReceivables()
@@ -17,6 +18,7 @@ export function Registry() {
   const [preview, setPreview] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [usdPerBsv, setUsdPerBsv] = useState<number | null>(null)
 
   const refresh = async (): Promise<void> => {
     setBusy(true)
@@ -45,18 +47,23 @@ export function Registry() {
     void refresh()
   }, [url])
 
+  useEffect(() => {
+    void fetchUsdPerBsv()
+      .then(setUsdPerBsv)
+      .catch(() => setUsdPerBsv(null))
+  }, [])
+
   const overlayDown = online === false || Boolean(error)
 
   return (
-    <section className="panel">
+    <section className="pane">
       <h2>You owe us</h2>
-      <p>
-        Open invoices on this desk’s registry. No wallet needed to read the
-        list.
-      </p>
-      <button className="btn" disabled={busy} onClick={() => void refresh()}>
-        {busy ? 'Refreshing…' : 'Refresh'}
-      </button>
+      <p>Open invoices on this desk.</p>
+      <div className="toolbar">
+        <button className="btn quiet" disabled={busy} onClick={() => void refresh()}>
+          {busy ? 'Refreshing…' : 'Refresh'}
+        </button>
+      </div>
       {overlayDown && (
         <p className="status err">{error || overlayCheckFailed(probeError, url)}</p>
       )}
@@ -67,16 +74,24 @@ export function Registry() {
         </p>
       )}
       <p className="hint">{rows.length} open invoice{rows.length === 1 ? '' : 's'}.</p>
-      {rows.map((row) => (
-        <article key={`${row.txid}.${row.outputIndex}`} className="work-row">
-          <div>
-            <strong>{partyName(row.debtor)}</strong>
-            <span className="work-id">{row.invoiceId}</span>
-          </div>
-          <div className="work-amount">{formatSats(row.amountSats)}</div>
-          <div className="work-late">due {row.dueDate}</div>
-        </article>
-      ))}
+      <div className="list">
+        {rows.map((row) => {
+          const badge = rowStatus(row.status, row.dueDate)
+          return (
+            <article key={`${row.txid}.${row.outputIndex}`} className="work-row registry-row">
+              <div className="work-who">
+                <strong>{partyName(row.debtor) || row.invoiceId}</strong>
+              </div>
+              <span className="work-id">{row.invoiceId}</span>
+              <span className={`work-age${badge === 'overdue' ? ' overdue' : ''}`}>
+                {agePhrase(row.dueDate)}
+              </span>
+              <span className={`status-word ${badge}`}>{rowStatusLabel(badge)}</span>
+              <div className="work-amount">{formatInvoiceAmount(row.amountSats, usdPerBsv)}</div>
+            </article>
+          )
+        })}
+      </div>
     </section>
   )
 }

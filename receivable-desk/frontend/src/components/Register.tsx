@@ -134,51 +134,61 @@ export function Register() {
   }
 
   return (
-    <section className="panel">
+    <section className="pane">
       <h2>Record an invoice</h2>
       <p>
-        Same treasurer — the paper that proves an invoice you already issued.
-        Not a loan. Wallet is only needed to record, not to read the list.
+        The paper that proves an invoice you already issued. Wallet is only
+        needed to record.
       </p>
-      <label htmlFor="invoiceId">Invoice id</label>
-      <input id="invoiceId" value={invoiceId} onChange={(event) => setInvoiceId(event.target.value)} />
-      <label htmlFor="creditor">Who is owed</label>
-      <input
-        id="creditor"
-        value={creditorName}
-        onChange={(event) => setCreditorName(event.target.value)}
-        placeholder="Riverside Hall"
-        autoComplete="organization"
-      />
-      <label htmlFor="debtor">Who owes us</label>
-      <input
-        id="debtor"
-        value={debtorName}
-        onChange={(event) => setDebtorName(event.target.value)}
-        placeholder="Alex"
-        autoComplete="name"
-      />
-      {debtorMissing && (
-        <p className="hint">Record stays disabled until who owes us is filled in.</p>
-      )}
-      <div className="row">
-        <div className="grow">
-          <label htmlFor="amount">Amount</label>
+      <div className="fields">
+        <div className="field">
+          <label htmlFor="invoiceId">Invoice id</label>
+          <input id="invoiceId" value={invoiceId} onChange={(event) => setInvoiceId(event.target.value)} />
+        </div>
+        <div className="field">
+          <label htmlFor="creditor">Who is owed</label>
           <input
-            id="amount"
-            type="number"
-            min={1}
-            value={amountSats}
-            onChange={(event) => setAmountSats(Number(event.target.value))}
+            id="creditor"
+            value={creditorName}
+            onChange={(event) => setCreditorName(event.target.value)}
+            placeholder="Riverside Hall"
+            autoComplete="organization"
           />
         </div>
-        <div className="grow">
-          <label htmlFor="due">Due date</label>
-          <input id="due" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+        <div className="field">
+          <label htmlFor="debtor">Who owes us</label>
+          <input
+            id="debtor"
+            value={debtorName}
+            onChange={(event) => setDebtorName(event.target.value)}
+            placeholder="Alex"
+            autoComplete="name"
+          />
+          {debtorMissing && (
+            <p className="hint">Record stays disabled until who owes us is filled in.</p>
+          )}
+        </div>
+        <div className="row">
+          <div className="grow field">
+            <label htmlFor="amount">Amount</label>
+            <input
+              id="amount"
+              type="number"
+              min={1}
+              value={amountSats}
+              onChange={(event) => setAmountSats(Number(event.target.value))}
+            />
+          </div>
+          <div className="grow field">
+            <label htmlFor="due">Due date</label>
+            <input id="due" type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+          </div>
+        </div>
+        <div className="field">
+          <label htmlFor="memo">Memo</label>
+          <input id="memo" value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="What is owed" />
         </div>
       </div>
-      <label htmlFor="memo">Memo</label>
-      <input id="memo" value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="What is owed" />
       <details className="advanced">
         <summary>Advanced</summary>
         <p className="hint">
@@ -203,7 +213,7 @@ export function Register() {
           autoComplete="off"
         />
       </details>
-      <div className="row" style={{ marginTop: 16 }}>
+      <div className="actions">
         <button
           className="btn primary"
           disabled={registerDisabled}

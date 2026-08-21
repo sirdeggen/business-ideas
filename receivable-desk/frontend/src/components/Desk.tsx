@@ -15,7 +15,7 @@ import {
   errorMessage,
   overlayCheckFailed
 } from '../lib/config'
-import { partyName, workRowTitle } from '../lib/display'
+import { agePhrase, partyName, rowStatus, rowStatusLabel, workRowTitle } from '../lib/display'
 import { fetchUsdPerBsv, formatInvoiceAmount } from '../lib/money'
 import { type OverlayReceivable } from '../lib/overlay'
 import { loadChaseRows, saveChaseRows } from '../lib/persist'
@@ -27,11 +27,27 @@ function reminderText(row: OverlayReceivable, late: number, aging: AgingLabel, a
   return `Reminder: ${who} still owes ${owed} on ${row.invoiceId}, due ${row.dueDate} — ${lateBit}.`
 }
 
+function SkeletonRows() {
+  return (
+    <div className="list" aria-hidden="true">
+      {[0, 1, 2].map((key) => (
+        <div key={key} className="work-row">
+          <span className="skel skel-who" />
+          <span className="skel skel-meta" />
+          <span className="skel skel-meta" />
+          <span className="skel skel-meta" />
+          <span className="skel skel-amt" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function Desk() {
   const { wallet, connecting, error: walletError, connect } = useWallet()
   const { url, online, probeError } = useOverlay()
   const [held, setHeld] = useState<HeldReceivable[]>([])
-  const [rows, setRows] = useState<OverlayReceivable[]>([])
+  const [rows, setRows] = useState<OverlayReceivable[]>(() => loadChaseRows())
   const [preview, setPreview] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
@@ -120,23 +136,21 @@ export function Desk() {
     }
   }
 
+  const waiting = !loaded && rows.length === 0 && !preview
   const allEmpty = loaded && rows.length === 0 && !preview
 
   return (
-    <section className="panel">
-      <h2>Who do we chase today?</h2>
-      <p>
-        Same treasurer, after invoices exist. This list is the desk’s own
-        registry — not a second product.
-      </p>
+    <section className="pane">
       {preview && (
         <p className="hint">Showing sample invoices because the local index is not running.</p>
       )}
-      <button className="btn" onClick={() => void refresh()}>Refresh list</button>
+      <div className="toolbar">
+        <button className="btn quiet" onClick={() => void refresh()}>Refresh list</button>
+      </div>
       {status && <p className="status ok">{status}</p>}
       {error && <p className="status err">{error}</p>}
       {error && (
-        <button className="btn" style={{ marginTop: 8 }} onClick={() => void refresh()}>Retry</button>
+        <button className="btn quiet" style={{ marginTop: 8 }} onClick={() => void refresh()}>Retry</button>
       )}
       {walletError && <p className="status err">{walletError}</p>}
       {walletError && (
@@ -151,52 +165,68 @@ export function Desk() {
         <p className="hint">{CHROME_ALLOW_HINT}</p>
       )}
 
+      {waiting && <SkeletonRows />}
+
       {allEmpty && (
-        <p className="hint">
-          No open invoices yet — <a href="../invoices/">create one</a>
-        </p>
+        <div className="empty">
+          <h2 className="empty-title">No Open Invoices</h2>
+          <p>
+            Create an invoice when someone owes the organization. It will show up
+            here until it’s paid.
+          </p>
+          <a className="btn primary" href="../invoices/">Create Invoice</a>
+        </div>
       )}
 
-      {(preview || rows.length > 0) && AGING_LABELS.map((label) => (
-        <div key={label} className={`aging-group aging-${label.replace(/\s+/g, '-')}`}>
-          <h3 className="subhead">{label}</h3>
-          {grouped[label].length === 0 && <p className="hint">None.</p>}
-          {grouped[label].map((row) => {
-            const settleReady = canSettle && !!wallet && held.some(
-              (entry) => entry.item.invoiceId === row.invoiceId && entry.item.status !== 'paid'
-            )
-            const markNeedsConnect = !wallet && canSettle
-            return (
-              <article key={`${row.txid}.${row.outputIndex}`} className="work-row chase-row">
-                <div>
-                  <strong>{workRowTitle(row.debtor, row.invoiceId)}</strong>
-                  <span className="work-id">{row.invoiceId}</span>
-                </div>
-                <div className="work-amount">{amountLabel(row)}</div>
-                <div className="row work-actions">
-                  <button className="btn" onClick={() => void sendReminder(row)}>
-                    {copied === row.invoiceId ? 'Copied' : 'Send reminder'}
-                  </button>
-                  <button
-                    className="btn primary"
-                    disabled={(!settleReady && !markNeedsConnect) || busy !== null || connecting}
-                    title={
-                      markNeedsConnect
-                        ? 'Connect only when you mark paid'
-                        : settleReady
-                          ? 'Mark this invoice paid'
-                          : 'Mark paid needs the wallet that recorded this invoice'
-                    }
-                    onClick={() => void markPaid(row)}
-                  >
-                    {busy === row.invoiceId ? 'Marking…' : connecting ? 'Connecting…' : 'Mark paid'}
-                  </button>
-                </div>
-              </article>
-            )
-          })}
-        </div>
-      ))}
+      {(preview || rows.length > 0) && AGING_LABELS.map((label) => {
+        if (grouped[label].length === 0) return null
+        return (
+          <div key={label} className={`aging-group aging-${label.replace(/\s+/g, '-')}`}>
+            <h3 className="aging-label">{label}</h3>
+            <div className="list">
+              {grouped[label].map((row) => {
+                const settleReady = canSettle && !!wallet && held.some(
+                  (entry) => entry.item.invoiceId === row.invoiceId && entry.item.status !== 'paid'
+                )
+                const markNeedsConnect = !wallet && canSettle
+                const badge = rowStatus(row.status, row.dueDate)
+                return (
+                  <article key={`${row.txid}.${row.outputIndex}`} className="work-row chase-row">
+                    <div className="work-who">
+                      <strong>{workRowTitle(row.debtor, row.invoiceId)}</strong>
+                    </div>
+                    <span className="work-id">{row.invoiceId}</span>
+                    <span className={`work-age${badge === 'overdue' ? ' overdue' : ''}`}>
+                      {agePhrase(row.dueDate)}
+                    </span>
+                    <span className={`status-word ${badge}`}>{rowStatusLabel(badge)}</span>
+                    <div className="work-amount">{amountLabel(row)}</div>
+                    <div className="work-actions">
+                      <button className="row-action" onClick={() => void sendReminder(row)}>
+                        {copied === row.invoiceId ? 'Copied' : 'Send reminder'}
+                      </button>
+                      <button
+                        className="row-action mark"
+                        disabled={(!settleReady && !markNeedsConnect) || busy !== null || connecting}
+                        title={
+                          markNeedsConnect
+                            ? 'Connect only when you mark paid'
+                            : settleReady
+                              ? 'Mark this invoice paid'
+                              : 'Mark paid needs the wallet that recorded this invoice'
+                        }
+                        onClick={() => void markPaid(row)}
+                      >
+                        {busy === row.invoiceId ? 'Marking…' : connecting ? 'Connecting…' : 'Mark paid'}
+                      </button>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
     </section>
   )
 }

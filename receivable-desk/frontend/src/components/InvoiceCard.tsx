@@ -19,7 +19,7 @@ export function InvoiceCard({
     <article className={`invoice status-${item.status}`}>
       <div className="invoice-head">
         <h3>{item.invoiceId}</h3>
-        <span className={`pill ${unpaid ? 'open' : 'paid'}`}>{unpaid ? aging : 'paid'}</span>
+        <span className={`status-word ${unpaid ? 'open' : 'paid'}`}>{unpaid ? aging : 'paid'}</span>
       </div>
       <dl className="meta">
         <div>
