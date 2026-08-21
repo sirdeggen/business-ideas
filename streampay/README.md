@@ -31,7 +31,7 @@ Rate is `amountSats / durationSec`. Freeze stops the clock. Already-claimable st
 
 ## Create
 
-1. **Open a stream.** Who is paying, who is working, what it’s for, how much in **dollars** (sats as helper; default pot **100,000 sats over 14 days**), days, start (a past start is allowed so day 3 is demoable). Contractor identity stays on the form so they can unlock the pot; it does not lead.
+1. **Open a stream.** What it’s for, contractor name, org, duration, amount (default **100,000 sats over 14 days**), start. Contractor identity lives under Advanced (required to Open; do not lead with the key). Settlement is sats. “About $X” appears only when that dollar figure is meaningful.
 2. Approve in the wallet. The treasurer **funds** the stream: the PushDrop output is those sats, not a $400 spot conversion and not 1 sat. If the wallet cannot cover that, you get a human “not enough to fund this stream.”
 3. Copy the public URL (`/streampay/?s=<streamId>`). An auditor can open it with no wallet and see rate, accrued, claimed, and Open / Frozen / Finished.
 

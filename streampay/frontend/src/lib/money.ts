@@ -30,33 +30,6 @@ export async function fetchUsdPerBsv(): Promise<number> {
   throw new Error('Could not fetch a dollar rate')
 }
 
-export function parseUsdAmount(raw: string): number {
-  const trimmed = raw.trim().replace(/^[\$]/, '').replace(/,/g, '')
-  const amount = Number(trimmed)
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new Error('Enter an amount in dollars')
-  }
-  if (amount > 1_000_000) throw new Error('Amount is too large')
-  return Math.round(amount * 100) / 100
-}
-
-export function tryParseUsdAmount(raw: string): number | null {
-  try {
-    return parseUsdAmount(raw)
-  } catch {
-    return null
-  }
-}
-
-export function usdToSats(usd: number, usdPerBsv: number): number {
-  if (!(usdPerBsv > 0)) throw new Error('Could not fetch a dollar rate')
-  const sats = Math.round((usd / usdPerBsv) * SATS_PER_BSV)
-  if (!Number.isInteger(sats) || sats < 1) {
-    throw new Error('Amount is too small at the current rate')
-  }
-  return sats
-}
-
 export function parseSatsAmount(raw: string): number {
   const trimmed = raw.trim().replace(/,/g, '').replace(/\s*sats?$/i, '')
   if (!/^\d+$/.test(trimmed)) {
@@ -94,16 +67,6 @@ export function formatMeaningfulUsd(amount: number): string {
 
 export function formatUsdInput(amount: number): string {
   return amount.toFixed(2)
-}
-
-/** Sub-cent stream rates stay dollars, not a sats lead. */
-export function formatStreamUsd(amount: number): string {
-  if (!Number.isFinite(amount) || amount <= 0) return ''
-  if (amount >= 0.01) return formatUsd(amount)
-  return `$${amount.toLocaleString('en-US', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4
-  })}`
 }
 
 export function satsToUsdInput(sats: number, usdPerBsv: number): string {

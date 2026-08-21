@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { OVERLAY_STORAGE_KEY, resolveOverlayUrl } from '../lib/config'
 import { pingOverlay } from '../lib/overlay'
 
@@ -7,6 +7,7 @@ interface OverlayState {
   setUrl: (url: string) => void
   online: boolean | null
   refresh: () => Promise<void>
+  markReachable: () => void
 }
 
 const OverlayContext = createContext<OverlayState | undefined>(undefined)
@@ -24,12 +25,16 @@ export function OverlayProvider({ children }: { children: ReactNode }) {
     setOnline(await pingOverlay(url))
   }
 
+  const markReachable = useCallback((): void => {
+    setOnline(true)
+  }, [])
+
   useEffect(() => {
     void refresh()
   }, [url])
 
   return (
-    <OverlayContext.Provider value={{ url, setUrl, online, refresh }}>
+    <OverlayContext.Provider value={{ url, setUrl, online, refresh, markReachable }}>
       {children}
     </OverlayContext.Provider>
   )

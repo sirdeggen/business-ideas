@@ -22,10 +22,10 @@ import {
 import {
   CLOCK_STOPPED,
   FREEZE_HINT,
-  GHOST_AMOUNT_USD,
   GHOST_MEMO,
   RECEIPT_CARD,
   STREAM_CARD,
+  accruedLine,
   claimLabel,
   dailyRate,
   datetimeLocalToIso,
@@ -35,19 +35,11 @@ import {
   displaySats,
   formatWhen,
   humanReceiptId,
-  remainingLine,
-  statusLabel
+  showStatusStamp,
+  statusLabel,
+  streamHeading
 } from './lib/copy'
-import {
-  fetchUsdPerBsv,
-  formatSats,
-  formatUsd,
-  formatUsdInput,
-  parseUsdAmount,
-  satsToUsdInput,
-  tryParseUsdAmount,
-  usdToSats
-} from './lib/money'
+import { fetchUsdPerBsv, parseSatsAmount, satsToDisplayUsd, satsToUsdInput } from './lib/money'
 import { lookupStreams, type OverlayStream } from './lib/overlay'
 import { goHome, goToStream, parseStreamLocation, streamPublicUrl } from './lib/route'
 import { streamPageState } from './lib/stream-load'
@@ -91,24 +83,25 @@ function Page({
   children
 }: {
   variant: 'create' | 'stream'
-  advanced?: boolean
+  advanced?: ReactNode
   children: ReactNode
 }) {
   return (
     <div className={`app ${variant}`}>
       {children}
-      {advanced ? <Advanced /> : null}
+      {advanced}
     </div>
   )
 }
 
-function Advanced() {
+function Advanced({ children }: { children?: ReactNode }) {
   const { url, setUrl, online } = useOverlay()
   const { identityKey } = useWallet()
 
   return (
     <details className="advanced">
       <summary>Advanced</summary>
+      {children}
       <label htmlFor="overlay-url">Overlay URL</label>
       <input
         id="overlay-url"
@@ -132,42 +125,21 @@ function Advanced() {
 
 function GhostCard() {
   const [startIso] = useState(() => new Date(Date.now() - 3 * 86_400_000).toISOString())
-  const [nowMs, setNowMs] = useState(Date.now)
-
-  useEffect(() => {
-    const id = window.setInterval(() => setNowMs(Date.now()), 1000)
-    return () => window.clearInterval(id)
-  }, [])
-
   const durationSec = DEFAULT_DURATION_DAYS * 86_400
-  const ghost = {
+  const elapsed = dayPhrase({
     amountSats: DEFAULT_AMOUNT_SATS,
-    amountUsd: GHOST_AMOUNT_USD,
     startIso,
     durationSec,
     frozen: false,
     claimedSats: 0,
     freezeIso: '',
-    rateSatsPerSec: rateSatsPerSec(DEFAULT_AMOUNT_SATS, durationSec),
-    memo: GHOST_MEMO
-  }
-  const math = accrue(ghost, nowMs)
-  const running = displayMoney(math.earnedSats, ghost)
-  const rate = dailyRate(ghost)
-  const elapsed = dayPhrase(ghost, nowMs)
+    rateSatsPerSec: rateSatsPerSec(DEFAULT_AMOUNT_SATS, durationSec)
+  })
 
   return (
     <div className="ghost" aria-hidden="true">
-      <div className="ghost-head">
-        <span className="stamp open">Open</span>
-        <strong className="money">{running}</strong>
-      </div>
       <p className="memo">{GHOST_MEMO}</p>
-      <p className="meta">
-        {rate ? `${rate} / day` : ''}
-        {rate ? ' · ' : ''}
-        {elapsed}
-      </p>
+      <p className="meta">{elapsed}</p>
     </div>
   )
 }
@@ -180,7 +152,7 @@ function Home({
   notice?: string | null
 }) {
   return (
-    <Page variant="create" advanced>
+    <Page variant="create" advanced={<Advanced />}>
       <article className="sheet">
         <header className="sheet-head">
           <h1>StreamPay</h1>
@@ -207,12 +179,10 @@ function Create({
   const [contractorName, setContractorName] = useState('')
   const [contractorIdentity, setContractorIdentity] = useState('')
   const [memo, setMemo] = useState(GHOST_MEMO)
-  const [amount, setAmount] = useState('')
-  const [useDefaultSats, setUseDefaultSats] = useState(true)
+  const [amount, setAmount] = useState(String(DEFAULT_AMOUNT_SATS))
   const [days, setDays] = useState(String(DEFAULT_DURATION_DAYS))
   const [startLocal, setStartLocal] = useState(defaultStartLocal)
   const [usdPerBsv, setUsdPerBsv] = useState<number | null>(null)
-  const [rateError, setRateError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showInstall, setShowInstall] = useState(false)
@@ -223,40 +193,24 @@ function Create({
       .then((rate) => {
         if (cancelled) return
         setUsdPerBsv(rate)
-        setRateError(null)
-        setAmount((current) => current || satsToUsdInput(DEFAULT_AMOUNT_SATS, rate))
       })
-      .catch((err: unknown) => {
+      .catch(() => {
         if (cancelled) return
         setUsdPerBsv(null)
-        setRateError(errorMessage(err))
       })
     return () => { cancelled = true }
   }, [])
-
-  const parsedUsd = tryParseUsdAmount(amount)
-  const amountDisplay = parsedUsd != null ? formatUsd(parsedUsd) : ''
-
-  const helperSats = ((): number | null => {
-    if (useDefaultSats) return DEFAULT_AMOUNT_SATS
-    if (parsedUsd == null || !usdPerBsv) return null
-    try {
-      return usdToSats(parsedUsd, usdPerBsv)
-    } catch {
-      return null
-    }
-  })()
 
   const send = async (): Promise<void> => {
     setError(null)
     setShowInstall(false)
     if (!orgName.trim() || !contractorName.trim() || !memo.trim()) {
-      setError('Fill in who is paying, who is working, and what it’s for.')
+      setError('Fill in what it’s for, contractor, and org.')
       return
     }
     const identity = contractorIdentity.trim()
     if (!isIdentityKey(identity)) {
-      setError('Contractor identity is needed to open a funded stream.')
+      setError('Contractor identity is needed to open a funded stream. Open Advanced.')
       return
     }
     const durationDays = Number(days)
@@ -276,47 +230,17 @@ function Create({
       return
     }
     let sats: number
-    let displayUsd = ''
-    const defaultUsd = usdPerBsv ? satsToUsdInput(DEFAULT_AMOUNT_SATS, usdPerBsv) : ''
-    const keepDefaultPot = useDefaultSats || (
-      Boolean(defaultUsd) && parsedUsd != null && formatUsdInput(parsedUsd) === defaultUsd
-    )
-    if (keepDefaultPot) {
-      sats = DEFAULT_AMOUNT_SATS
-      displayUsd = defaultUsd || (parsedUsd != null ? formatUsdInput(parsedUsd) : '')
-    } else {
-      let usd: number
-      try {
-        usd = parseUsdAmount(amount)
-      } catch (err) {
-        setError(errorMessage(err))
-        return
-      }
-      let rate = usdPerBsv
-      if (!rate) {
-        try {
-          rate = await fetchUsdPerBsv()
-          setUsdPerBsv(rate)
-          setRateError(null)
-        } catch (err) {
-          const message = errorMessage(err)
-          setRateError(message)
-          setError(`Could not fetch a dollar rate. ${message}`)
-          return
-        }
-      }
-      try {
-        sats = usdToSats(usd, rate)
-      } catch (err) {
-        setError(errorMessage(err))
-        return
-      }
-      displayUsd = formatUsdInput(usd)
+    try {
+      sats = parseSatsAmount(amount)
+    } catch (err) {
+      setError(errorMessage(err))
+      return
     }
     if (sats > FUNDABLE_MAX_SATS) {
       setError('That’s more than this wallet can fund. Default is 100,000 sats over 14 days.')
       return
     }
+    const displayUsd = usdPerBsv ? satsToUsdInput(sats, usdPerBsv) : ''
     setBusy(true)
     let client
     try {
@@ -347,39 +271,40 @@ function Create({
     }
   }
 
+  let usdPreview = ''
+  try {
+    usdPreview = satsToDisplayUsd(parseSatsAmount(amount), usdPerBsv)
+  } catch {
+    usdPreview = ''
+  }
+
   return (
-    <Page variant="create" advanced>
+    <Page
+      variant="create"
+      advanced={(
+        <Advanced>
+          <label htmlFor="identity">Contractor identity</label>
+          <input
+            id="identity"
+            value={contractorIdentity}
+            onChange={(event) => setContractorIdentity(event.target.value)}
+            placeholder="Their compressed public key"
+            autoComplete="off"
+          />
+          <p className="helper">Needed so they can claim accrued pay from the stream you fund.</p>
+          <p className="helper">Defaults to three days ago so a mid-stream claim is demoable without waiting.</p>
+          <p className="helper">Settlement is sats. Dollars are display only.</p>
+        </Advanced>
+      )}
+    >
       <article className="sheet">
         <header className="sheet-head">
           <button className="text-link" onClick={onBack}>StreamPay</button>
-          <div className="title-row">
-            <h1>Open a stream</h1>
-          </div>
+          <h1>Open a stream</h1>
           <p className="lede">You fund the stream. They claim what’s accrued from it. You can freeze the clock.</p>
-          {amountDisplay && <p className="amount-run">{amountDisplay}</p>}
         </header>
 
         <div className="fields">
-          <div className="field">
-            <label htmlFor="org">Who is paying</label>
-            <input
-              id="org"
-              value={orgName}
-              onChange={(event) => setOrgName(event.target.value)}
-              placeholder="Harbor Legal Aid"
-              maxLength={80}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="contractor">Who is working</label>
-            <input
-              id="contractor"
-              value={contractorName}
-              onChange={(event) => setContractorName(event.target.value)}
-              placeholder="Jordan Lee"
-              maxLength={80}
-            />
-          </div>
           <div className="field">
             <label htmlFor="memo">What it’s for</label>
             <input
@@ -390,33 +315,48 @@ function Create({
               maxLength={200}
             />
           </div>
+          <div className="field">
+            <label htmlFor="contractor">Contractor name</label>
+            <input
+              id="contractor"
+              value={contractorName}
+              onChange={(event) => setContractorName(event.target.value)}
+              placeholder="Jordan Lee"
+              maxLength={80}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="org">Org</label>
+            <input
+              id="org"
+              value={orgName}
+              onChange={(event) => setOrgName(event.target.value)}
+              placeholder="Harbor Legal Aid"
+              maxLength={80}
+            />
+          </div>
           <div className="grid">
             <div className="field">
-              <label htmlFor="amount">How much</label>
-              <div className="dollar">
-                <span>$</span>
-                <input
-                  id="amount"
-                  inputMode="decimal"
-                  value={amount}
-                  onChange={(event) => {
-                    setUseDefaultSats(false)
-                    setAmount(event.target.value)
-                  }}
-                />
-              </div>
-              {helperSats != null && (
-                <p className="helper">{formatSats(helperSats)}</p>
-              )}
-            </div>
-            <div className="field">
-              <label htmlFor="days">Days</label>
+              <label htmlFor="days">Duration</label>
               <input
                 id="days"
                 inputMode="numeric"
                 value={days}
                 onChange={(event) => setDays(event.target.value)}
               />
+            </div>
+            <div className="field">
+              <label htmlFor="amount">Amount</label>
+              <div className="dollar">
+                <input
+                  id="amount"
+                  inputMode="numeric"
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value)}
+                />
+                <span>sats</span>
+              </div>
+              {usdPreview && <p className="helper">About {usdPreview}</p>}
             </div>
           </div>
           <div className="field">
@@ -427,23 +367,8 @@ function Create({
               value={startLocal}
               onChange={(event) => setStartLocal(event.target.value)}
             />
-            <p className="helper">Defaults to three days ago so a mid-stream claim is demoable without waiting. Settlement is sats. Dollars are display only.</p>
-          </div>
-          <div className="field">
-            <label htmlFor="identity">Contractor identity</label>
-            <input
-              id="identity"
-              value={contractorIdentity}
-              onChange={(event) => setContractorIdentity(event.target.value)}
-              placeholder="Needed so they can unlock the pot"
-              autoComplete="off"
-            />
-            <p className="helper">The worker uses this to claim accrued pay from the stream you fund.</p>
           </div>
         </div>
-        {rateError && (
-          <p className="helper">Dollar rate unavailable. You can still open the default pot — the stream is funded in sats.</p>
-        )}
         <div className="actions">
           <button
             className="btn primary"
@@ -473,7 +398,7 @@ function StreamPage({
   createTxid: string | null
   onHome: () => void
 }) {
-  const { url } = useOverlay()
+  const { url, markReachable } = useOverlay()
   const { connect, connecting } = useWallet()
   const [stream, setStream] = useState<OverlayStream | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -512,6 +437,7 @@ function StreamPage({
           txid: createTxid || undefined
         })
         if (cancelled) return
+        markReachable()
         const row = rows[0] ?? null
         setStream(row)
         if (row) setAsOfMs((prev) => prev || Date.now())
@@ -531,7 +457,7 @@ function StreamPage({
       window.clearInterval(timer)
       document.removeEventListener('visibilitychange', onVis)
     }
-  }, [url, streamId, createTxid, retryTick])
+  }, [url, streamId, createTxid, retryTick, markReachable])
 
   const retryLookup = (): void => {
     setError(null)
@@ -565,6 +491,7 @@ function StreamPage({
         streamId,
         txid: stream.txid || createTxid || undefined
       })
+      markReachable()
       setStream(rows[0] ?? stream)
       setAsOfMs(Date.now())
     } catch (err) {
@@ -594,7 +521,7 @@ function StreamPage({
   const showReceipt = Boolean(stream && (justClaimed || stream.lastClaimSats > 0))
   const panel = streamPageState(stream, error)
   const rate = stream ? dailyRate(stream) : ''
-  const clockStopped = status === 'frozen' || status === 'finished'
+  const clockStopped = Boolean(stream && (status === 'frozen' || status === 'finished'))
 
   return (
     <Page variant="stream">
@@ -602,12 +529,11 @@ function StreamPage({
         <header className="sheet-head">
           <button className="text-link" onClick={onHome}>StreamPay</button>
           <div className="title-row">
-            <h1>{stream?.org || 'Stream'}</h1>
-            <span className={`stamp ${status} fat`}>{statusLabel(status)}</span>
+            <h1>{streamHeading(stream)}</h1>
+            {showStatusStamp(stream) && (
+              <span className={`stamp ${status} fat`}>{statusLabel(status)}</span>
+            )}
           </div>
-          {stream && math && (
-            <p className="amount-xl money">{displayMoney(math.earnedSats, stream)}</p>
-          )}
         </header>
 
         {panel.loading && (
@@ -628,13 +554,11 @@ function StreamPage({
             <h2 className="block-title">{STREAM_CARD}</h2>
             <p className="memo">{stream.memo || 'Pay as they work'}</p>
             <p className="meta">
-              {rate ? `${rate} / day` : ''}
-              {rate ? ' · ' : ''}
               {dayPhrase(stream, viewedAt)}
+              {rate ? ` · ${rate} / day` : ''}
             </p>
-            <p className="meta">Claimed {displayMoney(stream.claimedSats, stream)}</p>
-            <p className="remaining">{remainingLine(stream)}</p>
-            <p className="helper">{displaySats(math.earnedSats)}</p>
+            <p className="lede">{accruedLine(stream, viewedAt)}</p>
+            <p className="meta">Claimable {displayMoney(math.claimableSats, stream)}</p>
             <p className="helper">Anyone with this link can see the rate, what’s accrued, and whether it’s frozen. No wallet needed to look.</p>
             {clockStopped && <p className="helper">{CLOCK_STOPPED}</p>}
             {(stream.satoshis ?? 1) < math.claimableSats && (

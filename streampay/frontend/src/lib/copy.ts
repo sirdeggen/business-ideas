@@ -1,12 +1,10 @@
 import { accrue, satsToUsd, type StreamStatus } from '../../../protocol/stream'
-import { formatSats, formatStreamUsd, formatUsd } from './money'
+import { formatMeaningfulUsd, formatSats } from './money'
 import type { OverlayStream } from './overlay'
 
 export const STREAM_CARD = 'Stream'
 export const RECEIPT_CARD = 'Receipt'
 
-/** Documented display of the default 100,000 sat pot. Settlement is still sats. */
-export const GHOST_AMOUNT_USD = '0.07'
 export const GHOST_MEMO = 'Legal research week'
 
 export const FREEZE_HINT =
@@ -25,17 +23,19 @@ export function remainingPotSats(stream: OverlayStream): number {
 
 function hasUsdSnapshot(stream: Pick<OverlayStream, 'amountSats' | 'amountUsd'>): boolean {
   const usd = Number(stream.amountUsd)
-  return stream.amountSats > 0 && Number.isFinite(usd) && usd >= 0 && String(stream.amountUsd).trim() !== ''
+  return stream.amountSats > 0 && Number.isFinite(usd) && usd > 0 && String(stream.amountUsd).trim() !== ''
 }
 
+/** Dollars first only when formatMeaningfulUsd is non-empty. Otherwise sats. */
 export function displayMoney(
   sats: number,
   stream: Pick<OverlayStream, 'amountSats' | 'amountUsd'>
 ): string {
-  if (!hasUsdSnapshot(stream)) return formatSats(sats)
-  const usd = satsToUsd(sats, stream.amountSats, stream.amountUsd)
-  if (sats === 0) return formatUsd(0)
-  return formatStreamUsd(usd) || formatUsd(0)
+  if (hasUsdSnapshot(stream)) {
+    const usd = formatMeaningfulUsd(satsToUsd(sats, stream.amountSats, stream.amountUsd))
+    if (usd) return usd
+  }
+  return formatSats(sats)
 }
 
 export function remainingLine(stream: OverlayStream): string {
@@ -76,8 +76,20 @@ export function statusLabel(status: StreamStatus): string {
   return 'Open'
 }
 
+export function streamHeading(stream: { org?: string } | null): string {
+  if (!stream) return 'StreamPay'
+  return stream.org?.trim() || 'StreamPay'
+}
+
+export function showStatusStamp(stream: unknown): stream is OverlayStream {
+  return stream != null
+}
+
 export function displayAmount(stream: OverlayStream): string {
-  if (hasUsdSnapshot(stream)) return formatUsd(stream.amountUsd)
+  if (hasUsdSnapshot(stream)) {
+    const usd = formatMeaningfulUsd(Number(stream.amountUsd))
+    if (usd) return usd
+  }
   return formatSats(stream.amountSats)
 }
 
@@ -89,8 +101,8 @@ export function dailyRate(stream: Pick<OverlayStream, 'amountSats' | 'amountUsd'
   const days = stream.durationSec / 86_400
   if (!(days > 0)) return ''
   if (hasUsdSnapshot(stream)) {
-    const usd = Number(stream.amountUsd) / days
-    return formatStreamUsd(usd)
+    const usd = formatMeaningfulUsd(Number(stream.amountUsd) / days)
+    if (usd) return usd
   }
   const sats = Math.floor(stream.amountSats / days)
   if (!(sats > 0)) return ''

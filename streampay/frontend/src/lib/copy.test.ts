@@ -7,12 +7,13 @@ import {
   STREAM_CARD,
   accruedLine,
   claimLabel,
-  dailyRate,
   displayAmount,
   displayMoney,
   displaySats,
   remainingLine,
-  remainingPotSats
+  remainingPotSats,
+  showStatusStamp,
+  streamHeading
 } from './copy'
 import type { OverlayStream } from './overlay'
 
@@ -33,7 +34,7 @@ function stream(partial: Partial<OverlayStream> = {}): OverlayStream {
     frozen: false,
     claimedSats: 0,
     freezeIso: '',
-    amountUsd: partial.amountUsd ?? '0.07',
+    amountUsd: partial.amountUsd ?? '',
     memo: 'Legal research week',
     updatedIso: '2026-08-11T12:00:00.000Z',
     lastClaimSats: 0,
@@ -45,34 +46,31 @@ function stream(partial: Partial<OverlayStream> = {}): OverlayStream {
   }
 }
 
-describe('stream copy is dollars on the sheet', () => {
-  it('leads with recorded dollars; sats stay a helper', () => {
-    expect(displayAmount(stream())).toBe('$0.07')
+describe('stream copy is sats unless dollars are meaningful', () => {
+  it('forbids paired pennies on the default pot; sats stay the settlement', () => {
+    expect(displayAmount(stream())).toBe('100,000 sats')
     expect(displayAmount(stream({ amountUsd: '0.07' }))).toBe('$0.07')
-    expect(displayAmount(stream())).not.toContain('sats')
-    expect(displayMoney(21_428, stream())).toBe('$0.01')
+    expect(displayMoney(21_428, stream({ amountUsd: '0.07' }))).toBe('21,428 sats')
+    expect(displayMoney(21_428, stream({ amountUsd: '0.07' }))).not.toMatch(/\$0\.0[01]/)
     expect(displaySats(21_428)).toBe('21,428 sats')
     expect(displaySats(14)).not.toMatch(/\$0\.0[01]/)
-    expect(claimLabel(21_428, stream())).toBe('Claim $0.01')
-    expect(claimLabel(21_428, stream())).not.toContain('sats')
-    expect(claimLabel(0, stream())).toBe('Nothing to claim yet')
-    expect(dailyRate(stream())).toBe('$0.005')
+    expect(claimLabel(14, stream({ amountUsd: '0.07' }))).toBe('Claim 14 sats')
+    expect(claimLabel(14, stream({ amountUsd: '0.07' }))).not.toMatch(/\$0\.0[01]/)
+    expect(claimLabel(21_428, stream({ amountUsd: '0.07' }))).toBe('Claim 21,428 sats')
+    expect(claimLabel(0)).toBe('Nothing to claim yet')
   })
 
-  it('does not invent a spot dollar conversion when no snapshot exists', () => {
-    const raw = stream({ amountUsd: '' })
-    expect(displayAmount(raw)).toBe('100,000 sats')
-    expect(displayMoney(21_428, raw)).toBe('21,428 sats')
-    expect(displayMoney(21_428, raw)).not.toContain('$86')
-    expect(claimLabel(21_428, raw)).toBe('Claim 21,428 sats')
+  it('shows claimable in sats, not a spot dollar conversion of the notional', () => {
+    expect(displaySats(21_428)).toBe('21,428 sats')
+    expect(displaySats(21_428)).not.toContain('$86')
+    expect(displayMoney(21_428, stream({ amountUsd: '0.07' }))).not.toContain('$86')
   })
 
   it('writes the remaining pot after a claim (QA 78,559)', () => {
     const afterClaim = stream({ satoshis: 100_000, claimedSats: 21_441 })
     expect(remainingPotSats(afterClaim)).toBe(78_559)
-    expect(remainingLine(afterClaim)).toBe('$0.05 remaining')
-    expect(accruedLine(afterClaim, Date.parse(afterClaim.startIso) + 3 * 86_400_000)).toContain('$0.05 remaining')
-    expect(remainingLine(afterClaim)).not.toContain('sats')
+    expect(remainingLine(afterClaim)).toBe('78,559 sats remaining')
+    expect(accruedLine(afterClaim, Date.parse(afterClaim.startIso) + 3 * 86_400_000)).toContain('78,559 sats remaining')
   })
 
   it('says who can freeze and what freeze does', () => {
@@ -80,11 +78,16 @@ describe('stream copy is dollars on the sheet', () => {
     expect(FREEZE_HINT).toMatch(/stops new pay from accruing/i)
     expect(FREEZE_HINT).toMatch(/already-accrued can still be claimed/i)
     expect(CLOCK_STOPPED).toMatch(/clock is stopped/i)
-    expect(CLOCK_STOPPED).toMatch(/already-accrued can still be claimed/i)
   })
 
   it('names the OPEN stream card and the CLAIMED receipt card', () => {
     expect(STREAM_CARD).toBe('Stream')
     expect(RECEIPT_CARD).toBe('Receipt')
+  })
+
+  it('never titles a missing stream Stream or stamps OPEN', () => {
+    expect(streamHeading(null)).toBe('StreamPay')
+    expect(showStatusStamp(null)).toBe(false)
+    expect(streamHeading(stream())).toBe('Harbor Legal Aid')
   })
 })
