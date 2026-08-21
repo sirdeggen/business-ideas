@@ -34,9 +34,11 @@ Tickets you can send, show on a phone, and spend at the door so they can’t be 
 - Pages UI: https://sirdeggen.github.io/business-ideas/tickets/
 - How to run: [event-tickets/README.md](./event-tickets/README.md)
 
-## 402 publisher
+## 402 Press
 
 Readers pay a little. Crawlers pay more.
+
+- How to run: [402-publisher/README.md](./402-publisher/README.md)
 
 ## 402 MCP
 
