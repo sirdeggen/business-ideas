@@ -40,6 +40,14 @@ export function parseUsdAmount(raw: string): number {
   return Math.round(amount * 100) / 100
 }
 
+export function tryParseUsdAmount(raw: string): number | null {
+  try {
+    return parseUsdAmount(raw)
+  } catch {
+    return null
+  }
+}
+
 export function usdToSats(usd: number, usdPerBsv: number): number {
   if (!(usdPerBsv > 0)) throw new Error('Could not fetch a dollar rate')
   const sats = Math.round((usd / usdPerBsv) * SATS_PER_BSV)
