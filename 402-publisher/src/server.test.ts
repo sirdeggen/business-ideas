@@ -53,11 +53,12 @@ describe('402 Press routes', () => {
     assert.match(res.headers.get('content-type') ?? '', /text\/html/)
     const html = await res.text()
     assert.ok(html.length > 0)
-    assert.match(html, /Payment required/)
-    assert.match(html, /100 sats/)
+    assert.match(html, /This essay is 100 sats/)
     assert.match(html, /BSV Browser/)
     assert.match(html, /402-extension/)
     assert.match(html, /BSV Desktop/)
+    assert.doesNotMatch(html, /x-bsv-sats/)
+    assert.doesNotMatch(html, /x-bsv-server/)
   })
 
   it('returns a distinct crawler 402 price with a JSON body', async () => {
