@@ -36,10 +36,18 @@ a { color: var(--ink); }
 }
 
 .lede {
-  margin: 0 0 40px;
+  margin: 0 0 10px;
   max-width: 44ch;
   font-size: 15px;
   line-height: 1.5;
+  color: var(--muted);
+}
+
+.runtime {
+  margin: 0 0 40px;
+  max-width: 44ch;
+  font-size: 13px;
+  line-height: 1.45;
   color: var(--muted);
 }
 
@@ -178,15 +186,13 @@ footer a:hover {
 }
 
 .row {
-  display: grid;
-  grid-template-areas: "row";
+  position: relative;
   border-bottom: 1px solid var(--hair);
 }
 
 .row .hit {
-  grid-area: row;
   display: grid;
-  grid-template-columns: 3.5rem minmax(0, 1fr) 4.75rem;
+  grid-template-columns: 3.5rem minmax(0, 1fr) auto;
   gap: 6px 14px;
   align-items: baseline;
   margin: 0 -8px;
@@ -220,23 +226,18 @@ footer a:hover {
   padding-top: 3px;
   font-size: 13px;
   text-align: right;
+  white-space: nowrap;
 }
 
 .row > .run {
-  grid-area: row;
-  z-index: 1;
-  justify-self: end;
-  align-self: end;
-  width: 4.75rem;
-  margin-right: -8px;
-  padding: 0 8px 10px 0;
+  position: absolute;
+  left: calc(8px + 3.5rem + 14px);
+  bottom: 10px;
   font-size: 11px;
-  text-align: right;
 }
 
 .row.inert .hit {
   padding-bottom: 13px;
-  grid-template-columns: 3.5rem minmax(0, 1fr);
 }
 
 footer {
@@ -250,5 +251,8 @@ footer {
   .row .hit {
     grid-template-columns: 3.2rem minmax(0, 1fr) auto;
     gap: 4px 10px;
+  }
+  .row > .run {
+    left: calc(8px + 3.2rem + 10px);
   }
 }
