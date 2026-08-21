@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useWallet } from './context/WalletContext'
 import { DESKTOP_INSTALL_URL, errorMessage, giveHref } from './lib/config'
+import { formatWhenShort } from './lib/copy'
 import { internalizeGift, signReceipt } from './lib/gift'
 import { displayNameFor } from './lib/identity'
 import { applyEvent, mergeIncomingGifts, statusLabel, type GiftRecord } from './lib/machine'
@@ -21,6 +22,12 @@ function giftsForDesk(gifts: GiftRecord[], orgKey?: string): GiftRecord[] {
   if (!org || !isIdentityKey(org)) return gifts
   const want = org.toLowerCase()
   return gifts.filter((row) => row.orgIdentityKey.trim().toLowerCase() === want)
+}
+
+function stampClass(status: GiftRecord['status']): string {
+  if (status === 'receipted') return 'status-word receipted'
+  if (status === 'acknowledged') return 'status-word ack'
+  return 'status-word'
 }
 
 export function Desk({ orgIdentity = '' }: { orgIdentity?: string }) {
@@ -91,6 +98,7 @@ export function Desk({ orgIdentity = '' }: { orgIdentity?: string }) {
   }
 
   const visibleGifts = giftsForDesk(gifts, orgIdentity || identityKey || undefined)
+  const boundDesk = isIdentityKey(orgIdentity || identityKey || '')
 
   const copyGiveLink = async (): Promise<void> => {
     setFail('')
@@ -200,13 +208,81 @@ export function Desk({ orgIdentity = '' }: { orgIdentity?: string }) {
 
   return (
     <>
-      <section className="panel">
-        <h2>The desk</h2>
-        <p>
-          Incoming gifts arrive already tagged with a purpose. Acknowledge the
-          purpose, then issue a receipt bound to it. This is not a vault and
-          not a tax letter.
+      <p className="job">
+        Incoming gifts arrive already tagged with a purpose. Acknowledge the
+        purpose, then issue a receipt bound to it. This is not a vault and
+        not a tax letter.
+      </p>
+
+      <h2>Incoming gifts</h2>
+      {!boundDesk && (
+        <p className="helper">
+          This is the public incoming list. Copy a give link to bind a desk.
         </p>
+      )}
+      {overlayStatus === 'checking' && visibleGifts.length === 0 && (
+        <p className="helper">Looking up incoming gifts…</p>
+      )}
+      {overlayStatus === 'failed' && (
+        <p className="status err">
+          {visibleGifts.length === 0
+            ? 'Couldn’t refresh incoming gifts. They are not missing because this list failed.'
+            : 'Couldn’t refresh incoming gifts'}
+        </p>
+      )}
+      {((overlayStatus === 'failed' && visibleGifts.length > 0) ||
+        (usedOverlayCache && overlayStatus === 'online' && visibleGifts.length > 0)) && (
+        <p className="helper">Showing last-good incoming gifts.</p>
+      )}
+      {visibleGifts.length === 0 && overlayStatus === 'online' ? (
+        <p className="helper">
+          Nothing in yet. Share the give link. When a donor sends a
+          purpose-restricted gift, it lands here.
+        </p>
+      ) : visibleGifts.length > 0 ? (
+        <ul className="mail">
+          {visibleGifts.slice().reverse().map((gift) => (
+            <li key={gift.giftId}>
+              <div className="mail-head">
+                <p className="purpose">{gift.purpose}</p>
+                <p className="amount">{displayUsd(gift.amountUsd, gift.amountSats, null)}</p>
+              </div>
+              <p className="when">
+                {formatWhenShort(gift.at)}
+                {gift.donorName || names[gift.donorIdentityKey] ? ` · From ${donorLabel(gift)}` : ''}
+              </p>
+              <p className={stampClass(gift.status)}>{statusLabel(gift.status)}</p>
+              <div className="row">
+                {gift.status === 'gifted' && (
+                  <button type="button" className="btn primary" disabled={Boolean(busy)} onClick={() => void onAck(gift)}>
+                    Acknowledge
+                  </button>
+                )}
+                {gift.status === 'acknowledged' && (
+                  <button type="button" className="btn primary" disabled={Boolean(busy)} onClick={() => void onReceipt(gift)}>
+                    Issue receipt
+                  </button>
+                )}
+              </div>
+              <details className="advanced">
+                <summary>Advanced</summary>
+                <p>Donor <code>{gift.donorIdentityKey}</code></p>
+                <p>Desk <code>{gift.orgIdentityKey}</code></p>
+                <p>Purpose hash <code>{gift.purposeHash}</code></p>
+                <p>Gift <code>{gift.giftTxid}</code></p>
+              </details>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {busy && <p className="status">{busy}</p>}
+      {connecting && <p className="status">Waiting for wallet…</p>}
+      {error && <p className="status err">{error}</p>}
+      {notice && <p className="status ok">{notice}</p>}
+      {fail && <p className="status err">{fail}</p>}
+
+      <div className="clerk">
         <label htmlFor="org-name">Desk name</label>
         <input
           id="org-name"
@@ -214,12 +290,12 @@ export function Desk({ orgIdentity = '' }: { orgIdentity?: string }) {
           onChange={(event) => setOrgName(event.target.value)}
           placeholder="St Mary’s, the community foundation…"
         />
-        <div className="row" style={{ marginTop: 16 }}>
-          <button className="btn primary" onClick={() => void copyGiveLink()}>
+        <div className="row">
+          <button type="button" className="btn" onClick={() => void copyGiveLink()}>
             Copy give link
           </button>
         </div>
-        <p className="hint">
+        <p className="helper">
           Wallet is for acknowledge, receipt, and the give link.
         </p>
         <details className="advanced">
@@ -228,74 +304,10 @@ export function Desk({ orgIdentity = '' }: { orgIdentity?: string }) {
             ? <p>Desk identity <code>{identityKey}</code></p>
             : <p>Open the wallet to see the desk identity.</p>}
           <p>
-            <a href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">BSV Desktop</a>
+            <a href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">Need a wallet?</a>
           </p>
         </details>
-      </section>
-
-      {busy && <p className="status">{busy}</p>}
-      {connecting && <p className="status">Waiting for wallet…</p>}
-      {error && <p className="status err">{error}</p>}
-      {notice && <p className="status ok">{notice}</p>}
-      {fail && <p className="status err">{fail}</p>}
-
-      <section className="panel">
-        <h2>Incoming gifts</h2>
-        {overlayStatus === 'checking' && visibleGifts.length === 0 && (
-          <p className="hint">Looking up incoming gifts…</p>
-        )}
-        {overlayStatus === 'failed' && (
-          <p className="status err">
-            {visibleGifts.length === 0
-              ? 'Couldn’t refresh incoming gifts. They are not missing because this list failed.'
-              : 'Couldn’t refresh incoming gifts'}
-          </p>
-        )}
-        {((overlayStatus === 'failed' && visibleGifts.length > 0) ||
-          (usedOverlayCache && overlayStatus === 'online' && visibleGifts.length > 0)) && (
-          <p className="hint">Showing last-good incoming gifts.</p>
-        )}
-        {visibleGifts.length === 0 && overlayStatus === 'online' ? (
-          <p className="hint">
-            Nothing in yet. Share the give link. When a donor sends a
-            purpose-restricted gift, it lands here.
-          </p>
-        ) : visibleGifts.length > 0 ? (
-          <ul className="gift-list">
-            {visibleGifts.slice().reverse().map((gift) => (
-              <li key={gift.giftId}>
-                <div className="gift-head">
-                  <p className="amount">{displayUsd(gift.amountUsd, gift.amountSats, null)}</p>
-                  <span className={`stamp ${gift.status === 'receipted' ? 'receipted' : ''}`}>
-                    {statusLabel(gift.status)}
-                  </span>
-                </div>
-                <p className="purpose">{gift.purpose}</p>
-                <p className="hint">From {donorLabel(gift)}</p>
-                <div className="row">
-                  {gift.status === 'gifted' && (
-                    <button className="btn primary" disabled={Boolean(busy)} onClick={() => void onAck(gift)}>
-                      Acknowledge
-                    </button>
-                  )}
-                  {gift.status === 'acknowledged' && (
-                    <button className="btn primary" disabled={Boolean(busy)} onClick={() => void onReceipt(gift)}>
-                      Issue receipt
-                    </button>
-                  )}
-                </div>
-                <details className="advanced">
-                  <summary>Advanced</summary>
-                  <p>Donor <code>{gift.donorIdentityKey}</code></p>
-                  <p>Desk <code>{gift.orgIdentityKey}</code></p>
-                  <p>Purpose hash <code>{gift.purposeHash}</code></p>
-                  <p>Gift <code>{gift.giftTxid}</code></p>
-                </details>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </section>
+      </div>
     </>
   )
 }

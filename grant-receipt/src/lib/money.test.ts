@@ -11,7 +11,8 @@ import {
   resolveGiftSpend,
   satsToUsd,
   sendGiftLabel,
-  usdToSats
+  usdToSats,
+  advancedSatsLine
 } from './money.ts'
 
 const FIXTURE_RATE = 50
@@ -52,6 +53,7 @@ describe('dollars (fixture rate, no network)', () => {
     assert.notEqual(spend.amountSats, defaultSpend.amountSats)
     assert.equal(sendGiftLabel(spend.amountUsd), 'Send $0.01')
     assert.equal(sendGiftLabel('25.00'), 'Send $25.00')
+    assert.equal(sendGiftLabel('', ''), 'Send gift')
     assert.throws(() => resolveGiftSpend('', FIXTURE_RATE), /dollars/)
     assert.throws(() => resolveGiftSpend('', FIXTURE_RATE, ''), /dollars/)
     assert.throws(() => resolveGiftSpend('25.00 leftover ignored', FIXTURE_RATE), /dollars/)
@@ -78,14 +80,20 @@ describe('dollars (fixture rate, no network)', () => {
     assert.notEqual(resolveGiftSpend('0.01', live).amountSats, twentyFive)
   })
 
-  it('sendGiftLabel includes sats when a live rate exists', () => {
+  it('sendGiftLabel is dollars only; sats stay off the button', () => {
     const live = 14.985
-    assert.equal(sendGiftLabel('0.01', live), `Send $0.01 (${formatSats(66_733)})`)
-    assert.equal(sendGiftLabel('0.01', live), 'Send $0.01 (66,733 sats)')
-    assert.equal(sendGiftLabel('0.01', live, '25.00'), 'Send $0.01 (66,733 sats)')
-    assert.notEqual(sendGiftLabel('0.01', live), sendGiftLabel('25.00', live))
     assert.equal(sendGiftLabel('0.01'), 'Send $0.01')
-    assert.equal(sendGiftLabel('0.01', null), 'Send $0.01')
-    assert.equal(sendGiftLabel('0.01', 0), 'Send $0.01')
+    assert.equal(sendGiftLabel('25.00'), 'Send $25.00')
+    assert.equal(sendGiftLabel('0.01', '25.00'), 'Send $0.01')
+    assert.notEqual(sendGiftLabel('0.01'), sendGiftLabel('25.00'))
+    assert.equal(sendGiftLabel('0.01').includes('sats'), false)
+    assert.equal(sendGiftLabel('25.00').includes('sats'), false)
+    assert.equal(sendGiftLabel('', ''), 'Send gift')
+    assert.equal(advancedSatsLine('0.01', live), formatSats(66_733))
+    assert.equal(advancedSatsLine('0.01', live), '66,733 sats')
+    assert.equal(advancedSatsLine('0.01', live, '25.00'), '66,733 sats')
+    assert.equal(advancedSatsLine('0.01', null), '')
+    assert.equal(advancedSatsLine('0.01', 0), '')
+    assert.equal(advancedSatsLine('', live), '')
   })
 })

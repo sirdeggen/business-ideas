@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { useWallet } from './context/WalletContext'
 import { DESKTOP_INSTALL_URL, errorMessage, newGiftId } from './lib/config'
+import { clerkReceiptId, formatWhen } from './lib/copy'
 import { sendGift, verifyReceiptWithWallet } from './lib/gift'
 import { applyDonorUpdates, applyEvent, type GiftRecord } from './lib/machine'
 import { sendDeskMessage, pullDeskMessages } from './lib/messagebox'
-import { displayUsd, fetchUsdPerBsv, preferOnScreenAmount, readLiveAmountField, resolveGiftSpend, sendGiftLabel } from './lib/money'
+import { advancedSatsLine, displayUsd, fetchUsdPerBsv, preferOnScreenAmount, readLiveAmountField, resolveGiftSpend, sendGiftLabel } from './lib/money'
 import { lookupReceiptAnnouncements, publishGiftAnnouncement } from './lib/overlay'
 import { readGifts, writeGifts } from './lib/persist'
 import { DEFAULT_PURPOSE, isIdentityKey, purposeHash, shortKey, verifyPublishedReceipt } from './lib/protocol'
@@ -19,7 +20,7 @@ export function Give({
   const { wallet, identityKey, connecting, error, connect } = useWallet()
   const amountRef = useRef<HTMLInputElement>(null)
   const [purpose, setPurpose] = useState(DEFAULT_PURPOSE)
-  const [amountUsd, setAmountUsd] = useState('25.00')
+  const [amountUsd, setAmountUsd] = useState('')
   const [orgKey, setOrgKey] = useState(orgIdentity)
   const [who, setWho] = useState(orgName)
   const [donorName, setDonorName] = useState('')
@@ -76,7 +77,9 @@ export function Give({
 
   const latest = gifts[gifts.length - 1]
   const onScreenAmount = preferOnScreenAmount(readLiveAmountField(amountRef.current), amountUsd)
-  const giftLabel = sendGiftLabel(onScreenAmount, rate, amountUsd)
+  const giftLabel = sendGiftLabel(onScreenAmount, amountUsd)
+  const satsLine = advancedSatsLine(onScreenAmount, rate, amountUsd)
+  const missingOrg = !isIdentityKey(orgKey)
 
   const onSend = async (): Promise<void> => {
     setFail('')
@@ -136,43 +139,43 @@ export function Give({
 
   return (
     <>
-      <section className="panel">
-        <h2>Give</h2>
-        <p>
-          State a purpose. Send a gift in dollars. The desk acknowledges, then
-          you get a signed receipt bound to that purpose.
-        </p>
-        <form
-          className="give-form"
-          onSubmit={(event) => {
-            event.preventDefault()
-            void onSend()
-          }}
-        >
-          <label htmlFor="purpose">Purpose</label>
+      <p className="job">
+        State a purpose. Send a gift in dollars. The desk acknowledges, then
+        you get a signed receipt bound to that purpose.
+      </p>
+      {who.trim() && <p className="helper">To {who.trim()}</p>}
+      <form
+        className="fields"
+        onSubmit={(event) => {
+          event.preventDefault()
+          void onSend()
+        }}
+      >
+        <div className="field">
+          <label htmlFor="purpose">This gift is for</label>
           <input
             id="purpose"
             value={purpose}
             onChange={(event) => setPurpose(event.target.value)}
             placeholder="roof repair"
           />
+        </div>
+        <div className="field">
           <label htmlFor="amount">Amount</label>
-          <input
-            id="amount"
-            name="amount"
-            ref={amountRef}
-            value={amountUsd}
-            onChange={(event) => setAmountUsd(event.target.value)}
-            inputMode="decimal"
-            placeholder="25.00"
-          />
-          <label htmlFor="who">This gift is for</label>
-          <input
-            id="who"
-            value={who}
-            onChange={(event) => setWho(event.target.value)}
-            placeholder="The church, the foundation, the hall"
-          />
+          <div className="dollar">
+            <span>$</span>
+            <input
+              id="amount"
+              name="amount"
+              ref={amountRef}
+              value={amountUsd}
+              onChange={(event) => setAmountUsd(event.target.value)}
+              inputMode="decimal"
+              placeholder="25.00"
+            />
+          </div>
+        </div>
+        <div className="field">
           <label htmlFor="donor-name">Your name (optional)</label>
           <input
             id="donor-name"
@@ -180,72 +183,85 @@ export function Give({
             onChange={(event) => setDonorName(event.target.value)}
             placeholder="Shown on the desk"
           />
-          <div className="row" style={{ marginTop: 16 }}>
-            <button className="btn primary" type="submit" disabled={Boolean(busy) || connecting}>
-              {giftLabel}
-            </button>
-            <a className="btn" href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">
-              Need a wallet?
-            </a>
-          </div>
-        </form>
-        {rateError && <p className="status err">{rateError}</p>}
-        <p className="hint">
-          {rate && giftLabel !== 'Send gift'
-            ? `${giftLabel}. Declining the Desktop prompt does not send. The signed receipt comes back here from the public list — a wallet is not needed to see it.`
-            : 'A wallet is needed only to send. Declining the Desktop prompt does not send. The signed receipt comes back here from the public list — a wallet is not needed to see it.'}
-        </p>
-        <details className="advanced">
-          <summary>Advanced</summary>
-          <label htmlFor="org-key">Desk identity</label>
-          <input
-            id="org-key"
-            value={orgKey}
-            onChange={(event) => setOrgKey(event.target.value)}
-            placeholder="66-hex identity from the treasurer"
-            autoComplete="off"
-          />
-          {identityKey && (
-            <p>Your identity <code>{shortKey(identityKey)}</code></p>
-          )}
-          <p>Purpose hash <code>{purpose.trim() ? purposeHash(purpose) : '—'}</code></p>
-        </details>
-      </section>
-
+        </div>
+        {missingOrg && (
+          <p className="helper">
+            Open the give link from the treasurer, or paste their desk identity under Advanced.
+          </p>
+        )}
+        <div className="actions">
+          <button className="btn primary" type="submit" disabled={Boolean(busy) || connecting}>
+            {giftLabel}
+          </button>
+        </div>
+      </form>
+      {rateError && <p className="status err">{rateError}</p>}
       {busy && <p className="status">{busy}</p>}
       {connecting && <p className="status">Waiting for wallet…</p>}
       {error && <p className="status err">{error}</p>}
       {notice && <p className="status ok">{notice}</p>}
       {fail && <p className="status err">{fail}</p>}
+      <p className="helper">
+        A wallet is needed only to send. Declining the Desktop prompt does not send. The receipt comes back to this page.
+      </p>
 
       {latest && (
-        <section className={`panel ${latest.status === 'receipted' ? 'receipt-card' : ''}`}>
-          <div className="gift-head">
+        <section className="slip">
+          <div className="mail-head">
+            <p className="purpose">{latest.purpose}</p>
             <p className="amount">{displayUsd(latest.amountUsd, latest.amountSats, rate)}</p>
-            <span className={`stamp ${latest.status === 'receipted' ? 'receipted' : ''}`}>
-              {latest.status === 'gifted' ? 'Sent' : latest.status === 'acknowledged' ? 'Acknowledged' : 'Receipt'}
-            </span>
           </div>
-          <p className="purpose">{latest.purpose}</p>
+          <p className={`status-word ${latest.status === 'receipted' ? 'receipted' : 'ack'}`}>
+            {latest.status === 'gifted' ? 'Sent' : latest.status === 'acknowledged' ? 'Acknowledged' : 'Receipt issued'}
+          </p>
           {latest.status === 'gifted' && (
-            <p className="hint">Waiting for the desk to acknowledge this purpose.</p>
+            <p className="helper">Waiting for the desk to acknowledge this purpose.</p>
           )}
           {latest.status === 'acknowledged' && (
-            <p className="hint">Acknowledged. Waiting for the signed receipt.</p>
+            <p className="helper">Acknowledged. Waiting for the signed receipt.</p>
           )}
           {latest.receipt && (
             <>
+              {latest.receipt.at && <p className="when">{formatWhen(latest.receipt.at)}</p>}
+              <p className="receipt-meta">{clerkReceiptId(latest.receipt.giftTxid)}</p>
               <p>
                 Signed receipt for <strong>{latest.receipt.purpose}</strong>, bound to that
                 purpose{receiptCheck ? '.' : ' — check the hash under Advanced if this looks off.'}
               </p>
-              <p className="fine-print">
+              <p className="quiet">
                 This is a receipt for a purpose-restricted gift. It is not a tax document.
               </p>
             </>
           )}
         </section>
       )}
+
+      <details className="advanced">
+        <summary>Advanced</summary>
+        <p>
+          <a href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">Need a wallet?</a>
+        </p>
+        <label htmlFor="org-key">Desk identity</label>
+        <input
+          id="org-key"
+          value={orgKey}
+          onChange={(event) => setOrgKey(event.target.value)}
+          placeholder="66-hex identity from the treasurer"
+          autoComplete="off"
+        />
+        <label htmlFor="desk-name">Desk name</label>
+        <input
+          id="desk-name"
+          value={who}
+          onChange={(event) => setWho(event.target.value)}
+          placeholder="The church, the foundation, the hall"
+        />
+        {identityKey && (
+          <p>Your identity <code>{shortKey(identityKey)}</code></p>
+        )}
+        <p>Purpose hash <code>{purpose.trim() ? purposeHash(purpose) : '—'}</code></p>
+        {satsLine && <p>Wallet will ask for {satsLine}.</p>}
+      </details>
     </>
   )
 }

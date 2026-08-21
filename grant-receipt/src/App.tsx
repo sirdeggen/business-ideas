@@ -18,34 +18,37 @@ function Shell() {
     window.history.replaceState({}, '', url)
   }
 
+  const title = receiptTxid ? 'Receipt' : role === 'give' ? 'Give' : 'Desk'
+
   return (
     <div className="app">
-      <header className="masthead">
-        <div>
-          <p className="eyebrow">Grant Receipt Desk</p>
-          <h1>{receiptTxid ? 'Receipt' : role === 'give' ? 'Give' : 'Desk'}</h1>
-          <p className="lede">A gift for a purpose. A receipt bound to that purpose.</p>
-        </div>
-      </header>
+      <article className="sheet">
+        <header className="sheet-head">
+          {!receiptTxid && (
+            <nav className="roles" aria-label="Role">
+              <button type="button" className={role === 'give' ? 'active' : ''} onClick={() => switchRole('give')}>
+                Give
+              </button>
+              <button type="button" className={role === 'desk' ? 'active' : ''} onClick={() => switchRole('desk')}>
+                Desk
+              </button>
+            </nav>
+          )}
+          <p className="eyebrow">Grant receipt</p>
+          <h1>{title}</h1>
+          {!receiptTxid && (
+            <p className="lede">A gift for a purpose. A receipt bound to that purpose.</p>
+          )}
+        </header>
 
-      {!receiptTxid && (
-        <nav className="tabs" aria-label="Role">
-          <button className={`tab ${role === 'give' ? 'active' : ''}`} onClick={() => switchRole('give')}>
-            Give
-          </button>
-          <button className={`tab ${role === 'desk' ? 'active' : ''}`} onClick={() => switchRole('desk')}>
-            Desk
-          </button>
-        </nav>
-      )}
-
-      {receiptTxid ? (
-        <ReceiptView txid={receiptTxid} />
-      ) : role === 'give' ? (
-        <Give orgIdentity={org} orgName={name} />
-      ) : (
-        <Desk orgIdentity={org} />
-      )}
+        {receiptTxid ? (
+          <ReceiptView txid={receiptTxid} deskName={name} />
+        ) : role === 'give' ? (
+          <Give orgIdentity={org} orgName={name} />
+        ) : (
+          <Desk orgIdentity={org} />
+        )}
+      </article>
 
       <p className="fine-print">
         A purpose-restricted gift and a signed receipt. Not a tax letter.
