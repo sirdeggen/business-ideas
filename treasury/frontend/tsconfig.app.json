@@ -19,5 +19,6 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src", "../protocol/treasury.ts", "../protocol/events.ts", "../protocol/export.ts", "../protocol/money.ts", "../protocol/lookup.ts", "../protocol/board.ts"]
+  "include": ["src", "../protocol/treasury.ts", "../protocol/events.ts", "../protocol/export.ts", "../protocol/money.ts", "../protocol/lookup.ts", "../protocol/board.ts"],
+  "exclude": ["src/**/*.test.ts"]
 }

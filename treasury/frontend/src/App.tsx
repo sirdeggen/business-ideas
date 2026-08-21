@@ -10,15 +10,23 @@ import {
   type Role
 } from '../../protocol/treasury'
 import { downloadCsv, downloadPdf } from '../../protocol/export'
-import { vaultBalanceCopy } from '../../protocol/board'
 import { fundGate, inviteHeadline, proposeGate } from '../../protocol/events'
-import { resolveCreateTxid } from '../../protocol/lookup'
 import {
+  DEMO_CLUB_CREATE_TX,
+  DEMO_CLUB_ID,
   minutesAgo,
   minutesEmptyCopy,
-  overlayBanner,
+  resolveCreateTxid,
   type OverlayLookupStatus
 } from '../../protocol/lookup'
+import {
+  boardBanner,
+  minutesAsDocument,
+  motionSentence,
+  motionStatusWord,
+  pageTitle,
+  spendSentence
+} from './lib/copy'
 import {
   displayUsd,
   fetchUsdPerBsv,
@@ -104,7 +112,7 @@ function Shell() {
   const [busy, setBusy] = useState('')
   const [notice, setNotice] = useState('')
   const [fail, setFail] = useState('')
-  const [toolsOpen, setToolsOpen] = useState(!fromUrl)
+  const [toolsOpen, setToolsOpen] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [inviteNext, setInviteNext] = useState(false)
 
@@ -134,12 +142,24 @@ function Shell() {
     [treasury]
   )
   const vaultUsd = usdPerBsv ? formatUsd(satsToUsd(vaultSats, usdPerBsv)) : null
+  const hasMinutes = Boolean(treasury?.feed.length)
   const emptyCopy = minutesEmptyCopy({
     status: overlayStatus,
-    hasMinutes: Boolean(treasury?.feed.length),
+    hasMinutes,
     usedCache
   })
+  const banner = boardBanner({
+    boardMode,
+    status: overlayStatus,
+    usedCache,
+    hasMinutes
+  })
+  const minutes = treasury ? minutesAsDocument(treasury.feed) : []
   const openProposals = treasury?.proposals.filter((proposal) => proposal.status === 'open' || proposal.status === 'approved') ?? []
+
+  useEffect(() => {
+    document.title = pageTitle(treasury?.name)
+  }, [treasury?.name])
 
   const adopt = (next: Treasury, txid?: string): void => {
     setTreasury(next)
@@ -285,12 +305,12 @@ function Shell() {
     <div className="app">
       <header className="masthead">
         <div>
-          <p className="eyebrow">{boardMode ? 'Board' : 'Policy treasury'}</p>
-          <h1>{treasury?.name || (boardMode ? 'Board' : 'Policy treasury')}</h1>
+          <p className="eyebrow">{boardMode ? 'Board' : 'Treasury'}</p>
+          <h1>{treasury?.name || (boardMode ? 'Board' : 'Treasury')}</h1>
           <p className="lede">
             {boardMode
               ? 'Two people have to say yes.'
-              : 'A board anyone can read. Wallet only when you approve — or when you run treasurer tools.'}
+              : 'A board anyone can read.'}
           </p>
         </div>
         {identityKey && (
@@ -300,24 +320,26 @@ function Shell() {
         )}
       </header>
 
-      <p className={`banner ${overlayStatus}`}>
-        {overlayBanner(overlayStatus, usedCache)}
-        {seats.length ? ` · you are ${seats.map((role) => ROLE_LABEL[role]).join(', ')}` : ''}
-      </p>
+      {banner && (
+        <p className={`banner ${overlayStatus}`}>
+          {banner}
+          {seats.length ? ` · you are ${seats.map((role) => ROLE_LABEL[role]).join(', ')}` : ''}
+        </p>
+      )}
 
       {fail && <div className="status err">{fail}</div>}
       {notice && <div className="status ok">{notice}</div>}
       {busy && <div className="status">{busy}</div>}
-      {busy && connecting && <div className="status">Waiting for BSV wallet…</div>}
+      {busy && connecting && <div className="status">Waiting for a wallet…</div>}
       {busy && error && <div className="status err">{error}</div>}
 
       {boardMode && (
-        <div className="stranger-board">
+        <div className="board">
           <section className="panel">
             <h2>Minutes</h2>
-            {treasury?.feed.length ? (
+            {minutes.length ? (
               <ol className="feed">
-                {treasury.feed.map((event) => (
+                {minutes.map((event) => (
                   <li key={event.id}>
                     <time>{minutesAgo(event.at)}</time>
                     {event.text}
@@ -367,12 +389,12 @@ function Shell() {
       {!boardMode && (
         <section className="panel">
           <h2>Open a board</h2>
-          <p>Paste a board id. Minutes load from overlay — no wallet.</p>
+          <p>Paste a board id. Minutes load from overlay.</p>
           <label>Board id</label>
           <input
             value={lookupDraft}
             onChange={(event) => setLookupDraft(event.target.value.trim())}
-            placeholder="fd99a97b-0415-4036-909d-ca7794a70f04"
+            placeholder={DEMO_CLUB_ID}
           />
           <div className="row">
             <button
@@ -386,6 +408,9 @@ function Shell() {
               Open board
             </button>
           </div>
+          <p className="quiet-link">
+            <a href={`?treasury=${DEMO_CLUB_ID}&tx=${DEMO_CLUB_CREATE_TX}`}>Demo Club minutes</a>
+          </p>
         </section>
       )}
 
@@ -394,7 +419,7 @@ function Shell() {
         {toolsOpen && (
         <>
         <p className="hint">
-          Create, join, fund, propose, and pay live here. The board above is for minutes and Approve / Decline.
+          Create, join, fund, propose, and pay. Minutes and Approve / Decline stay on the board.
         </p>
 
         <section className="panel">
@@ -444,7 +469,11 @@ function Shell() {
 
         <section className="panel">
           <h2>Join</h2>
-          <p>Open seats can join from this wallet. One wallet may hold more than one remaining seat.</p>
+          <p>
+            {identityKey
+              ? 'Open seats can join from this wallet. One wallet may hold more than one remaining seat.'
+              : 'Open seats can join. One wallet may hold more than one remaining seat.'}
+          </p>
           {treasury && treasury.signers.map((signer) => (
             <div className="seat" key={signer.role}>
               <div>
@@ -478,15 +507,20 @@ function Shell() {
         </section>
 
         <section className="panel">
-          <h2>Fund the vault</h2>
+          <h2>Fund</h2>
           <p>
             Anyone can fund once every seat has joined.
-            {' '}{vaultBalanceCopy(vaultUsd, vaultSats > 0)}
+            {vaultSats > 0 && vaultUsd ? ` Balance ${vaultUsd}.` : ''}
           </p>
           {fund.reason && <p className="hint">{fund.reason}</p>}
           {rateError && <p className="hint">{rateError}</p>}
           <label>Amount (USD)</label>
-          <input value={fundUsd} onChange={(event) => setFundUsd(event.target.value)} placeholder="25.00" />
+          <input
+            className="amount-field"
+            value={fundUsd}
+            onChange={(event) => setFundUsd(event.target.value)}
+            placeholder="25.00"
+          />
           <div className="row">
             <button
               className="btn primary"
@@ -508,7 +542,7 @@ function Shell() {
                 setNotice(`Funded ${formatUsd(usd)}.`)
               })}
             >
-              Fund from this wallet
+              {identityKey ? 'Fund from this wallet' : 'Fund'}
             </button>
           </div>
         </section>
@@ -517,7 +551,12 @@ function Shell() {
           <h2>Propose a payment</h2>
           <p>Amount in dollars, a payee name the board can read, and a memo.</p>
           <label>Amount (USD)</label>
-          <input value={amountUsd} onChange={(event) => setAmountUsd(event.target.value)} placeholder="25.00" />
+          <input
+            className="amount-field"
+            value={amountUsd}
+            onChange={(event) => setAmountUsd(event.target.value)}
+            placeholder="25.00"
+          />
           <label>Payee name</label>
           <input value={payeeName} onChange={(event) => setPayeeName(event.target.value)} placeholder="Hall Committee" />
           <label>Memo</label>
@@ -571,7 +610,7 @@ function Shell() {
 
         <section className="panel">
           <h2>Sign vault and pay</h2>
-          <p>Broadcast pay only after the threshold is met. This is not on the stranger board.</p>
+          <p>Pay only after two people have said yes.</p>
           {treasury?.proposals.map((proposal) => (
             <ProposalCard
               key={`tools-${proposal.id}`}
@@ -655,7 +694,6 @@ function Shell() {
 
       <footer>
         Reading minutes never needs a wallet. A wallet is requested after Approve (or Decline).
-        Private keys never leave BSV Desktop or BSV Browser.
       </footer>
     </div>
   )
@@ -696,15 +734,19 @@ function ProposalCard(props: {
       : 'Sign vault spend'
   const canPay = proposal.status !== 'paid' && proposal.status !== 'declined' && uniqueApprovers(proposal.p2msSigs).length >= treasury.threshold
   const open = proposal.status === 'open' || proposal.status === 'approved'
+  const statusWord = motionStatusWord(proposal, treasury)
+  const pending = motionSentence(proposal, treasury)
+  const spend = mode === 'tools' ? spendSentence(proposal, treasury) : ''
   return (
-    <article className="proposal">
-      <h3>{amount}</h3>
+    <article className="motion">
+      <div className="motion-head">
+        <h3 className="amount">{amount}</h3>
+        <p className={`status-word ${statusWord.toLowerCase()}`}>{statusWord}</p>
+      </div>
       <p>{proposal.memo}</p>
-      <p className="meta">
-        To {payee} · {proposal.status} ·
-        {' '}{uniqueApprovers(proposal.approvals).length}/{treasury.threshold} approvals
-        {mode === 'tools' && ` · ${uniqueApprovers(proposal.p2msSigs).length}/${treasury.threshold} vault signatures`}
-      </p>
+      <p className="meta">To {payee}</p>
+      {pending && <p className="meta">{pending}</p>}
+      {spend && <p className="meta">{spend}</p>}
       <div className="row">
         {open && (
           <button className="btn primary" disabled={disabled || already} onClick={onApprove}>
