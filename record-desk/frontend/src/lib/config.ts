@@ -136,7 +136,7 @@ export function isWalletMissingMessage(text: string): boolean {
   return looksLikeWalletFailure(text)
 }
 
-/** Basket inspect noise — never the Buy-a-dump error when the user only wanted the list. */
+/** Basket inspect noise — never the list error when the user only wanted the hash list. */
 export function isListOutputsFailure(text: string): boolean {
   return /listoutputs\s*\(/i.test(text)
 }

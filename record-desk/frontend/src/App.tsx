@@ -9,7 +9,23 @@ import {
 } from '../../protocol/record'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
-import { downloadDump, exportPriceSats, payAndExport, postRecord } from './lib/actions'
+import { downloadDump, payAndExport, postRecord } from './lib/actions'
+import {
+  ADVANCED_ACCOUNT,
+  ADVANCED_GATE,
+  BANNER,
+  EMPTY_LIST,
+  EXPORT_BUTTON,
+  EXPORT_DONE,
+  EXPORT_HEADING,
+  EXPORT_JOB,
+  EYEBROW,
+  FOOTER,
+  LEDE,
+  POST_HEADING,
+  POST_JOB,
+  TITLE
+} from './lib/copy'
 import {
   CHROME_ALLOW_HINT,
   DESKTOP_INSTALL_URL,
@@ -172,7 +188,7 @@ function Shell() {
     try {
       const result = await payAndExport(activeWallet, row)
       downloadDump(result.dump)
-      setExportStatus(`Paid ${formatSatsAmount(result.paidSats)}. Dump downloaded.`)
+      setExportStatus(EXPORT_DONE)
     } catch (err) {
       console.error('Export failed', err)
       setExportError(errorMessage(err))
@@ -186,171 +202,187 @@ function Shell() {
 
   return (
     <div className="app">
-      <header className="masthead">
-        <div>
-          <p className="eyebrow">Field readings</p>
-          <h1>Signed record desk</h1>
-          <p className="lede">
-            Post a signed reading. Pay a little to export the dump.
-          </p>
-        </div>
-      </header>
+      <article className="sheet">
+        <header className="sheet-head">
+          <p className="eyebrow">{EYEBROW}</p>
+          <h1>{TITLE}</h1>
+          <p className="lede">{LEDE}</p>
+        </header>
 
-      <p className="banner">
-        {online === false
-          ? `${overlayCheckFailed(probeError, url)} This page is pointed at ${url}.`
-          : 'Hashes are listed for free. Pay to download the dump. Wallet is only asked when you Post or Pay.'}
-      </p>
-
-      <section className="panel">
-        <h2>Post a record</h2>
-        <p>A contributor signs a field reading — hours, an inspection, or a note.</p>
-        <label htmlFor="name">Your name</label>
-        <input
-          id="name"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="Alex"
-          autoComplete="name"
-        />
-        <label htmlFor="kind">Kind</label>
-        <select id="kind" value={kind} onChange={(event) => setKind(event.target.value as RecordKind)}>
-          {KINDS.map((item) => (
-            <option key={item} value={item}>{kindLabel(item)}</option>
-          ))}
-        </select>
-        <label htmlFor="note">Reading</label>
-        <textarea
-          id="note"
-          rows={4}
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          placeholder="What did you see?"
-        />
-        <div className="row">
-          <div className="grow">
-            <label htmlFor="lat">Latitude (optional)</label>
-            <input
-              id="lat"
-              value={lat}
-              onChange={(event) => setLat(event.target.value)}
-              placeholder="51.5074"
-            />
-          </div>
-          <div className="grow">
-            <label htmlFor="lon">Longitude (optional)</label>
-            <input
-              id="lon"
-              value={lon}
-              onChange={(event) => setLon(event.target.value)}
-              placeholder="-0.1278"
-            />
-          </div>
-        </div>
-        <details className="advanced">
-          <summary>Advanced</summary>
-          <p className="hint">
-            Optional account id. Leave blank to post the name. Only needed if a buyer should pay you on-chain.
-          </p>
-          <label htmlFor="hex">Account id</label>
-          <input
-            id="hex"
-            value={advancedHex}
-            onChange={(event) => setAdvancedHex(event.target.value)}
-            placeholder="Leave blank unless you already have one"
-            spellCheck={false}
-            autoComplete="off"
-          />
-        </details>
-        <div className="row" style={{ marginTop: 16 }}>
-          <button
-            className="btn primary"
-            disabled={postDisabled}
-            onClick={() => void post()}
-          >
-            {postBusy ? 'Posting…' : connecting ? 'Connecting…' : 'Post'}
-          </button>
-        </div>
-        {postStatus && <p className="status ok">{postStatus}</p>}
-        {postError && <p className="status err">{postError}</p>}
-      </section>
-
-      <section className="panel">
-        <div className="invoice-head">
-          <h2>Buy a dump</h2>
-          <button className="btn" disabled={listBusy} onClick={() => void refreshList()}>
-            {listBusy ? 'Refreshing…' : 'Refresh list'}
-          </button>
-        </div>
-        <p>
-          Pay to download the dump. The overlay already holds the fields; payment is the gate here.
-          {' '}Export is {formatSatsAmount(1, usdPerBsv)} for a name-only reading,
-          or {formatSatsAmount(EXPORT_PRICE_SATS, usdPerBsv)} when an account id is present.
+        <p className={online === false ? 'status err' : 'helper'}>
+          {online === false
+            ? `${overlayCheckFailed(probeError, url)} This page is pointed at ${url}.`
+            : BANNER}
         </p>
-        {listError && <p className="status err">{listError}</p>}
-        {listHint && <p className="hint">{listHint}</p>}
-        {rows.length === 0 && !listBusy && !listError && (
-          <p className="empty">No signed records yet — post one.</p>
-        )}
-        {rows.map((row) => {
-          const price = exportPriceSats(row)
-          return (
-            <article key={`${row.txid}.${row.outputIndex}`} className="invoice">
-              <div className="invoice-head">
-                <h3>{displayName(row.name)}</h3>
-                <span className="pill">{kindLabel(row.kind)}</span>
+
+        <section className="block">
+          <h2>{POST_HEADING}</h2>
+          <p className="job">{POST_JOB}</p>
+          <div className="fields">
+            <div className="field">
+              <label htmlFor="name">Your name</label>
+              <input
+                id="name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Alex"
+                autoComplete="name"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="kind">Kind</label>
+              <select id="kind" value={kind} onChange={(event) => setKind(event.target.value as RecordKind)}>
+                {KINDS.map((item) => (
+                  <option key={item} value={item}>{kindLabel(item)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="note">Reading</label>
+              <textarea
+                id="note"
+                rows={4}
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                placeholder="What did you see?"
+              />
+            </div>
+            <div className="grid">
+              <div className="field">
+                <label htmlFor="lat">Latitude (optional)</label>
+                <input
+                  id="lat"
+                  value={lat}
+                  onChange={(event) => setLat(event.target.value)}
+                  placeholder="optional"
+                />
               </div>
-              <dl className="meta">
-                <div>
-                  <dt>When</dt>
-                  <dd>{formatTime(row.time)}</dd>
-                </div>
-                <div>
-                  <dt>Hash</dt>
-                  <dd><code>{shortKey(row.hash)}</code></dd>
-                </div>
-              </dl>
-              <div className="row">
-                <button
-                  className="btn primary"
-                  disabled={exportBusy !== null || connecting}
-                  onClick={() => void exportRow(row)}
-                >
-                  {exportBusy === row.hash
-                    ? 'Paying…'
-                    : `Pay ${formatSatsAmount(price, usdPerBsv)} + Export`}
-                </button>
+              <div className="field">
+                <label htmlFor="lon">Longitude (optional)</label>
+                <input
+                  id="lon"
+                  value={lon}
+                  onChange={(event) => setLon(event.target.value)}
+                  placeholder="optional"
+                />
               </div>
-            </article>
-          )
-        })}
-        {exportStatus && <p className="status ok">{exportStatus}</p>}
-        {exportError && <p className="status err">{exportError}</p>}
-      </section>
+            </div>
+          </div>
+          <details className="advanced">
+            <summary>Advanced</summary>
+            <p>
+              {ADVANCED_ACCOUNT}
+            </p>
+            <label htmlFor="hex">Account id</label>
+            <input
+              id="hex"
+              value={advancedHex}
+              onChange={(event) => setAdvancedHex(event.target.value)}
+              placeholder="Leave blank unless you already have one"
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </details>
+          <div className="actions">
+            <button
+              type="button"
+              className="btn primary"
+              disabled={postDisabled}
+              onClick={() => void post()}
+            >
+              {postBusy ? 'Posting…' : connecting ? 'Connecting…' : 'Post'}
+            </button>
+          </div>
+          {postStatus && <p className="status ok">{postStatus}</p>}
+          {postError && <p className="status err">{postError}</p>}
+        </section>
+
+        <section className="slip">
+          <div className="section-head">
+            <h2>{EXPORT_HEADING}</h2>
+            <button type="button" className="btn" disabled={listBusy} onClick={() => void refreshList()}>
+              {listBusy ? 'Refreshing…' : 'Refresh list'}
+            </button>
+          </div>
+          <p className="job">{EXPORT_JOB}</p>
+          {listError && <p className="status err">{listError}</p>}
+          {listHint && <p className="helper">{listHint}</p>}
+          {rows.length === 0 && !listBusy && !listError && (
+            <p className="empty">{EMPTY_LIST}</p>
+          )}
+          {rows.length > 0 && (
+            <ul className="records">
+              {rows.map((row) => (
+                <li key={`${row.txid}.${row.outputIndex}`} className="record">
+                  <div className="record-head">
+                    <h3>{displayName(row.name)}</h3>
+                    <span className="kind">{kindLabel(row.kind)}</span>
+                  </div>
+                  <dl className="meta">
+                    <div>
+                      <dt>When</dt>
+                      <dd>{formatTime(row.time)}</dd>
+                    </div>
+                    <div>
+                      <dt>Hash</dt>
+                      <dd><code>{shortKey(row.hash)}</code></dd>
+                    </div>
+                  </dl>
+                  <div className="row">
+                    <button
+                      type="button"
+                      className="btn primary"
+                      disabled={exportBusy !== null || connecting}
+                      onClick={() => void exportRow(row)}
+                    >
+                      {exportBusy === row.hash
+                        ? 'Paying…'
+                        : EXPORT_BUTTON}
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <details className="advanced">
+            <summary>Advanced</summary>
+            <p>
+              {ADVANCED_GATE}
+              {' '}Export is <span className="money">{formatSatsAmount(1, usdPerBsv)}</span> for a name-only reading,
+              or <span className="money">{formatSatsAmount(EXPORT_PRICE_SATS, usdPerBsv)}</span> when an account id is present.
+            </p>
+          </details>
+          {exportStatus && <p className="status ok">{exportStatus}</p>}
+          {exportError && <p className="status err">{exportError}</p>}
+        </section>
+      </article>
 
       {showInstall && (
-        <div className="row" style={{ marginTop: 8 }}>
-          <button
-            className="btn primary"
-            disabled={postBusy || exportBusy !== null || connecting}
-            onClick={() => {
-              if (lastAction === 'export') {
-                const row = rows.find((item) => item.hash === lastExportHash)
-                if (row) void exportRow(row)
-                return
-              }
-              void post()
-            }}
-          >
-            Retry
-          </button>
-          <a className="btn" href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">
-            Install BSV Desktop
-          </a>
+        <div className="install">
+          <div className="row">
+            <button
+              type="button"
+              className="btn primary"
+              disabled={postBusy || exportBusy !== null || connecting}
+              onClick={() => {
+                if (lastAction === 'export') {
+                  const row = rows.find((item) => item.hash === lastExportHash)
+                  if (row) void exportRow(row)
+                  return
+                }
+                void post()
+              }}
+            >
+              Retry
+            </button>
+            <a className="btn" href={DESKTOP_INSTALL_URL} target="_blank" rel="noreferrer">
+              Install BSV Desktop
+            </a>
+          </div>
         </div>
       )}
       {(actionError === CHROME_ALLOW_HINT) && (
-        <p className="hint">{CHROME_ALLOW_HINT}</p>
+        <p className="helper">{CHROME_ALLOW_HINT}</p>
       )}
 
       <details className="advanced">
@@ -359,9 +391,9 @@ function Shell() {
         <input value={url} onChange={(event) => setUrl(event.target.value)} />
       </details>
 
-      <footer>
-        Pay to download the dump. Not tickets, not invoices, not a stamp card.
-      </footer>
+      <p className="fine-print">
+        {FOOTER}
+      </p>
     </div>
   )
 }
