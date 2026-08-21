@@ -248,12 +248,12 @@ export function Desk({ orgIdentity = '' }: { orgIdentity?: string }) {
               <p className={stampClass(gift.status)}>{statusLabel(gift.status)}</p>
               <div className="row">
                 {gift.status === 'gifted' && (
-                  <button className="btn primary" disabled={Boolean(busy)} onClick={() => void onAck(gift)}>
+                  <button type="button" className="btn primary" disabled={Boolean(busy)} onClick={() => void onAck(gift)}>
                     Acknowledge
                   </button>
                 )}
                 {gift.status === 'acknowledged' && (
-                  <button className="btn primary" disabled={Boolean(busy)} onClick={() => void onReceipt(gift)}>
+                  <button type="button" className="btn primary" disabled={Boolean(busy)} onClick={() => void onReceipt(gift)}>
                     Issue receipt
                   </button>
                 )}
@@ -285,7 +285,7 @@ export function Desk({ orgIdentity = '' }: { orgIdentity?: string }) {
           placeholder="St Mary’s, the community foundation…"
         />
         <div className="row">
-          <button className="btn" onClick={() => void copyGiveLink()}>
+          <button type="button" className="btn" onClick={() => void copyGiveLink()}>
             Copy give link
           </button>
         </div>

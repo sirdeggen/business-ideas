@@ -141,7 +141,7 @@ export function Give({
         State a purpose. Send a gift in dollars. The desk acknowledges, then
         you get a signed receipt bound to that purpose.
       </p>
-      {who.trim() && <p className="desk-to">{who.trim()}</p>}
+      {who.trim() && <p className="helper">To {who.trim()}</p>}
       <form
         className="fields"
         onSubmit={(event) => {

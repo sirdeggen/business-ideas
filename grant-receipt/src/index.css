@@ -232,12 +232,6 @@ input:focus, textarea:focus {
   margin: 12px 0 0;
 }
 
-.desk-to {
-  margin: 0 0 20px;
-  color: var(--ink);
-  font-size: 16px;
-}
-
 .clerk {
   margin-top: 28px;
   padding-top: 20px;

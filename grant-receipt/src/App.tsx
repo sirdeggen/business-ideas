@@ -26,10 +26,10 @@ function Shell() {
         <header className="sheet-head">
           {!receiptTxid && (
             <nav className="roles" aria-label="Role">
-              <button className={role === 'give' ? 'active' : ''} onClick={() => switchRole('give')}>
+              <button type="button" className={role === 'give' ? 'active' : ''} onClick={() => switchRole('give')}>
                 Give
               </button>
-              <button className={role === 'desk' ? 'active' : ''} onClick={() => switchRole('desk')}>
+              <button type="button" className={role === 'desk' ? 'active' : ''} onClick={() => switchRole('desk')}>
                 Desk
               </button>
             </nav>
