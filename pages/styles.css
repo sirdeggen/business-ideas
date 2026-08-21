@@ -243,7 +243,7 @@ footer a:hover {
   font-size: 11px;
 }
 
-.row.inert .hit {
+.row.inert:not(:has(> .run)) .hit {
   padding-bottom: 13px;
 }
 

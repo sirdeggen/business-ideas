@@ -42,6 +42,8 @@ Readers pay a little. Crawlers pay more.
 
 Charge per call. No API keys.
 
+- How to run: [402-mcp/README.md](./402-mcp/README.md)
+
 ## Treasury
 
 Shared treasury, two of three must agree. Board at `?treasury=<id>` is lookup only (no wallet). Create and join persist on Pages; a stranger board works without Docker. Not a custodian.
