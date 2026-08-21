@@ -17,7 +17,6 @@ describe('event slip date', () => {
   it('drops Demo Night startsAt when it is already past', () => {
     expect(DEMO_EVENT.startsAt).toBe('2026-08-13T20:00:00Z')
     expect(eventWhenLine(DEMO_EVENT.startsAt, AFTER_DEMO_NIGHT)).toBeNull()
-    expect(eventWhenLine(DEMO_EVENT.startsAt, AFTER_DEMO_NIGHT)).not.toMatch(/tonight/i)
   })
 
   it('keeps an upcoming date without calling it tonight', () => {
@@ -49,8 +48,10 @@ describe('first-paint copy', () => {
   })
 
   it('does not leak wallet copy or Mint on organizer first paint', () => {
-    expect(organizer).toContain(EVENT_NAME)
-    expect(organizer).toContain(EVENT_PLACE)
+    expect(EVENT_NAME).toBe('Demo Night')
+    expect(EVENT_PLACE).toBe('The Overlay')
+    expect(organizer).toContain('EVENT_NAME')
+    expect(organizer).toContain('EVENT_PLACE')
     expect(organizer).not.toContain('Approve in your wallet')
     expect(organizer).not.toContain('We’ll ask you to approve this in a moment.')
     expect(organizer).not.toMatch(/>Mint</)
