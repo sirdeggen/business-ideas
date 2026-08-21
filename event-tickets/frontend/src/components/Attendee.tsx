@@ -10,8 +10,9 @@ import {
   type HeldTicket
 } from '../lib/actions'
 import { errorMessage } from '../lib/config'
+import { passDateLine } from '../lib/copy'
 
-export function Attendee() {
+export function Attendee({ onMakeTickets }: { onMakeTickets: () => void }) {
   const { wallet, identityKey } = useWallet()
   const { url } = useOverlay()
   const { tickets, error: basketError, refresh: refreshBasket } = useBasket()
@@ -26,7 +27,8 @@ export function Attendee() {
       for (const ticket of tickets) {
         next[ticket.outpoint] = await QRCode.toDataURL(qrPayload(ticket.outpoint, ticket.ticket), {
           margin: 1,
-          width: 240
+          width: 240,
+          color: { dark: '#1a1916', light: '#ffffff' }
         })
       }
       setQrs(next)
@@ -62,6 +64,9 @@ export function Attendee() {
       <section className="panel">
         <h2>Your tickets</h2>
         <p className="hint">No ticket yet — get one from the organizer.</p>
+        <button className="btn" onClick={onMakeTickets}>
+          Make tickets
+        </button>
       </section>
     )
   }
@@ -72,13 +77,31 @@ export function Attendee() {
       <p>Show the QR at the door.</p>
       {tickets.map((held) => {
         const hex = advancedTo[held.outpoint] ?? ''
+        const when = passDateLine(held.ticket.startsAt)
         return (
           <article className="ticket" key={held.outpoint}>
             <div className="ticket-body">
               <div className="serial">GA · {held.ticket.serial.padStart(3, '0')}</div>
               <h3>{held.ticket.name}</h3>
               <div className="ticket-meta">
-                <div>Venue<strong>{held.ticket.venue}</strong></div>
+                {when && (
+                  <div>
+                    <span className="pass-label">Date</span>
+                    <strong className="pass-value">{when}</strong>
+                  </div>
+                )}
+                <div>
+                  <span className="pass-label">Event</span>
+                  <strong className="pass-value">{held.ticket.name}</strong>
+                </div>
+                <div>
+                  <span className="pass-label">Place</span>
+                  <strong className="pass-value">{held.ticket.venue}</strong>
+                </div>
+                <div>
+                  <span className="pass-label">Holder</span>
+                  <strong className="pass-value">You</strong>
+                </div>
               </div>
               <h3 className="subhead">Send to a friend</h3>
               <label htmlFor={`email-${held.outpoint}`}>Email</label>
@@ -126,7 +149,11 @@ export function Attendee() {
               </details>
             </div>
             <div className="stub">
-              {qrs[held.outpoint] && <img alt={`QR for ticket ${held.ticket.serial}`} src={qrs[held.outpoint]} />}
+              {qrs[held.outpoint] && (
+                <div className="qr-pad">
+                  <img alt={`QR for ticket ${held.ticket.serial}`} src={qrs[held.outpoint]} />
+                </div>
+              )}
               <span className="serial">{held.ticket.serial.padStart(3, '0')}</span>
             </div>
           </article>
