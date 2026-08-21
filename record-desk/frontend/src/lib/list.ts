@@ -65,7 +65,7 @@ export function unionRecordRows(
 }
 
 /**
- * Overlay-first Buy-a-dump read. Wallet basket inspect is optional
+ * Overlay-first hash-list read. Wallet basket inspect is optional
  * enrichment and runs only when a wallet is actually connected.
  */
 export async function loadRecordsList(

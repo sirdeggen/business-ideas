@@ -43,15 +43,15 @@ Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access 
 2. Enter a name, kind, and reading. Optional lat/lon.
 3. Click **Post**. Approve the wallet prompt.
 
-## Buy a dump
+## Export a reading
 
 Hashes are listed for free (name, kind, time, hash). The full note is not shown until you pay.
 
 1. Click **Refresh list** if you just posted.
-2. Click **Pay + Export** on a row.
+2. Click **Pay a little + Export** on a row.
 3. After `createAction` succeeds, the dump downloads as JSON (`hash`, `name`, `kind`, `note`, `time`, `txid`).
 
-Copy is honest: **Pay to download the dump.** The overlay already has the fields; payment is the gate in the UI. There is no encryption or UHRP in v0.
+The overlay already has the fields; payment is the gate in the UI. Export is 1 sat for a name-only reading, or 10 sats when an account id is present. There is no encryption or UHRP in v0.
 
 If the contributor posted an account id, export pays a small sat amount to them (BRC-29). If they posted a name only, export spends a 1-sat labelled receipt (`exported`) plus change so the spend is real.
 

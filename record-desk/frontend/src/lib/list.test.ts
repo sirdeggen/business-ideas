@@ -26,7 +26,7 @@ function record(partial: Partial<OverlayRecord> = {}): OverlayRecord {
   }
 }
 
-describe('Buy-a-dump overlay-first read', () => {
+describe('hash-list overlay-first read', () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })
