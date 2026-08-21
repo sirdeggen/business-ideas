@@ -4,115 +4,164 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Business ideas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <main class="app">
-      <header class="masthead">
-        <div>
-          <p class="eyebrow">v0</p>
-          <h1>Business ideas</h1>
-          <p class="lede">
-            Invoices first: send a payable, get a receipt. The receivable desk
-            is a collections list, not a bank. Tickets sit after invoices.
-          </p>
-        </div>
-      </header>
+    <main class="page">
+      <p class="mark">Business ideas</p>
 
-      <section class="cards" aria-label="Demos">
-        <article class="card">
-          <p class="eyebrow soon">Server</p>
-          <h2>Invoices</h2>
-          <p>Send a payable. Get a receipt.</p>
-          <p class="path">
-            <a href="https://github.com/sirdeggen/business-ideas/blob/main/invoices/README.md">How to run</a>
-          </p>
-          <a class="btn" href="./invoices/">Open UI</a>
+      <p class="lede">
+        Invoices first: send a payable, get a receipt. The receivable desk
+        is a collections list, not a bank. Tickets sit after invoices.
+      </p>
+      <p class="runtime">Live is on Pages. Server needs a local runtime.</p>
+
+      <article class="featured">
+        <a class="hit" href="./invoices/">
+          <p class="badge">Server</p>
+          <h1>Invoices</h1>
+          <p class="job">Send a payable. Get a receipt.</p>
+          <span class="action">View</span>
+          <aside class="fragment" aria-hidden="true">
+            <p class="fragment-mark">Sample</p>
+            <p class="fragment-title">Invoice</p>
+            <dl>
+              <div>
+                <dt>Payable</dt>
+                <dd></dd>
+              </div>
+              <div>
+                <dt>Receipt</dt>
+                <dd></dd>
+              </div>
+            </dl>
+          </aside>
+        </a>
+        <p class="run">
+          <a href="https://github.com/sirdeggen/business-ideas/blob/main/invoices/README.md">How to run</a>
+        </p>
+      </article>
+
+      <section class="ledger" aria-label="Ledger">
+        <article class="row">
+          <a class="hit" href="./receivables/">
+            <span class="badge">Server</span>
+            <div class="copy">
+              <h2>Receivable desk</h2>
+              <p class="job">Who do we chase today?</p>
+            </div>
+            <span class="action">View</span>
+          </a>
+          <a
+            class="run"
+            href="https://github.com/sirdeggen/business-ideas/blob/main/receivable-desk/README.md"
+          >How to run</a>
         </article>
 
-        <article class="card">
-          <p class="eyebrow soon">Server</p>
-          <h2>Receivable desk</h2>
-          <p>Who do we chase today?</p>
-          <p class="path">
-            <a href="https://github.com/sirdeggen/business-ideas/blob/main/receivable-desk/README.md">How to run</a>
-          </p>
-          <a class="btn" href="./receivables/">Open UI</a>
+        <article class="row">
+          <a class="hit" href="./records/">
+            <span class="badge">Server</span>
+            <div class="copy">
+              <h2>Signed record desk</h2>
+              <p class="job">Post a signed reading. Pay a little to export.</p>
+            </div>
+            <span class="action">View</span>
+          </a>
+          <a
+            class="run"
+            href="https://github.com/sirdeggen/business-ideas/blob/main/record-desk/README.md"
+          >How to run</a>
         </article>
 
-        <article class="card">
-          <p class="eyebrow soon">Server</p>
-          <h2>Signed record desk</h2>
-          <p>Post a signed reading. Pay a little to export the dump.</p>
-          <p class="path">
-            <a href="https://github.com/sirdeggen/business-ideas/blob/main/record-desk/README.md">How to run</a>
-          </p>
-          <a class="btn" href="./records/">Open UI</a>
+        <article class="row">
+          <a class="hit" href="./tickets/">
+            <span class="badge">Server</span>
+            <div class="copy">
+              <h2>Event tickets</h2>
+              <p class="job">Send, show, spend at the door.</p>
+            </div>
+            <span class="action">View</span>
+          </a>
+          <a
+            class="run"
+            href="https://github.com/sirdeggen/business-ideas/blob/main/event-tickets/README.md"
+          >How to run</a>
         </article>
 
-        <article class="card">
-          <p class="eyebrow soon">Server</p>
-          <h2>Event tickets</h2>
-          <p>
-            Tickets you can send, show on a phone, and spend at the door so they
-            can’t be used twice.
-          </p>
-          <p class="path">
-            <a href="https://github.com/sirdeggen/business-ideas/blob/main/event-tickets/README.md">How to run</a>
-          </p>
-          <a class="btn" href="./tickets/">Open UI</a>
+        <article class="row inert">
+          <div class="hit">
+            <span class="badge">Server</span>
+            <div class="copy">
+              <h2>402 publisher</h2>
+              <p class="job">Readers pay a little. Crawlers pay more.</p>
+            </div>
+          </div>
         </article>
 
-        <article class="card">
-          <p class="eyebrow soon">Server</p>
-          <h2>402 publisher</h2>
-          <p>Readers pay a little. Crawlers pay more.</p>
+        <article class="row inert">
+          <div class="hit">
+            <span class="badge">Server</span>
+            <div class="copy">
+              <h2>402 MCP</h2>
+              <p class="job">Charge per call. No API keys.</p>
+            </div>
+          </div>
         </article>
 
-        <article class="card">
-          <p class="eyebrow soon">Server</p>
-          <h2>402 MCP</h2>
-          <p>Charge per call. No API keys.</p>
+        <article class="row">
+          <a class="hit" href="./treasury/">
+            <span class="badge">Server</span>
+            <div class="copy">
+              <h2>Treasury</h2>
+              <p class="job">Two people have to say yes. Read a board.</p>
+            </div>
+            <span class="action">Open board</span>
+          </a>
+          <a
+            class="run"
+            href="https://github.com/sirdeggen/business-ideas/blob/main/treasury/README.md"
+          >How to run</a>
         </article>
 
-        <article class="card">
-          <p class="eyebrow soon">Server</p>
-          <h2>Treasury</h2>
-          <p>
-            Shared treasury, two of three must agree. Board at
-            <code>?treasury=&lt;id&gt;</code> is lookup only (no wallet).
-            Create and join persist on Pages.
-          </p>
-          <p class="path">
-            <a href="https://github.com/sirdeggen/business-ideas/blob/main/treasury/README.md">How to run</a>
-          </p>
-          <a class="btn" href="./treasury/">Open board</a>
+        <article class="row">
+          <a class="hit" href="./streampay/">
+            <span class="badge">Live</span>
+            <div class="copy">
+              <h2>StreamPay</h2>
+              <p class="job">Pay as they work.</p>
+            </div>
+            <span class="action">Open</span>
+          </a>
+          <a
+            class="run"
+            href="https://github.com/sirdeggen/business-ideas/blob/main/streampay/README.md"
+          >How to run</a>
         </article>
 
-        <article class="card">
-          <p class="eyebrow">Live</p>
-          <h2>StreamPay</h2>
-          <p>Pay as they work.</p>
-          <p class="path">
-            <a href="https://github.com/sirdeggen/business-ideas/blob/main/streampay/README.md">How to run</a>
-          </p>
-          <a class="btn" href="./streampay/">Open UI</a>
-        </article>
-
-        <article class="card">
-          <p class="eyebrow">Live</p>
-          <h2>Grant receipt</h2>
-          <p>A gift for a purpose. A receipt bound to that purpose.</p>
-          <p class="path">
-            <a href="https://github.com/sirdeggen/business-ideas/blob/main/grant-receipt/README.md">How to run</a>
-          </p>
-          <a class="btn" href="./grants/">Open UI</a>
+        <article class="row">
+          <a class="hit" href="./grants/">
+            <span class="badge">Live</span>
+            <div class="copy">
+              <h2>Grant receipt</h2>
+              <p class="job">A gift for a purpose. A receipt bound to that purpose.</p>
+            </div>
+            <span class="action">Open</span>
+          </a>
+          <a
+            class="run"
+            href="https://github.com/sirdeggen/business-ideas/blob/main/grant-receipt/README.md"
+          >How to run</a>
         </article>
       </section>
 
       <footer>
-        Source:
-        <a href="https://github.com/sirdeggen/business-ideas">sirdeggen/business-ideas</a>.
+        <a href="https://github.com/sirdeggen/business-ideas">sirdeggen/business-ideas</a>
       </footer>
     </main>
   </body>
