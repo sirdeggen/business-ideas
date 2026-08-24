@@ -125,7 +125,7 @@ function Shell() {
       setHeader(view.header)
       setTickets(view.tickets)
       setDraws(view.draws)
-      if (!view.header) setListError('No raffle in this link.')
+      if (!view.header) setListError('No draw in this link.')
     } catch (err) {
       console.error('Lookup failed', err)
       setListError(errorMessage(err))
@@ -447,7 +447,7 @@ function Shell() {
         )}
 
         {raffleId && !header && !listBusy && (
-          <p className="empty">{listError || 'No raffle in this link.'}</p>
+          <p className="empty">{listError || 'No draw in this link.'}</p>
         )}
 
         {header && (
