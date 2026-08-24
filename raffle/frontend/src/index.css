@@ -245,6 +245,17 @@ input:focus, textarea:focus, select:focus {
   margin: 16px 0 0;
 }
 
+.facts {
+  margin: 16px 0 8px;
+  padding: 14px 0;
+  border-top: 1px solid var(--hair);
+  border-bottom: 1px solid var(--hair);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
 .meta {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -10,7 +10,7 @@ Public UI: `https://sirdeggen.github.io/business-ideas/raffle/`
 
 Local Docker `tm_raffle` / `ls_raffle` is an optional override. Pages does not need it.
 
-Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access other apps and services on this device,” then Retry with Desktop unlocked. Use the shared funded Desktop. Do not create a new wallet. Wallet is only asked on Start, Claim, Pass, or Draw.
+Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access other apps and services on this device,” then Retry with Desktop unlocked. Use the shared funded Desktop. Do not create a new wallet. Wallet is only asked on Start, Take a ticket, Pass, or Draw.
 
 ## Stack
 
@@ -30,10 +30,10 @@ Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access 
 ## How to try
 
 1. Open the UI. No wallet prompt on first paint.
-2. Host: fill Margaret’s eight fields (event name, prize, who can take a ticket, how many tickets, one per person, when we draw, must be here, host name). Optional HR value stays off the stub. Click **Start**. Approve Desktop.
+2. Host: fill Margaret’s eight fields (Event, Prize, Who can enter, Tickets, One per person, We draw, Must be here to win, Ask). Click **Start**. Approve Desktop.
 3. Share `?r=<raffleId>`.
-4. Guest: read the offsite (event, prize, who it’s for, when, “14 of 40 taken”, host first name) with no wallet. Write a name, then **Take a ticket**.
-5. If one-per-person is off, **Pass** hands the stub to the person who had to leave early.
+4. Guest: read the offsite with no wallet — event, prize, This trip only, We draw [moment], “14 of 40 tickets taken”, One per person (or “You can pass this stub to a coworker”), Ask Priya, “Free. Must be here when we draw.” Then **Take a ticket**.
+5. If one-per-person is off, **Pass your stub** hands it to the person who had to leave early.
 6. Host clicks **Draw** in the room. The winner is a name.
 
 ## Public overlay vs local Docker

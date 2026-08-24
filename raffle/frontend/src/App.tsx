@@ -22,8 +22,7 @@ import {
   CHROME_ALLOW_HINT,
   DESKTOP_INSTALL_URL,
   errorMessage,
-  overlayCheckFailed,
-  shortKey
+  overlayCheckFailed
 } from './lib/config'
 import { lookupRaffle, type OverlayDraw, type OverlayHeader, type OverlayTicket } from './lib/overlay'
 
@@ -50,12 +49,6 @@ function winnerName(tickets: OverlayTicket[], drawn: OverlayDraw): string {
   return ticket?.holderName.trim() || ''
 }
 
-function tripLine(header: OverlayHeader): string {
-  const parts = ['Free, this trip only']
-  if (header.mustBePresent) parts.push('must be here when we draw')
-  return `${parts.join(', ')}.`
-}
-
 function Shell() {
   const { url, setUrl, online, probeError } = useOverlay()
   const { wallet, identityKey, connecting, error: walletError, connect } = useWallet()
@@ -67,13 +60,12 @@ function Shell() {
   const [listBusy, setListBusy] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
 
-  const [title, setTitle] = useState('Northstar offsite, Friday dinner')
-  const [prize, setPrize] = useState('The leftover swag box')
-  const [prizeValue, setPrizeValue] = useState('')
-  const [whoCanEnter, setWhoCanEnter] = useState('People on this trip')
+  const [title, setTitle] = useState('')
+  const [prize, setPrize] = useState('')
+  const [whoCanEnter, setWhoCanEnter] = useState('This trip')
   const [ticketCount, setTicketCount] = useState(40)
   const [onePerPerson, setOnePerPerson] = useState(true)
-  const [drawNote, setDrawNote] = useState('When I press Draw in the room')
+  const [drawNote, setDrawNote] = useState('After dinner, when Priya says so')
   const [mustBePresent, setMustBePresent] = useState(true)
   const [hostName, setHostName] = useState('Priya')
 
@@ -106,7 +98,13 @@ function Shell() {
   }, [identityKey, tickets])
   const heldHere = held.find((item) => item.ticket.raffleId === raffleId)
   const alreadyHasStub = Boolean(identityKey && holderAlreadyHasStub(tickets, identityKey))
-  const asked = header ? hostFirstName(header.hostName) : ''
+  const asked = header ? (hostFirstName(header.hostName) || 'Priya') : ''
+  const whoLine = header
+    ? (!header.whoCanEnter.trim() || header.whoCanEnter.trim() === 'This trip' || header.whoCanEnter.trim() === 'This trip only'
+      ? 'This trip only'
+      : header.whoCanEnter.trim())
+    : ''
+  const whenLine = header ? (header.drawNote.trim() || 'when Priya says so') : ''
 
   const refresh = async (id = raffleId): Promise<void> => {
     if (!id) {
@@ -170,7 +168,7 @@ function Shell() {
       const result = await startRaffle(session.wallet, url, session.identityKey, {
         title,
         prize,
-        prizeValue,
+        prizeValue: '',
         whoCanEnter,
         ticketCount,
         onePerPerson,
@@ -354,12 +352,15 @@ function Shell() {
 
         {!raffleId && (
           <section className="block">
-            <h2>Start</h2>
-            <p className="job">This trip’s draw. Free stub. One winner, in the room.</p>
             <div className="fields">
               <div className="field">
-                <label htmlFor="event">Event name</label>
-                <input id="event" value={title} onChange={(event) => setTitle(event.target.value)} />
+                <label htmlFor="event">Event</label>
+                <input
+                  id="event"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="Northstar offsite, Friday dinner"
+                />
               </div>
               <div className="field">
                 <label htmlFor="prize">Prize</label>
@@ -367,25 +368,16 @@ function Shell() {
                   id="prize"
                   value={prize}
                   onChange={(event) => setPrize(event.target.value)}
-                  placeholder="The thing they take home"
+                  placeholder="Friday off / the cabin weekend / the jacket"
                 />
               </div>
               <div className="field">
-                <label htmlFor="value">Approx value — HR only, not on the stub</label>
-                <input
-                  id="value"
-                  value={prizeValue}
-                  onChange={(event) => setPrizeValue(event.target.value)}
-                  placeholder="Optional"
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="who">Who can take a ticket</label>
+                <label htmlFor="who">Who can enter</label>
                 <input id="who" value={whoCanEnter} onChange={(event) => setWhoCanEnter(event.target.value)} />
               </div>
               <div className="grid">
                 <div className="field">
-                  <label htmlFor="count">How many tickets</label>
+                  <label htmlFor="count">Tickets</label>
                   <input
                     id="count"
                     type="number"
@@ -396,12 +388,12 @@ function Shell() {
                   />
                 </div>
                 <div className="field">
-                  <label htmlFor="when">When we draw</label>
+                  <label htmlFor="when">We draw</label>
                   <input id="when" value={drawNote} onChange={(event) => setDrawNote(event.target.value)} />
                 </div>
               </div>
               <div className="field">
-                <label htmlFor="hostName">Host name</label>
+                <label htmlFor="hostName">Ask</label>
                 <input
                   id="hostName"
                   value={hostName}
@@ -434,7 +426,7 @@ function Shell() {
                 disabled={busy !== null || connecting || overlayDown}
                 onClick={() => void runStart()}
               >
-                {busy === 'start' ? 'Starting…' : connecting ? 'Connecting…' : 'Start'}
+                {busy === 'start' ? 'Starting…' : 'Start'}
               </button>
             </div>
           </section>
@@ -452,34 +444,30 @@ function Shell() {
                 {listBusy ? 'Refreshing…' : 'Refresh'}
               </button>
             </div>
-            <dl className="meta">
-              <div>
-                <dt>Prize</dt>
-                <dd>{header.prize || header.title}</dd>
-              </div>
-              <div>
-                <dt>Taken</dt>
-                <dd className="count">{drawn ? 'Drawn' : `${taken} of ${header.ticketCount} taken`}</dd>
-              </div>
-              <div>
-                <dt>Who it’s for</dt>
-                <dd>{header.whoCanEnter || 'People on this trip'}</dd>
-              </div>
-              <div>
-                <dt>When we draw</dt>
-                <dd>{header.drawNote || 'When I press Draw in the room'}</dd>
-              </div>
-            </dl>
-            <p className="helper">
-              {header.onePerPerson
-                ? 'One stub per person.'
-                : 'You can pass this stub to a coworker.'}
-              {asked ? ` Ask ${asked}.` : ''}
+            <p className="facts">
+              {whoLine}
+              <br />
+              We draw {whenLine}
+              <br />
+              <span className="count">{taken} of {header.ticketCount} tickets taken</span>
+              {header.onePerPerson ? (
+                <>
+                  <br />
+                  One per person
+                </>
+              ) : (
+                <>
+                  <br />
+                  You can pass this stub to a coworker
+                </>
+              )}
+              <br />
+              Ask {asked}
+              <br />
+              {header.mustBePresent !== false
+                ? 'Free. Must be here when we draw.'
+                : 'Free.'}
             </p>
-            <p className="helper">{tripLine(header)}</p>
-            {isHost && header.prizeValue && (
-              <p className="helper">HR only: {header.prizeValue}</p>
-            )}
             {drawn && (
               <p className="status ok">
                 {winnerName(tickets, drawn) || `Stub ${drawn.winningIndex}`} won.
@@ -487,7 +475,7 @@ function Shell() {
             )}
             {myTickets.map((ticket) => (
               <div className="stub" key={`${ticket.txid}.${ticket.outputIndex}`}>
-                <p className="stub-mark">Stub</p>
+                <p className="stub-mark">Raffle</p>
                 <p className="stub-name">{ticket.holderName || guestName || 'Your stub'}</p>
                 <p className="stub-number count">{String(ticket.ticketIndex).padStart(2, '0')}</p>
               </div>
@@ -512,7 +500,7 @@ function Shell() {
                     disabled={busy !== null || connecting || overlayDown}
                     onClick={() => void runClaim()}
                   >
-                    {busy === 'claim' ? 'Taking…' : connecting ? 'Connecting…' : 'Take a ticket'}
+                    {busy === 'claim' ? 'Taking…' : 'Take a ticket'}
                   </button>
                   {isHost && !drawn && (
                     <button
@@ -543,7 +531,7 @@ function Shell() {
 
             {canPass && !drawn && (
               <div className="fields pass">
-                <h2>Pass</h2>
+                <h2>Pass your stub</h2>
                 <p className="job">Hand your stub to the person who had to leave early.</p>
                 <div className="field">
                   <label htmlFor="passName">Their name</label>
@@ -642,11 +630,10 @@ function Shell() {
         <summary>Overlay URL</summary>
         <p>Operators can point this at a local indexer.</p>
         <input value={url} onChange={(event) => setUrl(event.target.value)} />
-        {identityKey && <p>You: {shortKey(identityKey)}</p>}
       </details>
 
       <p className="fine-print">
-        Keys stay in the wallet. Free stub. This trip only.
+        You must be present at the stage during the drawing to claim your prize.
       </p>
     </div>
   )
