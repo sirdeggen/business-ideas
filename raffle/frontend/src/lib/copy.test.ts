@@ -14,8 +14,10 @@ const raffleCard = catalog.slice(
 describe('first-paint copy', () => {
   it('names the offsite and empty states, not overlay jargon', () => {
     expect(app).toContain('This trip’s draw')
-    expect(app).toContain('No draw in this link.')
+    expect(app).toContain("const NO_DRAW_IN_THIS_LINK = 'No draw in this link.'")
+    expect(app).toContain('{NO_DRAW_IN_THIS_LINK}')
     expect(app).not.toContain('No raffle in this link.')
+    expect(app).not.toContain('setListError(errorMessage(err))')
     expect(app).toContain('Event')
     expect(app).toContain('Northstar offsite, Friday dinner')
     expect(app).toContain('Friday off / the cabin weekend / the jacket')
@@ -80,7 +82,7 @@ describe('first-paint copy', () => {
     expect(app).toContain('const showInstall = walletMissing || actionNeedsInstall')
     expect(app).toContain('const combinedError = actionError || walletError')
     expect(app).not.toContain('Boolean(combinedError) && !overlayDown')
-    expect(app).not.toContain('listError || walletError')
+    expect(app).not.toContain('listError')
     expect(app).toContain('Install BSV Desktop')
     expect(app).toContain('No draw in this link.')
   })

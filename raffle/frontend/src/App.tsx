@@ -27,6 +27,8 @@ import {
 } from './lib/config'
 import { lookupRaffle, type OverlayDraw, type OverlayHeader, type OverlayTicket } from './lib/overlay'
 
+const NO_DRAW_IN_THIS_LINK = 'No draw in this link.'
+
 function raffleIdFromUrl(): string {
   if (typeof window === 'undefined') return ''
   return (new URLSearchParams(window.location.search).get('r') ?? '').trim()
@@ -59,7 +61,6 @@ function Shell() {
   const [tickets, setTickets] = useState<OverlayTicket[]>([])
   const [draws, setDraws] = useState<OverlayDraw[]>([])
   const [listBusy, setListBusy] = useState(false)
-  const [listError, setListError] = useState<string | null>(null)
 
   const [title, setTitle] = useState('')
   const [prize, setPrize] = useState('')
@@ -115,20 +116,19 @@ function Shell() {
       setHeader(null)
       setTickets([])
       setDraws([])
-      setListError(null)
       return
     }
     setListBusy(true)
-    setListError(null)
     try {
       const view = await lookupRaffle(url, id)
       setHeader(view.header)
       setTickets(view.tickets)
       setDraws(view.draws)
-      if (!view.header) setListError('No draw in this link.')
     } catch (err) {
       console.error('Lookup failed', err)
-      setListError(errorMessage(err))
+      setHeader(null)
+      setTickets([])
+      setDraws([])
     } finally {
       setListBusy(false)
     }
@@ -447,7 +447,7 @@ function Shell() {
         )}
 
         {raffleId && !header && !listBusy && (
-          <p className="empty">{listError || 'No draw in this link.'}</p>
+          <p className="empty">{NO_DRAW_IN_THIS_LINK}</p>
         )}
 
         {header && (
