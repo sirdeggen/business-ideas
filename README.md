@@ -66,3 +66,10 @@ A gift for a purpose. A receipt bound to that purpose.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/grants/
 - How to run: [grant-receipt/README.md](./grant-receipt/README.md)
+
+## Raffle
+
+This trip’s draw. Free stub. One winner, in the room.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/raffle/
+- How to run: [raffle/README.md](./raffle/README.md)
