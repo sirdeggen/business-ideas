@@ -22,6 +22,7 @@ import {
   CHROME_ALLOW_HINT,
   DESKTOP_INSTALL_URL,
   errorMessage,
+  isWalletMissing,
   overlayCheckFailed
 } from './lib/config'
 import { lookupRaffle, type OverlayDraw, type OverlayHeader, type OverlayTicket } from './lib/overlay'
@@ -51,7 +52,7 @@ function winnerName(tickets: OverlayTicket[], drawn: OverlayDraw): string {
 
 function Shell() {
   const { url, setUrl, online, probeError } = useOverlay()
-  const { wallet, identityKey, connecting, error: walletError, connect } = useWallet()
+  const { wallet, identityKey, connecting, error: walletError, walletMissing, connect } = useWallet()
 
   const [raffleId, setRaffleId] = useState(() => raffleIdFromUrl())
   const [header, setHeader] = useState<OverlayHeader | null>(null)
@@ -77,6 +78,7 @@ function Shell() {
   const [busy, setBusy] = useState<'start' | 'claim' | 'pass' | 'draw' | 'receive' | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [actionNeedsInstall, setActionNeedsInstall] = useState(false)
   const [lastAction, setLastAction] = useState<'start' | 'claim' | 'pass' | 'draw' | 'receive'>('start')
 
   const overlayDown = online === false
@@ -97,6 +99,8 @@ function Shell() {
     ))
   }, [identityKey, tickets])
   const heldHere = held.find((item) => item.ticket.raffleId === raffleId)
+  const hasStub = Boolean(heldHere || myTickets.length > 0)
+  const showPass = Boolean(canPass && !drawn && hasStub)
   const alreadyHasStub = Boolean(identityKey && holderAlreadyHasStub(tickets, identityKey))
   const asked = header ? (hostFirstName(header.hostName) || 'Priya') : ''
   const whoLine = header
@@ -160,6 +164,7 @@ function Shell() {
   const runStart = async (): Promise<void> => {
     setLastAction('start')
     setActionError(null)
+    setActionNeedsInstall(false)
     setStatus(null)
     const session = await ensureWallet()
     if (!session) return
@@ -186,6 +191,7 @@ function Shell() {
     } catch (err) {
       console.error('Start failed', err)
       setActionError(errorMessage(err))
+      setActionNeedsInstall(isWalletMissing(err))
     } finally {
       setBusy(null)
     }
@@ -195,6 +201,7 @@ function Shell() {
     if (!header) return
     setLastAction('claim')
     setActionError(null)
+    setActionNeedsInstall(false)
     setStatus(null)
     if (!guestName.trim()) {
       setActionError('Write the name that goes on the stub.')
@@ -221,6 +228,7 @@ function Shell() {
     } catch (err) {
       console.error('Claim failed', err)
       setActionError(errorMessage(err))
+      setActionNeedsInstall(isWalletMissing(err))
     } finally {
       setBusy(null)
     }
@@ -230,6 +238,7 @@ function Shell() {
     if (!header) return
     setLastAction('pass')
     setActionError(null)
+    setActionNeedsInstall(false)
     setStatus(null)
     const session = await ensureWallet()
     if (!session) return
@@ -260,6 +269,7 @@ function Shell() {
     } catch (err) {
       console.error('Pass failed', err)
       setActionError(errorMessage(err))
+      setActionNeedsInstall(isWalletMissing(err))
     } finally {
       setBusy(null)
     }
@@ -269,6 +279,7 @@ function Shell() {
     if (!header) return
     setLastAction('draw')
     setActionError(null)
+    setActionNeedsInstall(false)
     setStatus(null)
     const session = await ensureWallet()
     if (!session) return
@@ -289,6 +300,7 @@ function Shell() {
     } catch (err) {
       console.error('Draw failed', err)
       setActionError(errorMessage(err))
+      setActionNeedsInstall(isWalletMissing(err))
     } finally {
       setBusy(null)
     }
@@ -297,6 +309,7 @@ function Shell() {
   const runReceive = async (ticket: OverlayTicket): Promise<void> => {
     setLastAction('receive')
     setActionError(null)
+    setActionNeedsInstall(false)
     setStatus(null)
     const session = await ensureWallet()
     if (!session) return
@@ -312,6 +325,7 @@ function Shell() {
     } catch (err) {
       console.error('Receive failed', err)
       setActionError(errorMessage(err))
+      setActionNeedsInstall(isWalletMissing(err))
     } finally {
       setBusy(null)
     }
@@ -328,7 +342,7 @@ function Shell() {
   }
 
   const combinedError = actionError || walletError
-  const showInstall = Boolean(combinedError) && !overlayDown
+  const showInstall = walletMissing || actionNeedsInstall
   const showTake = Boolean(header && !drawn && remaining > 0 && !alreadyHasStub)
 
   return (
@@ -529,7 +543,7 @@ function Shell() {
               </div>
             )}
 
-            {canPass && !drawn && (
+            {showPass && (
               <div className="fields pass">
                 <h2>Pass your stub</h2>
                 <p className="job">Hand your stub to the person who had to leave early.</p>
@@ -558,17 +572,10 @@ function Shell() {
                   <button
                     type="button"
                     className="btn"
-                    disabled={busy !== null || connecting || overlayDown || !passTo.trim() || !passName.trim() || (!heldHere && myTickets.length === 0)}
+                    disabled={busy !== null || connecting || overlayDown || !passTo.trim() || !passName.trim() || !hasStub}
                     onClick={() => void runPass()}
                   >
                     {busy === 'pass' ? 'Handing…' : 'Pass'}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => void navigator.clipboard.writeText(shareUrl(header.raffleId))}
-                  >
-                    Copy link
                   </button>
                 </div>
               </div>
@@ -587,17 +594,15 @@ function Shell() {
               </div>
             )}
 
-            {!canPass && (
-              <div className="actions">
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => void navigator.clipboard.writeText(shareUrl(header.raffleId))}
-                >
-                  Copy link
-                </button>
-              </div>
-            )}
+            <div className="actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void navigator.clipboard.writeText(shareUrl(header.raffleId))}
+              >
+                Copy link
+              </button>
+            </div>
           </section>
         )}
 

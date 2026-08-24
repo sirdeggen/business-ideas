@@ -5,6 +5,11 @@ import { describe, expect, it } from 'vitest'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const app = readFileSync(join(here, '../App.tsx'), 'utf8')
+const catalog = readFileSync(join(here, '../../../../pages/index.html'), 'utf8')
+const raffleCard = catalog.slice(
+  catalog.indexOf('href="./raffle/"'),
+  catalog.indexOf('</article>', catalog.indexOf('href="./raffle/"'))
+)
 
 describe('first-paint copy', () => {
   it('names the offsite and empty states, not overlay jargon', () => {
@@ -56,5 +61,33 @@ describe('first-paint copy', () => {
     expect(app).not.toMatch(/\bpot\b/i)
     expect(app).not.toMatch(/buy extra/i)
     expect(app).not.toMatch(/whale/i)
+  })
+
+  it('hides Pass, hex, and wallet chrome until the guest has a stub', () => {
+    expect(app).toContain('const hasStub = Boolean(heldHere || myTickets.length > 0)')
+    expect(app).toContain('const showPass = Boolean(canPass && !drawn && hasStub)')
+    expect(app).toContain('{showPass && (')
+    expect(app).not.toContain('{canPass && !drawn && (')
+    expect(app).not.toContain('Wallet key')
+    expect(app).not.toContain('shortKey(')
+    expect(app).not.toContain('{identityKey}')
+    expect(app).not.toContain('{shortKey')
+  })
+
+  it('shows Install Desktop only when the wallet is missing', () => {
+    expect(app).toContain('isWalletMissing')
+    expect(app).toContain('const showInstall = walletMissing || actionNeedsInstall')
+    expect(app).not.toContain('Boolean(combinedError) && !overlayDown')
+    expect(app).toContain('Install BSV Desktop')
+  })
+
+  it('keeps the catalog card Server + View, not Open UI or Live', () => {
+    expect(raffleCard).toContain('class="badge">Server<')
+    expect(raffleCard).toContain('>View<')
+    expect(raffleCard).toContain('How to run')
+    expect(raffleCard).not.toContain('Open UI')
+    expect(raffleCard).not.toContain('soon')
+    expect(raffleCard).not.toContain('Live')
+    expect(raffleCard).not.toContain('eyebrow')
   })
 })

@@ -33,7 +33,7 @@ Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access 
 2. Host: fill Margaret’s eight fields (Event, Prize, Who can enter, Tickets, One per person, We draw, Must be here to win, Ask). Click **Start**. Approve Desktop.
 3. Share `?r=<raffleId>`.
 4. Guest: read the offsite with no wallet — event, prize, This trip only, We draw [moment], “14 of 40 taken”, One per person (or “You can pass this stub to a coworker”), Ask Priya, “Free. Must be here when we draw.” Then **Take a ticket**.
-5. If one-per-person is off, **Pass your stub** hands it to the person who had to leave early.
+5. After the guest has a stub, if one-per-person is off, **Pass your stub** hands it to the person who had to leave early.
 6. Host clicks **Draw** in the room. The winner is a name.
 
 ## Public overlay vs local Docker
