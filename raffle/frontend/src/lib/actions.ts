@@ -13,6 +13,7 @@ import {
   encodeHeaderFields,
   encodeTicketFields,
   isIdentityKey,
+  holderAlreadyHasStub,
   liveTickets,
   makeRaffleId,
   nextTicketIndex,
@@ -47,11 +48,14 @@ export interface HeldTicket {
 
 export interface StartInput {
   title: string
+  prize: string
+  prizeValue: string
   whoCanEnter: string
   ticketCount: number
-  transferable: boolean
+  onePerPerson: boolean
   drawNote: string
-  terms: string
+  mustBePresent: boolean
+  hostName: string
 }
 
 export interface StartResult {
@@ -71,6 +75,7 @@ export interface DrawResult {
   txid: string
   winningOutpoint: string
   winningIndex: number
+  winnerName: string
   overlayError?: string
 }
 
@@ -194,16 +199,22 @@ export async function startRaffle(
   input: StartInput
 ): Promise<StartResult> {
   const timestamp = nowIso()
+  if (!input.hostName.trim()) throw new Error('Host name is required.')
+  if (!input.prize.trim()) throw new Error('Prize is required.')
   const raffleId = makeRaffleId(identityKey, input.title.trim(), timestamp, randomNonce())
   const header: Omit<RaffleHeader, 'magic' | 'version' | 'kind'> = {
     raffleId,
     host: identityKey,
     title: input.title.trim(),
+    prize: input.prize.trim(),
+    prizeValue: input.prizeValue.trim(),
     whoCanEnter: input.whoCanEnter.trim(),
     ticketCount: input.ticketCount,
-    transferable: input.transferable,
+    onePerPerson: input.onePerPerson,
+    transferable: !input.onePerPerson,
     drawNote: input.drawNote.trim(),
-    terms: input.terms.trim(),
+    mustBePresent: input.mustBePresent,
+    hostName: input.hostName.trim(),
     timestamp
   }
   const invalid = validateHeader({
@@ -264,14 +275,21 @@ export async function claimTicket(
   overlayUrl: string,
   identityKey: string,
   header: OverlayHeader,
-  tickets: OverlayTicket[]
+  tickets: OverlayTicket[],
+  holderName: string
 ): Promise<TicketResult> {
+  const name = holderName.trim()
+  if (!name) throw new Error('Write the name that goes on the stub.')
+  if (header.onePerPerson && holderAlreadyHasStub(tickets, identityKey)) {
+    throw new Error('One stub per person for this draw.')
+  }
   const ticketIndex = nextTicketIndex(header, tickets)
-  if (ticketIndex == null) throw new Error('No tickets left to claim.')
+  if (ticketIndex == null) throw new Error('No stubs left.')
   const ticket: Omit<RaffleTicket, 'magic' | 'version' | 'kind'> = {
     raffleId: header.raffleId,
     ticketIndex,
     holder: identityKey,
+    holderName: name,
     timestamp: nowIso()
   }
   const invalid = validateTicket({
@@ -293,11 +311,11 @@ export async function claimTicket(
   )
 
   const response = await wallet.createAction({
-    description: `Claim raffle ticket ${ticketIndex}`,
+    description: `Take stub ${ticketIndex}`,
     outputs: [{
       satoshis: 1,
       lockingScript: lockingScript.toHex(),
-      outputDescription: `${header.title} ticket ${ticketIndex}`,
+      outputDescription: `${header.title} stub ${ticketIndex}`,
       basket: BASKET,
       customInstructions: JSON.stringify({
         protocolID: PROTOCOL_ID,
@@ -391,16 +409,20 @@ export async function passTicket(
   overlayUrl: string,
   held: HeldTicket,
   senderIdentityKey: string,
-  recipientIdentityKey: string
+  recipientIdentityKey: string,
+  recipientName: string
 ): Promise<TicketResult> {
   if (!isIdentityKey(recipientIdentityKey)) {
-    throw new Error('Recipient must be a 66-hex compressed identity key')
+    throw new Error('Paste the coworker’s account to hand them this stub.')
   }
+  const name = recipientName.trim()
+  if (!name) throw new Error('Write the name that goes on their stub.')
   const keyID = randomKeyId()
   const ticket: Omit<RaffleTicket, 'magic' | 'version' | 'kind'> = {
     raffleId: held.ticket.raffleId,
     ticketIndex: held.ticket.ticketIndex,
     holder: recipientIdentityKey,
+    holderName: name,
     timestamp: nowIso(),
     keyID,
     sender: senderIdentityKey
@@ -420,9 +442,9 @@ export async function passTicket(
     [{
       satoshis: 1,
       lockingScript: lockingScript.toHex(),
-      outputDescription: `Pass raffle ticket ${held.ticket.ticketIndex}`
+      outputDescription: `Hand stub ${held.ticket.ticketIndex}`
     }],
-    `Pass raffle ticket ${held.ticket.ticketIndex}`
+    `Hand stub ${held.ticket.ticketIndex}`
   )
 
   const outputIndex = raffleOutputIndex(txFromWalletBeef(spent.tx))
@@ -467,7 +489,7 @@ export async function acceptPass(
         tags: [BASKET, 'transfer', ticket.raffleId, String(ticket.ticketIndex)]
       }
     }],
-    description: `Receive raffle ticket ${ticket.ticketIndex}`
+    description: `Receive stub ${ticket.ticketIndex}`
   })
 }
 
@@ -480,7 +502,7 @@ export async function drawWinner(
   draws: OverlayDraw[]
 ): Promise<DrawResult> {
   assertHostCanDraw(header.host, identityKey)
-  if (draws.length > 0) throw new Error('This raffle already has a winner.')
+  if (draws.length > 0) throw new Error('This draw already has a winner.')
   const winner = pickLiveWinner(tickets, draws)
   const keyID = randomKeyId()
   const lockingScript = await pushdrop(wallet).lock(
@@ -488,6 +510,7 @@ export async function drawWinner(
       raffleId: header.raffleId,
       winningOutpoint: `${winner.txid}.${winner.outputIndex}`,
       winningIndex: winner.ticketIndex,
+      winnerName: winner.holderName || header.hostName,
       timestamp: nowIso()
     }),
     PROTOCOL_ID,
@@ -498,11 +521,11 @@ export async function drawWinner(
   )
 
   const response = await wallet.createAction({
-    description: `Draw winner for ${header.title}`,
+    description: `Draw in the room: ${header.title}`,
     outputs: [{
       satoshis: 1,
       lockingScript: lockingScript.toHex(),
-      outputDescription: `Winner ticket ${winner.ticketIndex}`,
+      outputDescription: winner.holderName || `Stub ${winner.ticketIndex}`,
       basket: BASKET,
       customInstructions: JSON.stringify({
         protocolID: PROTOCOL_ID,
@@ -524,7 +547,8 @@ export async function drawWinner(
     return {
       txid: response.txid,
       winningOutpoint: `${winner.txid}.${winner.outputIndex}`,
-      winningIndex: winner.ticketIndex
+      winningIndex: winner.ticketIndex,
+      winnerName: winner.holderName || header.hostName
     }
   } catch (error) {
     const detail = error instanceof Error && error.message.trim() ? error.message : String(error ?? '')
@@ -532,6 +556,7 @@ export async function drawWinner(
       txid: response.txid,
       winningOutpoint: `${winner.txid}.${winner.outputIndex}`,
       winningIndex: winner.ticketIndex,
+      winnerName: winner.holderName || header.hostName,
       overlayError: detail.trim() || 'overlay submit failed with no message'
     }
   }

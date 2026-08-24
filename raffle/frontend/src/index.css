@@ -264,6 +264,36 @@ input:focus, textarea:focus, select:focus {
   font-variant-numeric: tabular-nums lining-nums;
 }
 
+.stub {
+  margin: 20px 0 8px;
+  max-width: 240px;
+  padding: 16px 18px 14px;
+  background: var(--paper);
+  border: 1px solid var(--hair);
+}
+
+.stub-mark {
+  margin: 0 0 10px;
+  font-family: var(--sans);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.stub-name {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.stub-number {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
 code {
   font-family: var(--mono);
   font-size: 12px;

@@ -69,7 +69,7 @@ A gift for a purpose. A receipt bound to that purpose.
 
 ## Raffle
 
-Start a raffle. Pass a ticket. Draw a winner.
+This trip’s draw. Free stub. One winner, in the room.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/raffle/
 - How to run: [raffle/README.md](./raffle/README.md)

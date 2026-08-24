@@ -355,19 +355,23 @@ function encodeContextFields(parsed: RafflePayload): number[][] {
   if (parsed.kind === 'header') {
     return [
       utf8(MAGIC), utf8(parsed.version), utf8('header'), utf8(parsed.raffleId), utf8(parsed.host),
-      utf8(parsed.title), utf8(parsed.whoCanEnter), utf8(String(parsed.ticketCount)),
-      utf8(parsed.transferable ? 'yes' : 'no'), utf8(parsed.drawNote), utf8(parsed.terms), utf8(parsed.timestamp)
+      utf8(parsed.title), utf8(parsed.prize), utf8(parsed.whoCanEnter), utf8(String(parsed.ticketCount)),
+      utf8(parsed.onePerPerson ? 'yes' : 'no'), utf8(parsed.drawNote),
+      utf8(parsed.mustBePresent ? 'yes' : 'no'), utf8(parsed.hostName), utf8(parsed.timestamp),
+      utf8(parsed.prizeValue ?? '')
     ]
   }
   if (parsed.kind === 'ticket') {
     return [
       utf8(MAGIC), utf8(parsed.version), utf8('ticket'), utf8(parsed.raffleId),
-      utf8(String(parsed.ticketIndex)), utf8(parsed.holder), utf8(parsed.timestamp)
+      utf8(String(parsed.ticketIndex)), utf8(parsed.holder), utf8(parsed.holderName ?? ''),
+      utf8(parsed.timestamp)
     ]
   }
   return [
     utf8(MAGIC), utf8(parsed.version), utf8('draw'), utf8(parsed.raffleId),
-    utf8(parsed.winningOutpoint), utf8(String(parsed.winningIndex)), utf8(parsed.timestamp)
+    utf8(parsed.winningOutpoint), utf8(String(parsed.winningIndex)), utf8(parsed.timestamp),
+    utf8(parsed.winnerName ?? '')
   ]
 }
 

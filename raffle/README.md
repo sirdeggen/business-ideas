@@ -1,8 +1,8 @@
 # Raffle (v0)
 
-Start a raffle. Pass a ticket. Draw a winner.
+This trip’s draw. Free stub. One winner, in the room.
 
-A digital tombola: the host names a prize, guests claim tickets, anyone with a ticket can pass it if the host said so, and only the host draws. Not a casino. Not a pot.
+A company-offsite tombola: everyone on the trip takes a free stub, the host draws in the room. Not a sold raffle, not a casino, not a sweepstakes. There is no ticket price.
 
 Pages defaults to the public overlay: `https://overlay-us-1.bsvb.tech`, topic `tm_anytx`, lookup `ls_anytx`. After `createAction`, the app broadcasts with `@bsv/sdk` `TopicBroadcaster(['tm_anytx'])` pointed at that host. The page queries `ls_anytx` via `LookupResolver`, then keeps only this app’s raffle PushDrop fields (MAGIC). A stranger can read a raffle without a wallet.
 
@@ -17,7 +17,7 @@ Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access 
 - Wallet interface: BRC-100. The app never holds keys. It calls `createAction`, `getPublicKey`, `listOutputs`, `signAction`, and `internalizeAction` via the visitor’s Desktop.
 - Identity: 66-hex compressed pubkey. The host is the `identityKey` of the visitor who clicks Start (`WalletClient('auto', originator())`, originator = page hostname, on Pages `sirdeggen.github.io`).
 - State: wallet basket `raffle`. Public Pages uses overlay topic `tm_anytx` / lookup `ls_anytx` (client-filtered). Local Docker still hosts custom `tm_raffle` / `ls_raffle`.
-- Encoding: PushDrop fields — header (title, who can enter, ticket count, transferable, draw note, terms), ticket (index + holder), draw (winning outpoint or index).
+- Encoding: PushDrop fields — header (event name, prize, optional HR value, who can take a ticket, ticket count, one-per-person, when we draw, must-be-here, host name), ticket (index + holder name), draw (winning stub + name).
 - Frontend: Vite + React. Wallet via `WalletClient('auto', originator)` from `@bsv/sdk`. Overlay via `@bsv/sdk` `TopicBroadcaster` and `LookupResolver`.
 - Overlay (public): `https://overlay-us-1.bsvb.tech`. Overlay (local optional): `@bsv/overlay-express` + MongoDB + MySQL.
 
@@ -30,11 +30,11 @@ Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access 
 ## How to try
 
 1. Open the UI. No wallet prompt on first paint.
-2. Host: fill the form (prize, who can enter, ticket count, transferable, when to draw, optional terms). Click **Start**. Approve Desktop.
+2. Host: fill Margaret’s eight fields (event name, prize, who can take a ticket, how many tickets, one per person, when we draw, must be here, host name). Optional HR value stays off the stub. Click **Start**. Approve Desktop.
 3. Share `?r=<raffleId>`.
-4. Guest: read the prize and remaining tickets with no wallet. Click **Claim** to take a ticket, or **Receive** if someone passed you one.
-5. **Pass** spends your ticket UTXO and recreates it for a coworker (paste their identity), or copy the claim link.
-6. Host clicks **Draw**. One live ticket wins. The winner is announced on the overlay.
+4. Guest: read the offsite (event, prize, who it’s for, when, “14 of 40 taken”, host first name) with no wallet. Write a name, then **Take a ticket**.
+5. If one-per-person is off, **Pass** hands the stub to the person who had to leave early.
+6. Host clicks **Draw** in the room. The winner is a name.
 
 ## Public overlay vs local Docker
 

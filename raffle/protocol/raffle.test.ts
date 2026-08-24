@@ -5,6 +5,7 @@ import {
   SCHEMA_VERSION,
   classifyRaffleTransaction,
   encodeDrawFields,
+  hostFirstName,
   encodeHeaderFields,
   encodeTicketFields,
   liveTickets,
@@ -26,20 +27,26 @@ const GUEST = `03${'cd'.repeat(32)}`
 const OUTPOINT = `${'ab'.repeat(32)}.0`
 
 function header(partial: Partial<RaffleHeader> = {}): RaffleHeader {
+  const onePerPerson = partial.onePerPerson ?? true
+  const transferable = partial.transferable ?? !onePerPerson
   return {
     magic: MAGIC,
     version: SCHEMA_VERSION,
     kind: 'header',
     raffleId: 'a'.repeat(32),
     host: HOST,
-    title: 'Office tombola',
-    whoCanEnter: 'Anyone with this link',
+    title: 'Northstar offsite, Friday dinner',
+    prize: 'The leftover swag box',
+    prizeValue: '',
+    whoCanEnter: 'People on this trip',
     ticketCount: 8,
-    transferable: true,
-    drawNote: 'We draw together on Friday',
-    terms: '',
+    drawNote: 'After dinner, in the room',
+    mustBePresent: true,
+    hostName: 'Priya',
     timestamp: '2026-08-24T12:00:00Z',
-    ...partial
+    ...partial,
+    onePerPerson,
+    transferable
   }
 }
 
@@ -51,6 +58,7 @@ function ticket(partial: Partial<RaffleTicket> = {}): RaffleTicket {
     raffleId: 'a'.repeat(32),
     ticketIndex: 1,
     holder: GUEST,
+    holderName: 'Alex',
     timestamp: '2026-08-24T12:01:00Z',
     ...partial
   }
@@ -64,6 +72,7 @@ function draw(partial: Partial<RaffleDraw> = {}): RaffleDraw {
     raffleId: 'a'.repeat(32),
     winningOutpoint: OUTPOINT,
     winningIndex: 1,
+    winnerName: 'Alex',
     timestamp: '2026-08-24T12:05:00Z',
     ...partial
   }
@@ -98,10 +107,11 @@ describe('raffle protocol', () => {
     if (parsed?.kind === 'draw') expect(parsed.winningIndex).toBe(4)
   })
 
-  it('validates host, title, ticket count, and holder', () => {
+  it('validates host, event name, prize, ticket count, and holder', () => {
     expect(validateHeader(header())).toBeNull()
     expect(validateHeader(header({ host: 'not-a-key' }))).toMatch(/host/)
-    expect(validateHeader(header({ title: '' }))).toMatch(/title/)
+    expect(validateHeader(header({ title: '' }))).toMatch(/event name/)
+    expect(validateHeader(header({ prize: '' }))).toMatch(/prize/)
     expect(validateHeader(header({ ticketCount: 0 }))).toMatch(/ticket count/)
     expect(validateHeader(header({ ticketCount: 101 }))).toMatch(/ticket count/)
     expect(validateTicket(ticket())).toBeNull()
@@ -118,7 +128,7 @@ describe('raffle protocol', () => {
   })
 
   it('hashes and lists a raffle id', () => {
-    const id = makeRaffleId(HOST, 'Office tombola', '2026-08-24T12:00:00Z', 'n1')
+    const id = makeRaffleId(HOST, 'Northstar offsite, Friday dinner', '2026-08-24T12:00:00Z', 'n1')
     expect(id).toMatch(/^[0-9a-f]{32}$/)
     expect(raffleHash(header())).toMatch(/^[0-9a-f]{64}$/)
   })
@@ -163,6 +173,25 @@ describe('raffle protocol', () => {
     expect(classifyRaffleTransaction([], [
       { index: 0, item: draw() }
     ])).toEqual({ action: 'draw', admitOutputIndexes: [0] })
+  })
+
+  it('reads a host first name and still parses the older header shape', () => {
+    expect(hostFirstName('Priya Shah')).toBe('Priya')
+    expect(hostFirstName('Priya')).toBe('Priya')
+    const utf8 = (value: string) => Array.from(new TextEncoder().encode(value))
+    const older = [
+      utf8(MAGIC), utf8(SCHEMA_VERSION), utf8('header'),
+      utf8('a'.repeat(32)), utf8(HOST), utf8('Friday dinner'),
+      utf8('People on this trip'), utf8('8'), utf8('no'),
+      utf8('After dinner'), utf8(''), utf8('2026-08-24T12:00:00Z')
+    ]
+    const parsed = parseRaffleFields(older)
+    expect(parsed?.kind).toBe('header')
+    if (parsed?.kind === 'header') {
+      expect(parsed.title).toBe('Friday dinner')
+      expect(parsed.prize).toBe('Friday dinner')
+      expect(parsed.onePerPerson).toBe(true)
+    }
   })
 
   it('rejects a transfer that changes the ticket index', () => {

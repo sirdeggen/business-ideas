@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  holderAlreadyHasStub,
+  hostFirstName,
   liveTickets,
-  remainingCount
+  remainingCount,
+  takenCount
 } from '../../protocol/raffle'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
@@ -41,10 +44,16 @@ function goToRaffle(raffleId: string): void {
   window.history.replaceState({}, '', url)
 }
 
-function winnerLine(tickets: OverlayTicket[], winningIndex: number): string {
-  const ticket = tickets.find((item) => item.ticketIndex === winningIndex)
-  if (!ticket) return `Ticket ${winningIndex}`
-  return `Ticket ${ticket.ticketIndex}`
+function winnerName(tickets: OverlayTicket[], drawn: OverlayDraw): string {
+  if (drawn.winnerName.trim()) return drawn.winnerName.trim()
+  const ticket = tickets.find((item) => item.ticketIndex === drawn.winningIndex)
+  return ticket?.holderName.trim() || ''
+}
+
+function tripLine(header: OverlayHeader): string {
+  const parts = ['Free, this trip only']
+  if (header.mustBePresent) parts.push('must be here when we draw')
+  return `${parts.join(', ')}.`
 }
 
 function Shell() {
@@ -58,13 +67,18 @@ function Shell() {
   const [listBusy, setListBusy] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
 
-  const [title, setTitle] = useState('Friday offsite')
-  const [whoCanEnter, setWhoCanEnter] = useState('Anyone at the offsite')
-  const [ticketCount, setTicketCount] = useState(20)
-  const [transferable, setTransferable] = useState(true)
-  const [drawNote, setDrawNote] = useState('After lunch')
-  const [terms, setTerms] = useState('')
+  const [title, setTitle] = useState('Northstar offsite, Friday dinner')
+  const [prize, setPrize] = useState('The leftover swag box')
+  const [prizeValue, setPrizeValue] = useState('')
+  const [whoCanEnter, setWhoCanEnter] = useState('People on this trip')
+  const [ticketCount, setTicketCount] = useState(40)
+  const [onePerPerson, setOnePerPerson] = useState(true)
+  const [drawNote, setDrawNote] = useState('When I press Draw in the room')
+  const [mustBePresent, setMustBePresent] = useState(true)
+  const [hostName, setHostName] = useState('Priya')
 
+  const [guestName, setGuestName] = useState('')
+  const [passName, setPassName] = useState('')
   const [passTo, setPassTo] = useState('')
   const [held, setHeld] = useState<HeldTicket[]>([])
 
@@ -74,10 +88,12 @@ function Shell() {
   const [lastAction, setLastAction] = useState<'start' | 'claim' | 'pass' | 'draw' | 'receive'>('start')
 
   const overlayDown = online === false
+  const taken = header ? takenCount(header, tickets) : 0
   const remaining = header ? remainingCount(header, tickets) : 0
-  const live = header ? liveTickets(tickets, draws) as OverlayTicket[] : []
+  const live = header ? liveTickets(tickets, draws) : []
   const drawn = draws[0] ?? null
   const isHost = Boolean(identityKey && header && identityKey === header.host)
+  const canPass = Boolean(header && !header.onePerPerson)
   const myTickets = useMemo(() => {
     if (!identityKey) return [] as OverlayTicket[]
     return live.filter((ticket) => ticket.holder === identityKey)
@@ -89,6 +105,8 @@ function Shell() {
     ))
   }, [identityKey, tickets])
   const heldHere = held.find((item) => item.ticket.raffleId === raffleId)
+  const alreadyHasStub = Boolean(identityKey && holderAlreadyHasStub(tickets, identityKey))
+  const asked = header ? hostFirstName(header.hostName) : ''
 
   const refresh = async (id = raffleId): Promise<void> => {
     if (!id) {
@@ -151,17 +169,20 @@ function Shell() {
     try {
       const result = await startRaffle(session.wallet, url, session.identityKey, {
         title,
+        prize,
+        prizeValue,
         whoCanEnter,
         ticketCount,
-        transferable,
+        onePerPerson,
         drawNote,
-        terms
+        mustBePresent,
+        hostName
       })
       setRaffleId(result.raffleId)
       goToRaffle(result.raffleId)
       setStatus(result.overlayError
-        ? `Started in wallet. Overlay submit failed: ${result.overlayError}`
-        : 'Raffle started. Share the link.')
+        ? `Started. Overlay submit failed: ${result.overlayError}`
+        : 'Draw started. Share the link.')
       if (result.overlayError) setActionError(result.overlayError)
       await refresh(result.raffleId)
     } catch (err) {
@@ -177,14 +198,25 @@ function Shell() {
     setLastAction('claim')
     setActionError(null)
     setStatus(null)
+    if (!guestName.trim()) {
+      setActionError('Write the name that goes on the stub.')
+      return
+    }
     const session = await ensureWallet()
     if (!session) return
     setBusy('claim')
     try {
-      const result = await claimTicket(session.wallet, url, session.identityKey, header, tickets)
+      const result = await claimTicket(
+        session.wallet,
+        url,
+        session.identityKey,
+        header,
+        tickets,
+        guestName
+      )
       setStatus(result.overlayError
-        ? `Claimed ticket ${result.ticketIndex}. Overlay submit failed: ${result.overlayError}`
-        : `You have ticket ${result.ticketIndex}.`)
+        ? `Took stub ${result.ticketIndex}. Overlay submit failed: ${result.overlayError}`
+        : `Your stub is ${result.ticketIndex}.`)
       if (result.overlayError) setActionError(result.overlayError)
       await refresh()
       await refreshHeld(session.wallet)
@@ -206,17 +238,25 @@ function Shell() {
     const mine = held.find((item) => item.ticket.raffleId === header.raffleId)
       ?? held.find((item) => myTickets.some((ticket) => ticket.ticketIndex === item.ticket.ticketIndex))
     if (!mine) {
-      setActionError('You need a ticket in this wallet before you can pass one.')
+      setActionError('You need a stub in this wallet before you can hand one over.')
       return
     }
     setBusy('pass')
     try {
-      const result = await passTicket(session.wallet, url, mine, session.identityKey, passTo.trim())
+      const result = await passTicket(
+        session.wallet,
+        url,
+        mine,
+        session.identityKey,
+        passTo.trim(),
+        passName
+      )
       setStatus(result.overlayError
-        ? `Passed ticket ${result.ticketIndex}. Overlay submit failed: ${result.overlayError}`
-        : `Passed ticket ${result.ticketIndex}.`)
+        ? `Handed stub ${result.ticketIndex}. Overlay submit failed: ${result.overlayError}`
+        : `Handed stub ${result.ticketIndex} to ${passName.trim()}.`)
       if (result.overlayError) setActionError(result.overlayError)
       setPassTo('')
+      setPassName('')
       await refresh()
       await refreshHeld(session.wallet)
     } catch (err) {
@@ -244,8 +284,8 @@ function Shell() {
     try {
       const result = await drawWinner(session.wallet, url, session.identityKey, header, tickets, draws)
       setStatus(result.overlayError
-        ? `Drew ticket ${result.winningIndex}. Overlay submit failed: ${result.overlayError}`
-        : `Ticket ${result.winningIndex} won.`)
+        ? `${result.winnerName || `Stub ${result.winningIndex}`} won. Overlay submit failed: ${result.overlayError}`
+        : `${result.winnerName || `Stub ${result.winningIndex}`} won.`)
       if (result.overlayError) setActionError(result.overlayError)
       await refresh()
     } catch (err) {
@@ -263,13 +303,13 @@ function Shell() {
     const session = await ensureWallet()
     if (!session) return
     if (!ticket.beef) {
-      setActionError('This pass is missing the ticket transaction.')
+      setActionError('This stub is missing its pass.')
       return
     }
     setBusy('receive')
     try {
       await acceptPass(session.wallet, ticket.beef, ticket)
-      setStatus(`Received ticket ${ticket.ticketIndex}.`)
+      setStatus(`Received stub ${ticket.ticketIndex}.`)
       await refreshHeld(session.wallet)
     } catch (err) {
       console.error('Receive failed', err)
@@ -291,17 +331,18 @@ function Shell() {
 
   const combinedError = actionError || walletError
   const showInstall = Boolean(combinedError) && !overlayDown
+  const showTake = Boolean(header && !drawn && remaining > 0 && !alreadyHasStub)
 
   return (
     <div className="app">
       <article className="sheet">
         <header className="sheet-head">
-          <p className="eyebrow">Raffle</p>
-          <h1>{header ? header.title : 'Start a raffle'}</h1>
+          <p className="eyebrow">Draw</p>
+          <h1>{header ? header.title : 'This trip’s draw'}</h1>
           <p className="lede">
             {header
-              ? header.drawNote || 'Pass a ticket. Draw a winner.'
-              : 'Start a raffle. Pass a ticket. Draw a winner.'}
+              ? header.prize
+              : 'This trip’s draw. Free stub. One winner, in the room.'}
           </p>
         </header>
 
@@ -314,14 +355,32 @@ function Shell() {
         {!raffleId && (
           <section className="block">
             <h2>Start</h2>
-            <p className="job">Name what it’s for. Say who can enter. Then share the link.</p>
+            <p className="job">This trip’s draw. Free stub. One winner, in the room.</p>
             <div className="fields">
               <div className="field">
-                <label htmlFor="title">What’s it for?</label>
-                <input id="title" value={title} onChange={(event) => setTitle(event.target.value)} />
+                <label htmlFor="event">Event name</label>
+                <input id="event" value={title} onChange={(event) => setTitle(event.target.value)} />
               </div>
               <div className="field">
-                <label htmlFor="who">Who can enter</label>
+                <label htmlFor="prize">Prize</label>
+                <input
+                  id="prize"
+                  value={prize}
+                  onChange={(event) => setPrize(event.target.value)}
+                  placeholder="The thing they take home"
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="value">Approx value — HR only, not on the stub</label>
+                <input
+                  id="value"
+                  value={prizeValue}
+                  onChange={(event) => setPrizeValue(event.target.value)}
+                  placeholder="Optional"
+                />
+              </div>
+              <div className="field">
+                <label htmlFor="who">Who can take a ticket</label>
                 <input id="who" value={whoCanEnter} onChange={(event) => setWhoCanEnter(event.target.value)} />
               </div>
               <div className="grid">
@@ -342,16 +401,30 @@ function Shell() {
                 </div>
               </div>
               <div className="field">
-                <label htmlFor="terms">Short terms (optional)</label>
-                <textarea id="terms" rows={3} value={terms} onChange={(event) => setTerms(event.target.value)} />
+                <label htmlFor="hostName">Host name</label>
+                <input
+                  id="hostName"
+                  value={hostName}
+                  onChange={(event) => setHostName(event.target.value)}
+                  placeholder="Priya"
+                  autoComplete="name"
+                />
               </div>
               <label className="check">
                 <input
                   type="checkbox"
-                  checked={transferable}
-                  onChange={(event) => setTransferable(event.target.checked)}
+                  checked={onePerPerson}
+                  onChange={(event) => setOnePerPerson(event.target.checked)}
                 />
-                Tickets can be passed
+                One per person
+              </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={mustBePresent}
+                  onChange={(event) => setMustBePresent(event.target.checked)}
+                />
+                Must be here to win
               </label>
             </div>
             <div className="actions">
@@ -374,7 +447,7 @@ function Shell() {
         {header && (
           <section className="slip">
             <div className="section-head">
-              <h2>{drawn ? 'Winner' : 'The raffle'}</h2>
+              <h2>{drawn ? 'Winner' : header.title}</h2>
               <button type="button" className="btn" disabled={listBusy} onClick={() => void refresh()}>
                 {listBusy ? 'Refreshing…' : 'Refresh'}
               </button>
@@ -382,68 +455,113 @@ function Shell() {
             <dl className="meta">
               <div>
                 <dt>Prize</dt>
-                <dd>{header.title}</dd>
+                <dd>{header.prize || header.title}</dd>
               </div>
               <div>
-                <dt>Remaining</dt>
-                <dd className="count">{drawn ? 'Drawn' : `${remaining} of ${header.ticketCount}`}</dd>
+                <dt>Taken</dt>
+                <dd className="count">{drawn ? 'Drawn' : `${taken} of ${header.ticketCount} taken`}</dd>
               </div>
               <div>
-                <dt>Who can enter</dt>
-                <dd>{header.whoCanEnter || 'Anyone at the offsite'}</dd>
+                <dt>Who it’s for</dt>
+                <dd>{header.whoCanEnter || 'People on this trip'}</dd>
               </div>
               <div>
-                <dt>When</dt>
-                <dd>{header.drawNote || 'When the host draws'}</dd>
+                <dt>When we draw</dt>
+                <dd>{header.drawNote || 'When I press Draw in the room'}</dd>
               </div>
             </dl>
-            {header.terms && <p className="helper">{header.terms}</p>}
+            <p className="helper">
+              {header.onePerPerson
+                ? 'One stub per person.'
+                : 'You can pass this stub to a coworker.'}
+              {asked ? ` Ask ${asked}.` : ''}
+            </p>
+            <p className="helper">{tripLine(header)}</p>
+            {isHost && header.prizeValue && (
+              <p className="helper">HR only: {header.prizeValue}</p>
+            )}
             {drawn && (
               <p className="status ok">
-                <span className="count">{winnerLine(tickets, drawn.winningIndex)}</span> won.
+                {winnerName(tickets, drawn) || `Stub ${drawn.winningIndex}`} won.
               </p>
             )}
-            {myTickets.length > 0 && (
-              <p className="helper">
-                You hold ticket{' '}
-                <span className="count">{myTickets.map((ticket) => ticket.ticketIndex).join(', ')}</span>.
-              </p>
+            {myTickets.map((ticket) => (
+              <div className="stub" key={`${ticket.txid}.${ticket.outputIndex}`}>
+                <p className="stub-mark">Stub</p>
+                <p className="stub-name">{ticket.holderName || guestName || 'Your stub'}</p>
+                <p className="stub-number count">{String(ticket.ticketIndex).padStart(2, '0')}</p>
+              </div>
+            ))}
+
+            {showTake && (
+              <div className="fields">
+                <div className="field">
+                  <label htmlFor="guestName">Your name</label>
+                  <input
+                    id="guestName"
+                    value={guestName}
+                    onChange={(event) => setGuestName(event.target.value)}
+                    placeholder="The name on the stub"
+                    autoComplete="name"
+                  />
+                </div>
+                <div className="actions">
+                  <button
+                    type="button"
+                    className="btn primary"
+                    disabled={busy !== null || connecting || overlayDown}
+                    onClick={() => void runClaim()}
+                  >
+                    {busy === 'claim' ? 'Taking…' : connecting ? 'Connecting…' : 'Take a ticket'}
+                  </button>
+                  {isHost && !drawn && (
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={busy !== null || connecting || overlayDown || live.length === 0}
+                      onClick={() => void runDraw()}
+                    >
+                      {busy === 'draw' ? 'Drawing…' : 'Draw'}
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
 
-            <div className="actions">
-              {!drawn && remaining > 0 && (
+            {!showTake && isHost && !drawn && (
+              <div className="actions">
                 <button
                   type="button"
                   className="btn primary"
-                  disabled={busy !== null || connecting || overlayDown}
-                  onClick={() => void runClaim()}
-                >
-                  {busy === 'claim' ? 'Claiming…' : connecting ? 'Connecting…' : 'Claim'}
-                </button>
-              )}
-              {isHost && !drawn && (
-                <button
-                  type="button"
-                  className="btn"
                   disabled={busy !== null || connecting || overlayDown || live.length === 0}
                   onClick={() => void runDraw()}
                 >
                   {busy === 'draw' ? 'Drawing…' : 'Draw'}
                 </button>
-              )}
-            </div>
+              </div>
+            )}
 
-            {header.transferable && !drawn && (
+            {canPass && !drawn && (
               <div className="fields pass">
                 <h2>Pass</h2>
-                <p className="job">Send your ticket to a coworker, or share the claim link.</p>
+                <p className="job">Hand your stub to the person who had to leave early.</p>
                 <div className="field">
-                  <label htmlFor="pass">Their identity</label>
+                  <label htmlFor="passName">Their name</label>
+                  <input
+                    id="passName"
+                    value={passName}
+                    onChange={(event) => setPassName(event.target.value)}
+                    placeholder="Name on their stub"
+                    autoComplete="name"
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="pass">Their account</label>
                   <input
                     id="pass"
                     value={passTo}
                     onChange={(event) => setPassTo(event.target.value)}
-                    placeholder="Paste their identity"
+                    placeholder="Paste to hand the stub over"
                     spellCheck={false}
                     autoComplete="off"
                   />
@@ -452,17 +570,17 @@ function Shell() {
                   <button
                     type="button"
                     className="btn"
-                    disabled={busy !== null || connecting || overlayDown || !passTo.trim() || (!heldHere && myTickets.length === 0)}
+                    disabled={busy !== null || connecting || overlayDown || !passTo.trim() || !passName.trim() || (!heldHere && myTickets.length === 0)}
                     onClick={() => void runPass()}
                   >
-                    {busy === 'pass' ? 'Passing…' : 'Pass'}
+                    {busy === 'pass' ? 'Handing…' : 'Pass'}
                   </button>
                   <button
                     type="button"
                     className="btn"
                     onClick={() => void navigator.clipboard.writeText(shareUrl(header.raffleId))}
                   >
-                    Copy claim link
+                    Copy link
                   </button>
                 </div>
               </div>
@@ -476,19 +594,19 @@ function Shell() {
                   disabled={busy !== null || connecting}
                   onClick={() => void runReceive(incoming[0])}
                 >
-                  {busy === 'receive' ? 'Receiving…' : `Receive ticket ${incoming[0].ticketIndex}`}
+                  {busy === 'receive' ? 'Receiving…' : `Receive stub ${incoming[0].ticketIndex}`}
                 </button>
               </div>
             )}
 
-            {!header.transferable && (
+            {!canPass && (
               <div className="actions">
                 <button
                   type="button"
                   className="btn"
                   onClick={() => void navigator.clipboard.writeText(shareUrl(header.raffleId))}
                 >
-                  Copy claim link
+                  Copy link
                 </button>
               </div>
             )}
@@ -528,7 +646,7 @@ function Shell() {
       </details>
 
       <p className="fine-print">
-        Keys stay in the wallet.
+        Keys stay in the wallet. Free stub. This trip only.
       </p>
     </div>
   )

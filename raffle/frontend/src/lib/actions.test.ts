@@ -17,6 +17,7 @@ function ticket(partial: Partial<OverlayTicket> = {}): OverlayTicket {
     raffleId: 'a'.repeat(32),
     ticketIndex: 1,
     holder: GUEST,
+    holderName: 'Alex',
     timestamp: '2026-08-24T12:01:00Z',
     txid: 'ab'.repeat(32),
     outputIndex: 0,
@@ -46,6 +47,7 @@ describe('draw host check', () => {
       raffleId: 'a'.repeat(32),
       winningOutpoint: `${'ab'.repeat(32)}.0`,
       winningIndex: 1,
+      winnerName: 'Alex',
       timestamp: '2026-08-24T12:05:00Z',
       txid: 'ef'.repeat(32),
       outputIndex: 0

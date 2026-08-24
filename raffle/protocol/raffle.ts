@@ -1,9 +1,9 @@
 /**
- * Raffle protocol (PushDrop / BRC-48 fields).
+ * Offsite draw protocol (PushDrop / BRC-48 fields).
  *
- * A host starts one raffle (header UTXO). Guests claim tickets as their own
- * UTXOs. A transferable ticket is spent and recreated for a new holder.
- * The host draws by announcing one live ticket. Not a pot, not a casino.
+ * A host starts one trip draw (header UTXO). Everyone at the offsite takes a
+ * free stub. If one-per-person is off, a stub can be handed to a coworker.
+ * The host draws one live stub in the room. Not a sold raffle, not a casino.
  */
 
 import { sha256Hex } from './sha256'
@@ -15,10 +15,13 @@ export const LOOKUP_SERVICE = 'ls_raffle'
 export const MAGIC = 'raffle'
 export const SCHEMA_VERSION = '1'
 export const CLAIMABLE = 'claimable'
-export const TITLE_MAX = 80
+export const TITLE_MAX = 120
+export const PRIZE_MAX = 160
+export const PRIZE_VALUE_MAX = 40
 export const WHO_MAX = 200
 export const DRAW_NOTE_MAX = 120
-export const TERMS_MAX = 500
+export const HOST_NAME_MAX = 80
+export const HOLDER_NAME_MAX = 80
 export const TICKET_MIN = 1
 export const TICKET_MAX = 100
 
@@ -32,11 +35,15 @@ export interface RaffleHeader {
   raffleId: string
   host: string
   title: string
+  prize: string
+  prizeValue: string
   whoCanEnter: string
   ticketCount: number
+  onePerPerson: boolean
   transferable: boolean
   drawNote: string
-  terms: string
+  mustBePresent: boolean
+  hostName: string
   timestamp: string
 }
 
@@ -47,6 +54,7 @@ export interface RaffleTicket {
   raffleId: string
   ticketIndex: number
   holder: string
+  holderName: string
   timestamp: string
   keyID?: string
   sender?: string
@@ -59,6 +67,7 @@ export interface RaffleDraw {
   raffleId: string
   winningOutpoint: string
   winningIndex: number
+  winnerName: string
   timestamp: string
 }
 
@@ -129,16 +138,36 @@ function magicIndex(fields: Array<number[] | Uint8Array>): number {
   })
 }
 
+function yesNo(value: boolean): string {
+  return value ? 'yes' : 'no'
+}
+
+function parseYesNo(value: string | undefined, fallback: boolean): boolean {
+  const raw = (value ?? '').trim().toLowerCase()
+  if (raw === 'yes' || raw === 'true' || raw === '1') return true
+  if (raw === 'no' || raw === 'false' || raw === '0') return false
+  return fallback
+}
+
+export function hostFirstName(name: string): string {
+  const trimmed = name.trim()
+  if (!trimmed) return ''
+  return trimmed.split(/\s+/)[0] ?? ''
+}
+
 export function raffleHash(header: Omit<RaffleHeader, 'magic' | 'version' | 'kind'>): string {
   return sha256Hex([
     header.raffleId,
     header.host,
     header.title,
+    header.prize,
+    header.prizeValue,
     header.whoCanEnter,
     String(header.ticketCount),
-    header.transferable ? 'yes' : 'no',
+    yesNo(header.onePerPerson),
     header.drawNote,
-    header.terms,
+    yesNo(header.mustBePresent),
+    header.hostName,
     header.timestamp
   ].join('\n'))
 }
@@ -148,20 +177,25 @@ export function makeRaffleId(host: string, title: string, timestamp: string, non
 }
 
 export function encodeHeaderFields(header: Omit<RaffleHeader, 'magic' | 'version' | 'kind'>): number[][] {
-  return [
+  const onePerPerson = header.onePerPerson ?? !header.transferable
+  const fields = [
     stringToUtf8Bytes(MAGIC),
     stringToUtf8Bytes(SCHEMA_VERSION),
     stringToUtf8Bytes('header'),
     stringToUtf8Bytes(header.raffleId),
     stringToUtf8Bytes(header.host),
     stringToUtf8Bytes(header.title),
+    stringToUtf8Bytes(header.prize),
     stringToUtf8Bytes(header.whoCanEnter),
     stringToUtf8Bytes(String(header.ticketCount)),
-    stringToUtf8Bytes(header.transferable ? 'yes' : 'no'),
+    stringToUtf8Bytes(yesNo(onePerPerson)),
     stringToUtf8Bytes(header.drawNote),
-    stringToUtf8Bytes(header.terms),
+    stringToUtf8Bytes(yesNo(header.mustBePresent)),
+    stringToUtf8Bytes(header.hostName),
     stringToUtf8Bytes(header.timestamp)
   ]
+  if (header.prizeValue) fields.push(stringToUtf8Bytes(header.prizeValue))
+  return fields
 }
 
 export function encodeTicketFields(ticket: Omit<RaffleTicket, 'magic' | 'version' | 'kind'>): number[][] {
@@ -172,6 +206,7 @@ export function encodeTicketFields(ticket: Omit<RaffleTicket, 'magic' | 'version
     stringToUtf8Bytes(ticket.raffleId),
     stringToUtf8Bytes(String(ticket.ticketIndex)),
     stringToUtf8Bytes(ticket.holder),
+    stringToUtf8Bytes(ticket.holderName ?? ''),
     stringToUtf8Bytes(ticket.timestamp)
   ]
   if (ticket.keyID) fields.push(stringToUtf8Bytes(ticket.keyID))
@@ -180,7 +215,7 @@ export function encodeTicketFields(ticket: Omit<RaffleTicket, 'magic' | 'version
 }
 
 export function encodeDrawFields(draw: Omit<RaffleDraw, 'magic' | 'version' | 'kind'>): number[][] {
-  return [
+  const fields = [
     stringToUtf8Bytes(MAGIC),
     stringToUtf8Bytes(SCHEMA_VERSION),
     stringToUtf8Bytes('draw'),
@@ -189,53 +224,104 @@ export function encodeDrawFields(draw: Omit<RaffleDraw, 'magic' | 'version' | 'k
     stringToUtf8Bytes(String(draw.winningIndex)),
     stringToUtf8Bytes(draw.timestamp)
   ]
+  if (draw.winnerName) fields.push(stringToUtf8Bytes(draw.winnerName))
+  return fields
 }
 
-function parseHeader(rest: string[]): RaffleHeader | null {
-  if (rest.length < 8) return null
-  const [
-    raffleId,
-    host,
-    title,
-    whoCanEnter,
-    ticketCountRaw,
-    transferableRaw,
-    drawNote,
-    terms,
-    timestamp
-  ] = rest
-  const ticketCount = Number(ticketCountRaw)
-  if (!Number.isInteger(ticketCount)) return null
+function headerFromParts(parts: {
+  raffleId: string
+  host: string
+  title: string
+  prize: string
+  prizeValue: string
+  whoCanEnter: string
+  ticketCount: number
+  onePerPerson: boolean
+  drawNote: string
+  mustBePresent: boolean
+  hostName: string
+  timestamp: string
+}): RaffleHeader | null {
   const header: RaffleHeader = {
     magic: MAGIC,
     version: SCHEMA_VERSION,
     kind: 'header',
-    raffleId,
-    host,
-    title,
-    whoCanEnter: whoCanEnter ?? '',
-    ticketCount,
-    transferable: transferableRaw === 'yes' || transferableRaw === 'true' || transferableRaw === '1',
-    drawNote: drawNote ?? '',
-    terms: terms ?? '',
-    timestamp: timestamp ?? ''
+    raffleId: parts.raffleId,
+    host: parts.host,
+    title: parts.title,
+    prize: parts.prize,
+    prizeValue: parts.prizeValue,
+    whoCanEnter: parts.whoCanEnter,
+    ticketCount: parts.ticketCount,
+    onePerPerson: parts.onePerPerson,
+    transferable: !parts.onePerPerson,
+    drawNote: parts.drawNote,
+    mustBePresent: parts.mustBePresent,
+    hostName: parts.hostName,
+    timestamp: parts.timestamp
   }
   return validateHeader(header) ? null : header
 }
 
+function parseHeader(rest: string[]): RaffleHeader | null {
+  if (rest.length < 8) return null
+  const ticketCountNew = Number(rest[5])
+  const ticketCountOld = Number(rest[4])
+
+  if (rest.length >= 11 && Number.isInteger(ticketCountNew)) {
+    return headerFromParts({
+      raffleId: rest[0],
+      host: rest[1],
+      title: rest[2],
+      prize: rest[3] ?? '',
+      whoCanEnter: rest[4] ?? '',
+      ticketCount: ticketCountNew,
+      onePerPerson: parseYesNo(rest[6], true),
+      drawNote: rest[7] ?? '',
+      mustBePresent: parseYesNo(rest[8], true),
+      hostName: rest[9] ?? '',
+      timestamp: rest[10] ?? '',
+      prizeValue: rest[11] ?? ''
+    })
+  }
+
+  if (!Number.isInteger(ticketCountOld)) return null
+  const transferable = parseYesNo(rest[5], false)
+  return headerFromParts({
+    raffleId: rest[0],
+    host: rest[1],
+    title: rest[2],
+    prize: rest[2] ?? '',
+    whoCanEnter: rest[3] ?? '',
+    ticketCount: ticketCountOld,
+    onePerPerson: !transferable,
+    drawNote: rest[6] ?? '',
+    mustBePresent: true,
+    hostName: '',
+    timestamp: rest[8] ?? '',
+    prizeValue: ''
+  })
+}
+
 function parseTicket(rest: string[]): RaffleTicket | null {
   if (rest.length < 4) return null
-  const [raffleId, indexRaw, holder, timestamp, keyID, sender] = rest
-  const ticketIndex = Number(indexRaw)
+  const ticketIndex = Number(rest[1])
   if (!Number.isInteger(ticketIndex)) return null
+  const third = rest[3] ?? ''
+  const named = third.length > 0 && !ISO_TIME.test(third)
+  const holderName = named ? third : ''
+  const timestamp = named ? (rest[4] ?? '') : third
+  const keyID = named ? rest[5] : rest[4]
+  const sender = named ? rest[6] : rest[5]
   const ticket: RaffleTicket = {
     magic: MAGIC,
     version: SCHEMA_VERSION,
     kind: 'ticket',
-    raffleId,
+    raffleId: rest[0],
     ticketIndex,
-    holder,
-    timestamp: timestamp ?? '',
+    holder: rest[2],
+    holderName,
+    timestamp,
     ...(keyID ? { keyID } : {}),
     ...(sender ? { sender } : {})
   }
@@ -250,18 +336,22 @@ function parseDraw(rest: string[]): RaffleDraw | null {
   let winningIndex = 0
   let timestamp = ''
 
+  let winnerName = ''
   if (OUTPOINT.test(second)) {
     winningOutpoint = second
     const maybeIndex = Number(rest[2])
     if (rest[2] && Number.isInteger(maybeIndex)) {
       winningIndex = maybeIndex
       timestamp = rest[3] ?? ''
+      winnerName = rest[4] ?? ''
     } else {
       timestamp = rest[2] ?? ''
+      winnerName = rest[3] ?? ''
     }
   } else if (Number.isInteger(Number(second))) {
     winningIndex = Number(second)
     timestamp = rest[2] ?? ''
+    winnerName = rest[3] ?? ''
   } else {
     return null
   }
@@ -273,6 +363,7 @@ function parseDraw(rest: string[]): RaffleDraw | null {
     raffleId,
     winningOutpoint,
     winningIndex,
+    winnerName,
     timestamp
   }
   return validateDraw(draw) ? null : draw
@@ -309,14 +400,22 @@ export function validateHeader(header: RaffleHeader): string | null {
   if (!isRaffleId(header.raffleId)) return 'raffle id must be 16–64 hex'
   if (!isIdentityKey(header.host)) return 'host must be a 66-hex identity key'
   if (!header.title.trim() || header.title.trim().length > TITLE_MAX) {
-    return `title must be 1–${TITLE_MAX} characters`
+    return `event name must be 1–${TITLE_MAX} characters`
   }
-  if (header.whoCanEnter.trim().length > WHO_MAX) return `who can enter must be ≤${WHO_MAX} characters`
+  if (!header.prize.trim() || header.prize.trim().length > PRIZE_MAX) {
+    return `prize must be 1–${PRIZE_MAX} characters`
+  }
+  if (header.prizeValue.trim().length > PRIZE_VALUE_MAX) {
+    return `prize value must be ≤${PRIZE_VALUE_MAX} characters`
+  }
+  if (header.whoCanEnter.trim().length > WHO_MAX) return `who can take a ticket must be ≤${WHO_MAX} characters`
   if (!Number.isInteger(header.ticketCount) || header.ticketCount < TICKET_MIN || header.ticketCount > TICKET_MAX) {
     return `ticket count must be ${TICKET_MIN}–${TICKET_MAX}`
   }
-  if (header.drawNote.trim().length > DRAW_NOTE_MAX) return `draw note must be ≤${DRAW_NOTE_MAX} characters`
-  if (header.terms.trim().length > TERMS_MAX) return `terms must be ≤${TERMS_MAX} characters`
+  if (header.drawNote.trim().length > DRAW_NOTE_MAX) return `when we draw must be ≤${DRAW_NOTE_MAX} characters`
+  if (header.hostName.trim().length > HOST_NAME_MAX) {
+    return `host name must be ≤${HOST_NAME_MAX} characters`
+  }
   if (header.timestamp && !ISO_TIME.test(header.timestamp)) return 'timestamp must be ISO-8601 UTC'
   return null
 }
@@ -330,6 +429,9 @@ export function validateTicket(ticket: RaffleTicket): string | null {
     return `ticket index must be 1–${TICKET_MAX}`
   }
   if (!isHolder(ticket.holder)) return 'holder must be claimable or a 66-hex identity key'
+  if (ticket.holderName.trim().length > HOLDER_NAME_MAX) {
+    return `name on the stub must be ≤${HOLDER_NAME_MAX} characters`
+  }
   if (ticket.timestamp && !ISO_TIME.test(ticket.timestamp)) return 'timestamp must be ISO-8601 UTC'
   if (ticket.sender && !isIdentityKey(ticket.sender)) return 'sender must be a 66-hex identity key'
   return null
@@ -343,6 +445,7 @@ export function validateDraw(draw: RaffleDraw): string | null {
   const hasOutpoint = OUTPOINT.test(draw.winningOutpoint)
   const hasIndex = Number.isInteger(draw.winningIndex) && draw.winningIndex >= 1
   if (!hasOutpoint && !hasIndex) return 'draw must name a winning outpoint or ticket index'
+  if (draw.winnerName.trim().length > HOLDER_NAME_MAX) return `winner name must be ≤${HOLDER_NAME_MAX} characters`
   if (draw.timestamp && !ISO_TIME.test(draw.timestamp)) return 'timestamp must be ISO-8601 UTC'
   return null
 }
@@ -383,6 +486,15 @@ export function liveTickets<T extends RaffleTicket & { txid?: string, outputInde
 export function remainingCount(header: Pick<RaffleHeader, 'ticketCount'>, tickets: RaffleTicket[]): number {
   const claimed = new Set(latestTickets(tickets).map((ticket) => ticket.ticketIndex))
   return Math.max(0, header.ticketCount - claimed.size)
+}
+
+export function takenCount(header: Pick<RaffleHeader, 'ticketCount'>, tickets: RaffleTicket[]): number {
+  return header.ticketCount - remainingCount(header, tickets)
+}
+
+export function holderAlreadyHasStub(tickets: RaffleTicket[], identityKey: string): boolean {
+  if (!identityKey) return false
+  return latestTickets(tickets).some((ticket) => ticket.holder === identityKey)
 }
 
 export function nextTicketIndex(header: Pick<RaffleHeader, 'ticketCount'>, tickets: RaffleTicket[]): number | null {
