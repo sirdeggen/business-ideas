@@ -58,11 +58,11 @@ function Shell() {
   const [listBusy, setListBusy] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
 
-  const [title, setTitle] = useState('Office tombola')
-  const [whoCanEnter, setWhoCanEnter] = useState('Anyone with this link')
+  const [title, setTitle] = useState('Friday offsite')
+  const [whoCanEnter, setWhoCanEnter] = useState('Anyone at the offsite')
   const [ticketCount, setTicketCount] = useState(20)
   const [transferable, setTransferable] = useState(true)
-  const [drawNote, setDrawNote] = useState('We draw together')
+  const [drawNote, setDrawNote] = useState('After lunch')
   const [terms, setTerms] = useState('')
 
   const [passTo, setPassTo] = useState('')
@@ -305,16 +305,16 @@ function Shell() {
           </p>
         </header>
 
-        <p className={online === false ? 'status err' : 'helper'}>
-          {online === false
-            ? `${overlayCheckFailed(probeError, url)} This page is pointed at ${url}.`
-            : 'A stranger can read this page. Desktop is only asked to start, claim, pass, or draw.'}
-        </p>
+        {online === false && (
+          <p className="status err">
+            {`${overlayCheckFailed(probeError, url)} This page is pointed at ${url}.`}
+          </p>
+        )}
 
         {!raffleId && (
           <section className="block">
             <h2>Start</h2>
-            <p className="job">Name the prize. Say who can enter. Then share the link.</p>
+            <p className="job">Name what it’s for. Say who can enter. Then share the link.</p>
             <div className="fields">
               <div className="field">
                 <label htmlFor="title">What’s it for?</label>
@@ -386,11 +386,11 @@ function Shell() {
               </div>
               <div>
                 <dt>Remaining</dt>
-                <dd>{drawn ? 'Drawn' : `${remaining} of ${header.ticketCount}`}</dd>
+                <dd className="count">{drawn ? 'Drawn' : `${remaining} of ${header.ticketCount}`}</dd>
               </div>
               <div>
                 <dt>Who can enter</dt>
-                <dd>{header.whoCanEnter || 'Anyone with this link'}</dd>
+                <dd>{header.whoCanEnter || 'Anyone at the offsite'}</dd>
               </div>
               <div>
                 <dt>When</dt>
@@ -400,12 +400,13 @@ function Shell() {
             {header.terms && <p className="helper">{header.terms}</p>}
             {drawn && (
               <p className="status ok">
-                {winnerLine(tickets, drawn.winningIndex)} won.
+                <span className="count">{winnerLine(tickets, drawn.winningIndex)}</span> won.
               </p>
             )}
             {myTickets.length > 0 && (
               <p className="helper">
-                You hold ticket {myTickets.map((ticket) => ticket.ticketIndex).join(', ')}.
+                You hold ticket{' '}
+                <span className="count">{myTickets.map((ticket) => ticket.ticketIndex).join(', ')}</span>.
               </p>
             )}
 
@@ -480,9 +481,17 @@ function Shell() {
               </div>
             )}
 
-            <p className="helper">
-              Share <code>{shareUrl(header.raffleId)}</code>
-            </p>
+            {!header.transferable && (
+              <div className="actions">
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => void navigator.clipboard.writeText(shareUrl(header.raffleId))}
+                >
+                  Copy claim link
+                </button>
+              </div>
+            )}
           </section>
         )}
 
@@ -519,7 +528,7 @@ function Shell() {
       </details>
 
       <p className="fine-print">
-        Keys stay in the wallet. This is a tombola, not a pot.
+        Keys stay in the wallet.
       </p>
     </div>
   )

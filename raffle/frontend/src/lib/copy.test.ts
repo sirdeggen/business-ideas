@@ -20,4 +20,15 @@ describe('first-paint copy', () => {
     expect(app).not.toContain('UTXO')
     expect(app).not.toContain('BRC-')
   })
+
+  it('stays a company-offsite raffle, not a casino or sweepstakes', () => {
+    expect(app).toContain('Friday offsite')
+    expect(app).toContain('Anyone at the offsite')
+    expect(app).not.toMatch(/jackpot/i)
+    expect(app).not.toMatch(/sweepstake/i)
+    expect(app).not.toMatch(/casino/i)
+    expect(app).not.toMatch(/\$400/)
+    expect(app).not.toMatch(/\bpot\b/i)
+    expect(app).not.toMatch(/tombola/i)
+  })
 })
