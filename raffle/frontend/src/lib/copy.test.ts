@@ -5,11 +5,19 @@ import { describe, expect, it } from 'vitest'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const app = readFileSync(join(here, '../App.tsx'), 'utf8')
+const catalog = readFileSync(join(here, '../../../../pages/index.html'), 'utf8')
+const raffleCard = catalog.slice(
+  catalog.indexOf('href="./raffle/"'),
+  catalog.indexOf('</article>', catalog.indexOf('href="./raffle/"'))
+)
 
 describe('first-paint copy', () => {
   it('names the offsite and empty states, not overlay jargon', () => {
     expect(app).toContain('This trip’s draw')
-    expect(app).toContain('No raffle in this link.')
+    expect(app).toContain("const NO_DRAW_IN_THIS_LINK = 'No draw in this link.'")
+    expect(app).toContain('{NO_DRAW_IN_THIS_LINK}')
+    expect(app).not.toContain('No raffle in this link.')
+    expect(app).not.toContain('setListError(errorMessage(err))')
     expect(app).toContain('Event')
     expect(app).toContain('Northstar offsite, Friday dinner')
     expect(app).toContain('Friday off / the cabin weekend / the jacket')
@@ -56,5 +64,36 @@ describe('first-paint copy', () => {
     expect(app).not.toMatch(/\bpot\b/i)
     expect(app).not.toMatch(/buy extra/i)
     expect(app).not.toMatch(/whale/i)
+  })
+
+  it('hides Pass, hex, and wallet chrome until the guest has a stub', () => {
+    expect(app).toContain('const hasStub = Boolean(heldHere || myTickets.length > 0)')
+    expect(app).toContain('const showPass = Boolean(canPass && !drawn && hasStub)')
+    expect(app).toContain('{showPass && (')
+    expect(app).not.toContain('{canPass && !drawn && (')
+    expect(app).not.toContain('Wallet key')
+    expect(app).not.toContain('shortKey(')
+    expect(app).not.toContain('{identityKey}')
+    expect(app).not.toContain('{shortKey')
+  })
+
+  it('shows Install Desktop only when the wallet is missing', () => {
+    expect(app).toContain('isWalletMissing')
+    expect(app).toContain('const showInstall = walletMissing || actionNeedsInstall')
+    expect(app).toContain('const combinedError = actionError || walletError')
+    expect(app).not.toContain('Boolean(combinedError) && !overlayDown')
+    expect(app).not.toContain('listError')
+    expect(app).toContain('Install BSV Desktop')
+    expect(app).toContain('No draw in this link.')
+  })
+
+  it('keeps the catalog card Server + View, not Open UI or Live', () => {
+    expect(raffleCard).toContain('class="badge">Server<')
+    expect(raffleCard).toContain('>View<')
+    expect(raffleCard).toContain('How to run')
+    expect(raffleCard).not.toContain('Open UI')
+    expect(raffleCard).not.toContain('soon')
+    expect(raffleCard).not.toContain('Live')
+    expect(raffleCard).not.toContain('eyebrow')
   })
 })

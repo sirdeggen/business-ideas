@@ -41,6 +41,12 @@ export const DESKTOP_INSTALL_URL = 'https://github.com/bsv-blockchain/bsv-deskto
 export const CHROME_ALLOW_HINT =
   'Unlock Desktop and try again. Chrome may ask to allow this site to talk to apps on this device. Allow, then Retry.'
 
+export const DECLINED_APPROVAL =
+  'You declined the approval. Unlock Desktop and try again.'
+
+export const OVERLAY_ACTION_FAILED =
+  'Couldn’t reach the overlay. Try again in a moment.'
+
 /**
  * Pages never defaults to localhost. Local Vite/Docker may still point at :8084
  * via VITE_OVERLAY_URL or the in-UI overlay URL (custom tm_raffle).
@@ -122,9 +128,76 @@ function looksLikeWalletFailure(text: string): boolean {
   )
 }
 
+function looksLikeOverlayFailure(text: string): boolean {
+  const lower = text.toLowerCase()
+  return (
+    lower.includes('overlay broadcast') ||
+    lower.includes('overlay submit') ||
+    lower.includes('overlay rejected') ||
+    lower.includes('overlay check failed') ||
+    lower.includes('topical host') ||
+    lower.includes('topical-host') ||
+    lower.includes('tm_anytx') ||
+    lower.includes('ls_anytx') ||
+    lower.includes('hosts have rejected') ||
+    lower.includes('err_all_hosts_rejected') ||
+    lower.includes('overlay-us-1') ||
+    lower.includes('steak') ||
+    lower.includes('/submit') ||
+    lower.includes('no outputs admitted') ||
+    lower.includes('outputstoadmit')
+  )
+}
+
+function looksLikeRejected(text: string): boolean {
+  const lower = text.toLowerCase()
+  if (looksLikeOverlayFailure(lower)) return false
+  return (
+    lower.includes('permission denied') ||
+    lower.includes('reject') ||
+    lower.includes('denied') ||
+    lower.includes('cancelled') ||
+    lower.includes('canceled') ||
+    lower.includes('user declined')
+  )
+}
+
+function looksLikeNetwork(text: string): boolean {
+  const lower = text.toLowerCase()
+  return (
+    lower.includes('failed to fetch') ||
+    lower.includes('networkerror') ||
+    lower.includes('network request failed') ||
+    lower.includes('err_network') ||
+    lower.includes('err_internet') ||
+    lower.includes('econnrefused') ||
+    lower.includes('econnreset') ||
+    lower.includes('enotfound')
+  )
+}
+
 function looksLikeTimeout(text: string): boolean {
   const lower = text.toLowerCase()
   return lower.includes('timeout') || lower.includes('timed out') || lower.includes('deadline')
+}
+
+function looksLikeWalletCallJson(text: string): boolean {
+  return /"call"\s*:/.test(text) || text.includes('"createAction"') || text.includes('"args"')
+}
+
+function errorText(error: unknown): string {
+  return `${formatWalletError(error)} ${extractErrorText(error)}`.trim()
+}
+
+/** True only when no wallet answered over any substrate — not overlay, network, or decline. */
+export function isWalletMissing(error: unknown): boolean {
+  if (error == null) return false
+  const text = typeof error === 'string' ? error : errorText(error)
+  if (looksLikeOverlayFailure(text) || looksLikeRejected(text) || looksLikeNetwork(text)) {
+    return false
+  }
+  if (looksLikeTimeout(text) && !looksLikeWalletFailure(text)) return false
+  return looksLikeWalletFailure(text)
 }
 
 function fieldString(value: unknown): string {
@@ -183,11 +256,16 @@ export function formatWalletError(error: unknown): string {
 export function errorMessage(error: unknown): string {
   const formatted = formatWalletError(error)
   const raw = extractErrorText(error).trim()
+  if (looksLikeRejected(formatted) || looksLikeRejected(raw)) return DECLINED_APPROVAL
+  if (looksLikeOverlayFailure(formatted) || looksLikeOverlayFailure(raw)) {
+    return OVERLAY_ACTION_FAILED
+  }
+  if (looksLikeWalletFailure(formatted) || looksLikeWalletFailure(raw)) return CHROME_ALLOW_HINT
   if (looksLikeTimeout(formatted) || looksLikeTimeout(raw) || raw === CHROME_ALLOW_HINT) {
     return CHROME_ALLOW_HINT
   }
-  if (looksLikeWalletFailure(formatted) || looksLikeWalletFailure(raw)) return CHROME_ALLOW_HINT
+  if (looksLikeWalletCallJson(formatted) || looksLikeWalletCallJson(raw)) return CHROME_ALLOW_HINT
   if (formatted) return formatted
-  if (!raw) return CHROME_ALLOW_HINT
-  return raw
+  if (raw) return raw
+  return 'Something went wrong.'
 }
