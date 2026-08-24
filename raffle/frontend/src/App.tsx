@@ -282,8 +282,8 @@ function Shell() {
     try {
       const result = await drawWinner(session.wallet, url, session.identityKey, header, tickets, draws)
       setStatus(result.overlayError
-        ? `${result.winnerName || `Stub ${result.winningIndex}`} won. Overlay submit failed: ${result.overlayError}`
-        : `${result.winnerName || `Stub ${result.winningIndex}`} won.`)
+        ? `${result.winnerName} won. Overlay submit failed: ${result.overlayError}`
+        : `${result.winnerName} won.`)
       if (result.overlayError) setActionError(result.overlayError)
       await refresh()
     } catch (err) {
@@ -449,7 +449,7 @@ function Shell() {
               <br />
               We draw {whenLine}
               <br />
-              <span className="count">{taken} of {header.ticketCount} tickets taken</span>
+              <span className="count">{taken} of {header.ticketCount} taken</span>
               {header.onePerPerson ? (
                 <>
                   <br />
@@ -468,9 +468,9 @@ function Shell() {
                 ? 'Free. Must be here when we draw.'
                 : 'Free.'}
             </p>
-            {drawn && (
+            {drawn && winnerName(tickets, drawn) && (
               <p className="status ok">
-                {winnerName(tickets, drawn) || `Stub ${drawn.winningIndex}`} won.
+                {winnerName(tickets, drawn)} won.
               </p>
             )}
             {myTickets.map((ticket) => (
