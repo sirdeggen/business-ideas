@@ -1,7 +1,7 @@
 /**
  * Spend Policy protocol (PushDrop / BRC-48 fields).
  *
- * A treasurer writes a live policy (allowed payees, daily cap in sats,
+ * A treasurer writes a policy (allowed payees, daily cap in sats,
  * expiry). A spender pays a listed payee only if that policy allows.
  * Spend announcements are tagged to the policy so later spends see the cap.
  *
