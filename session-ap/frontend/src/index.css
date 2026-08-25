@@ -1,0 +1,380 @@
+:root {
+  color-scheme: light;
+  --paper: #f7f5f2;
+  --sheet: #fffcf8;
+  --ink: #1a1916;
+  --muted: #5c5a56;
+  --rule: #e4e1db;
+  --navy: #1f3a5f;
+  --paid: #1f7a4d;
+  --failed: #8c2e2e;
+  --sans: ui-sans-serif, system-ui, sans-serif;
+  --serif: "Source Serif 4", "Iowan Old Style", Georgia, "Times New Roman", serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--serif);
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  margin: 0;
+  min-height: 100%;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+button, input, textarea, select {
+  font: inherit;
+}
+
+a { color: var(--navy); }
+
+.app {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 32px 16px 64px;
+}
+
+.sheet {
+  background: var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 32px 32px 28px;
+}
+
+.sheet-head {
+  margin-bottom: 28px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+h1 {
+  font-size: 22px;
+  line-height: 1.25;
+  margin: 0;
+  font-weight: 560;
+  color: var(--ink);
+}
+
+h2 {
+  font-size: 18px;
+  line-height: 1.3;
+  margin: 0 0 8px;
+  font-weight: 560;
+  color: var(--ink);
+}
+
+.lede {
+  color: var(--muted);
+  max-width: 46ch;
+  margin: 8px 0 0;
+  font-size: 16px;
+}
+
+.job {
+  color: var(--muted);
+  margin: 0 0 20px;
+  max-width: 48ch;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field label,
+label {
+  display: block;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  margin: 0 0 6px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+input, textarea, select {
+  width: 100%;
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+input, select {
+  height: 40px;
+}
+
+textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: var(--navy);
+  box-shadow: 0 0 0 1px var(--navy);
+}
+
+.dollar {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 0 12px;
+  background: #fff;
+  gap: 6px;
+}
+
+.dollar span {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.dollar input {
+  height: 38px;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.dollar input:focus { box-shadow: none; }
+
+.dollar:focus-within {
+  border-color: var(--navy);
+  box-shadow: 0 0 0 1px var(--navy);
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.actions {
+  margin-top: 24px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  background: transparent;
+  color: var(--navy);
+  border: 1px solid var(--navy);
+  border-radius: 6px;
+  padding: 8px 16px;
+  min-height: 40px;
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn.primary {
+  background: var(--navy);
+  color: #f7f5f2;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.status {
+  font-family: var(--sans);
+  font-size: 13px;
+  margin: 12px 0 0;
+}
+
+.status.ok { color: var(--paid); }
+.status.err { color: var(--failed); }
+
+.helper, .hint {
+  color: var(--muted);
+  font-size: 13px;
+  font-family: var(--sans);
+  margin: 12px 0 0;
+}
+
+.empty {
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 15px;
+  margin: 16px 0 0;
+}
+
+.facts {
+  margin: 16px 0 8px;
+  padding: 14px 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.facts dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.facts dd {
+  margin: 2px 0 12px;
+}
+
+.facts dd:last-child { margin-bottom: 0; }
+
+.amount-xl {
+  margin: 0 0 12px;
+  font-size: 36px;
+  line-height: 1.15;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.status-word {
+  display: inline-block;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.status-word.closed { color: var(--navy); }
+.status-word.approved { color: var(--navy); }
+.status-word.paid { color: var(--paid); }
+
+.lines {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+}
+
+.lines li {
+  padding: 14px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.line-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: baseline;
+}
+
+.line-label { margin: 0; }
+
+.line-amount {
+  margin: 0;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.line-hash {
+  margin: 6px 0 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.slip {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--rule);
+}
+
+.attach {
+  display: flex;
+  gap: 16px;
+  margin: 0 0 16px;
+  font-family: var(--sans);
+}
+
+.attach button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.attach button.active { color: var(--navy); }
+
+.install {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--rule);
+}
+
+.advanced {
+  margin-top: 32px;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 13px;
+}
+
+.advanced summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.advanced p { font-size: 12px; }
+
+.advanced label { margin-top: 16px; }
+
+code {
+  font-family: var(--mono);
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.desk-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+}
+
+.desk-list li {
+  padding: 12px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.desk-list a {
+  text-decoration: none;
+}
+
+@media (max-width: 700px) {
+  .sheet { padding: 24px 20px 20px; }
+  .grid { display: block; }
+  .grid .field + .field { margin-top: 16px; }
+  h1 { font-size: 20px; }
+  .amount-xl { font-size: 32px; }
+}
