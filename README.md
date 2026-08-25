@@ -87,3 +87,10 @@ Close a session. One invoice for many small spends.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/session/
 - How to run: [session-ap/README.md](./session-ap/README.md)
+
+## Dataset stall
+
+Post a listing. Pay a little to take the file.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/datasets/
+- How to run: [datasets/README.md](./datasets/README.md)
