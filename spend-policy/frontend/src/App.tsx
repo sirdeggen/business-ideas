@@ -3,14 +3,14 @@ import {
   DEFAULT_DAILY_CAP_SATS,
   DEFAULT_EXPIRY_DAYS,
   decideSpend,
-  formatSats,
   isIdentityKey,
   remainingDailyCap,
   type AllowedPayee
 } from '../../protocol/spendpolicy'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
-import { spendAgainstPolicy, writePolicy } from './lib/actions'
+import { assertCanWrite, spendAgainstPolicy, writePolicy } from './lib/actions'
+import { paidLine } from './lib/copy'
 import {
   CHROME_ALLOW_HINT,
   DESKTOP_INSTALL_URL,
@@ -61,13 +61,13 @@ function formatWhen(value: string): string {
   })
 }
 
+function formatAmount(amount: number): string {
+  return amount.toLocaleString('en-US')
+}
+
 function payeeLabel(payee: AllowedPayee): string {
   const name = payee.name?.trim() ?? ''
-  const key = payee.identityKey?.trim() ?? ''
-  if (name && key) return `${name} (${shortKey(key, 6)})`
-  if (name) return name
-  if (key) return shortKey(key, 8)
-  return 'Payee'
+  return name || 'Payee'
 }
 
 function emptyPayee(): AllowedPayee {
@@ -147,6 +147,12 @@ function Shell() {
     setActionError(null)
     setActionNeedsInstall(false)
     setStatus(null)
+    try {
+      assertCanWrite({ dailyCapSats: Number(dailyCap), expiry: expiryLocal, payees })
+    } catch (err) {
+      setActionError(`${errorMessage(err)} Open Advanced.`)
+      return
+    }
     const session = await ensureWallet()
     if (!session) return
     setBusy('write')
@@ -214,9 +220,10 @@ function Shell() {
           payeeName: chosen?.name
         }
       )
+      const paid = paidLine(chosen?.name)
       setStatus(result.overlayError
-        ? `Spent. Overlay submit failed: ${result.overlayError}`
-        : `Spent ${formatSats(result.amountSats)}.`)
+        ? `${paid} Overlay submit failed: ${result.overlayError}`
+        : paid)
       if (result.overlayError) setActionError(result.overlayError)
       setLastReceipt({
         magic: policy.magic,
@@ -256,7 +263,7 @@ function Shell() {
     <div className="app">
       <article className="sheet">
         <header className="sheet-head">
-          <p className="eyebrow">Spend Policy</p>
+          <p className="eyebrow">Finance</p>
           <h1>Spend Policy</h1>
           <p className="lede">{JOB}</p>
         </header>
@@ -271,30 +278,17 @@ function Shell() {
           <h2>Policy</h2>
           {!policyId && (
             <>
-              <p className="job">Write a live policy. A stranger can read it with no wallet.</p>
+              <p className="job">Write a policy. A stranger can read it with no wallet.</p>
               <div className="fields">
                 {payees.map((payee, index) => (
-                  <div className="grid" key={`payee-${index}`}>
-                    <div className="field">
-                      <label htmlFor={`payee-name-${index}`}>Allowed payee</label>
-                      <input
-                        id={`payee-name-${index}`}
-                        value={payee.name ?? ''}
-                        onChange={(event) => updatePayee(index, { name: event.target.value })}
-                        placeholder="Vendor name"
-                      />
-                    </div>
-                    <div className="field">
-                      <label htmlFor={`payee-key-${index}`}>Identity key</label>
-                      <input
-                        id={`payee-key-${index}`}
-                        value={payee.identityKey ?? ''}
-                        onChange={(event) => updatePayee(index, { identityKey: event.target.value.trim() })}
-                        placeholder="02… or 03…"
-                        spellCheck={false}
-                        autoComplete="off"
-                      />
-                    </div>
+                  <div className="field" key={`payee-${index}`}>
+                    <label htmlFor={`payee-name-${index}`}>Allowed payee (name)</label>
+                    <input
+                      id={`payee-name-${index}`}
+                      value={payee.name ?? ''}
+                      onChange={(event) => updatePayee(index, { name: event.target.value })}
+                      placeholder="Vendor name"
+                    />
                   </div>
                 ))}
                 <div className="row">
@@ -304,7 +298,7 @@ function Shell() {
                 </div>
                 <div className="grid">
                   <div className="field">
-                    <label htmlFor="cap">Daily cap (sats)</label>
+                    <label htmlFor="cap">Daily cap</label>
                     <input
                       id="cap"
                       type="number"
@@ -351,11 +345,11 @@ function Shell() {
                 </div>
                 <div>
                   <dt>Daily cap</dt>
-                  <dd className="amount">{formatSats(policy.dailyCapSats)}</dd>
+                  <dd className="amount">{formatAmount(policy.dailyCapSats)}</dd>
                 </div>
                 <div>
                   <dt>Remaining today</dt>
-                  <dd className="amount">{formatSats(remaining)}</dd>
+                  <dd className="amount">{formatAmount(remaining)}</dd>
                 </div>
                 <div>
                   <dt>Expiry</dt>
@@ -398,7 +392,7 @@ function Shell() {
                 </select>
               </div>
               <div className="field">
-                <label htmlFor="spend-amount">Amount (sats)</label>
+                <label htmlFor="spend-amount">Amount</label>
                 <input
                   id="spend-amount"
                   type="number"
@@ -432,11 +426,11 @@ function Shell() {
               <dl className="meta" key={`${row.txid}.${row.outputIndex}`}>
                 <div>
                   <dt>Amount</dt>
-                  <dd className="amount">{formatSats(row.amountSats)}</dd>
+                  <dd className="amount">{formatAmount(row.amountSats)}</dd>
                 </div>
                 <div>
                   <dt>Payee</dt>
-                  <dd>{row.payeeName?.trim() || shortKey(row.payee, 8)}</dd>
+                  <dd>{row.payeeName?.trim() || 'Payee'}</dd>
                 </div>
                 <div>
                   <dt>When</dt>
@@ -477,9 +471,24 @@ function Shell() {
       )}
 
       <details className="advanced">
-        <summary>Overlay URL</summary>
+        <summary>Advanced</summary>
+        {!policyId && payees.map((payee, index) => (
+          <div className="field" key={`payee-key-${index}`}>
+            <label htmlFor={`payee-key-${index}`}>Identity key</label>
+            <input
+              id={`payee-key-${index}`}
+              value={payee.identityKey ?? ''}
+              onChange={(event) => updatePayee(index, { identityKey: event.target.value.trim() })}
+              placeholder="02… or 03…"
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </div>
+        ))}
+        <p>Amounts are in sats.</p>
+        <label htmlFor="overlay-url">Overlay URL</label>
+        <input id="overlay-url" value={url} onChange={(event) => setUrl(event.target.value)} />
         <p>Operators can point this at a local indexer.</p>
-        <input value={url} onChange={(event) => setUrl(event.target.value)} />
       </details>
     </div>
   )

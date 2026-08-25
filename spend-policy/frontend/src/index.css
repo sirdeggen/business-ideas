@@ -249,6 +249,14 @@ code {
   font-size: 12px;
 }
 
+.advanced .field {
+  margin: 12px 0;
+}
+
+.advanced label {
+  margin-top: 12px;
+}
+
 .install {
   margin-top: 16px;
   padding: 12px 16px;

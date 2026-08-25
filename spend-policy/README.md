@@ -2,7 +2,7 @@
 
 A policy. A spend that policy allows.
 
-A treasurer writes a live policy (allowed payees, daily cap in sats, expiry). A spender pays a listed payee only if that policy allows. A stranger can read the policy with no wallet. Not a card product. Not a 402 handshake. Not treasury, StreamPay, or invoices.
+A treasurer writes a policy (allowed payees, daily cap in sats, expiry). A spender pays a listed payee only if that policy allows. A stranger can read the policy with no wallet. Not a card product. Not a 402 handshake. Not treasury, StreamPay, or invoices.
 
 Pages defaults to the public overlay: `https://overlay-us-1.bsvb.tech`, topic `tm_anytx`, lookup `ls_anytx`. After `createAction`, the app broadcasts with `@bsv/sdk` `TopicBroadcaster(['tm_anytx'])` pointed at that host. The page queries `ls_anytx` via `LookupResolver`, then keeps only this app’s PushDrop fields (protocol string `spendpolicy`). Wallet is asked only on **Write policy** and **Spend**.
 
@@ -38,7 +38,7 @@ Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access 
 ## How to try
 
 1. Open the UI. No wallet prompt on first paint.
-2. Treasurer: one allowed payee (identity key), daily cap `100000` sats, expiry 14 days. Click **Write policy**. Approve Desktop.
+2. Treasurer: allowed payee name on the face; identity key under Advanced (required to Write). Daily cap `100000`, expiry 14 days. Click **Write policy**. Approve Desktop.
 3. Share `?p=<policyId>&tx=<txid>`.
 4. Stranger: read allowed payees, daily cap, remaining today, expiry. No wallet.
 5. Spender: amount within cap to the listed payee. Click **Spend**. Approve Desktop. Receipt appears on the same link.
@@ -68,7 +68,7 @@ npm test
 npm run build
 ```
 
-Policy allow/deny (cap, payee, expiry), first-paint copy (no Live, no Connect on load, wallet only on Write/Spend), deep links use `?p=` not `/p/`.
+Policy allow/deny (cap, payee, expiry), first-paint copy (no Live, no face hex or sats, wallet only on Write/Spend), deep links use `?p=` not `/p/`.
 
 ## Protocol constants
 
