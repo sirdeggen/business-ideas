@@ -10,6 +10,8 @@ function book(sessionId: string, status: JoinedSession['status'] = 'closed'): Jo
     sessionId,
     payerIdentity: '02' + 'ab'.repeat(32),
     payeeIdentity: '03' + 'cd'.repeat(32),
+    payerName: 'Alex',
+    payeeName: 'Northstar',
     label: 'March crawls',
     dueDate: '2026-09-01',
     createdAt: '2026-08-25T00:00:00.000Z',

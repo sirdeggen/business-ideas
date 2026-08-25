@@ -25,7 +25,9 @@ const PAYEE = `03${'aa'.repeat(32)}`
 function closedBooks(): SessionInvoice {
   const draft = openDraft({
     label: 'March crawls',
+    payerName: 'Alex',
     payerIdentity: PAYER,
+    payeeName: 'Northstar',
     dueDate: '2026-09-01'
   })
   draft.lineItems = [
@@ -113,6 +115,24 @@ describe('status machine', () => {
     expect(() => nextStatus('open', 'pay')).toThrow(/pay/)
     expect(() => nextStatus('closed', 'close')).toThrow(/close/)
     expect(() => nextStatus('paid', 'pay')).toThrow(/pay/)
+  })
+
+  it('opens with a payer name and requires identity only to close', () => {
+    const draft = openDraft({
+      label: 'March crawls',
+      payerName: 'Alex',
+      dueDate: '2026-09-01'
+    })
+    expect(draft.payerName).toBe('Alex')
+    expect(draft.payerIdentity).toBe('')
+    draft.lineItems = [lineItemFromReceipt({
+      label: 'Article fetch',
+      amountSats: 1,
+      receipt: 'aa'
+    })]
+    expect(() => closeSession(draft, PAYEE)).toThrow(/Payer identity/)
+    draft.payerIdentity = PAYER
+    expect(closeSession(draft, PAYEE).status).toBe('closed')
   })
 
   it('closeSession writes the rolled-up total', () => {
@@ -207,6 +227,8 @@ describe('MAGIC / client-side filter', () => {
       sessionId: closed.sessionId,
       payerIdentity: PAYER,
       payeeIdentity: PAYEE,
+      payerName: 'Alex',
+      payeeName: 'Northstar',
       status: 'closed',
       totalSats: 8_040_268
     })

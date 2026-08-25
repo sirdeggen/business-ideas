@@ -44,7 +44,7 @@ describe('usdToSats uses the typed dollars', () => {
     expect(typed).not.toBe(leftover)
     const spend = resolveSpend('1.20', live, '25.00')
     expect(spend.amountSats).toBe(typed)
-    expect(moneyActionLabel('Pay', spend.amountUsd, spend.amountSats)).toBe('Pay $1.20 · 8,040,201 sats')
+    expect(moneyActionLabel('Pay', spend.amountUsd)).toBe('Pay $1.20')
   })
 
   it('rejects an empty live field instead of inventing a rate or amount', () => {

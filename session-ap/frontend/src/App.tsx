@@ -14,15 +14,19 @@ import {
   defaultDueDate,
   errorMessage,
   isWalletMissing,
-  overlayCheckFailed,
-  shortKey
+  overlayCheckFailed
 } from './lib/config'
+import {
+  FIRST_PAINT,
+  advancedSatsLine,
+  lineFace,
+  moneyActionLabel,
+  partyFaceName
+} from './lib/copy'
 import { bookCsv, bookJson, downloadText } from './lib/export'
 import {
   fetchUsdPerBsv,
-  formatUsd,
   lineUsdTotal,
-  moneyActionLabel,
   preferOnScreenAmount,
   resolveSpend,
   tryParseUsdAmount
@@ -72,15 +76,17 @@ function BookLines({ lines }: { lines: LineItem[] }) {
   }
   return (
     <ul className="lines">
-      {lines.map((line, index) => (
-        <li key={`${line.receiptHash}-${index}`}>
-          <div className="line-head">
-            <p className="line-label">{line.label}</p>
-            <p className="line-amount">{line.amountUsd ? formatUsd(line.amountUsd) : `${line.amountSats.toLocaleString('en-US')} billed`}</p>
-          </div>
-          <p className="line-hash">{line.receiptHash}</p>
-        </li>
-      ))}
+      {lines.map((line, index) => {
+        const face = lineFace(line)
+        return (
+          <li key={`${line.receiptHash}-${index}`}>
+            <div className="line-head">
+              <p className="line-label">{face.label}</p>
+              {face.amount ? <p className="line-amount">{face.amount}</p> : null}
+            </div>
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -110,7 +116,10 @@ function Shell() {
   const [lookupFailed, setLookupFailed] = useState(false)
 
   const [label, setLabel] = useState('')
+  const [payerName, setPayerName] = useState('')
   const [payerIdentity, setPayerIdentity] = useState('')
+  const [payeeName, setPayeeName] = useState('')
+  const [payeeIdentity, setPayeeIdentity] = useState('')
   const [dueDate, setDueDate] = useState(defaultDueDate)
   const [lineLabel, setLineLabel] = useState('')
   const [lineUsd, setLineUsd] = useState('')
@@ -129,16 +138,21 @@ function Shell() {
     return drafts.find((row) => row.sessionId === sessionId) ?? null
   }, [book, drafts, sessionId])
 
-  const totalUsd = working ? lineUsdTotal(working.lineItems, rate) : ''
+  const totalUsd = working ? lineUsdTotal(working.lineItems) : ''
   const totalSats = working ? (working.totalSats || rolledUpTotal(working.lineItems)) : 0
   const liveLine = tryParseUsdAmount(preferOnScreenAmount(lineUsd))
   const liveLineSats = liveLine != null && rate ? resolveSpend(lineUsd, rate).amountSats : undefined
   const payLabel = working
-    ? moneyActionLabel('Pay', totalUsd || working.lineItems[0]?.amountUsd || '', totalSats || undefined)
+    ? moneyActionLabel('Pay', totalUsd || working.lineItems[0]?.amountUsd || '')
     : 'Pay'
   const sendLabel = liveLine != null
-    ? moneyActionLabel('Send', liveLine, liveLineSats)
+    ? moneyActionLabel('Send', liveLine)
     : 'Send'
+  const payerFace = working ? partyFaceName(working.payerName) : ''
+  const vendorFace = working ? partyFaceName(working.payeeName) : ''
+  const advancedSats = working?.status === 'approved'
+    ? advancedSatsLine(totalSats)
+    : advancedSatsLine(liveLineSats)
 
   useEffect(() => {
     void fetchUsdPerBsv()
@@ -196,7 +210,14 @@ function Shell() {
     setActionNeedsInstall(false)
     setStatus(null)
     try {
-      const draft = openDraft({ label, payerIdentity, dueDate })
+      const draft = openDraft({
+        label,
+        payerName,
+        payerIdentity,
+        payeeName,
+        payeeIdentity,
+        dueDate
+      })
       setDrafts(upsertDraft(draft))
       setSessionId(draft.sessionId)
       goToSession(draft.sessionId)
@@ -274,9 +295,19 @@ function Shell() {
     setStatus(null)
     const session = await ensureWallet()
     if (!session) return
+    const ready = {
+      ...working,
+      payerIdentity: payerIdentity.trim() || working.payerIdentity,
+      payeeName: payeeName.trim() || working.payeeName,
+      payeeIdentity: payeeIdentity.trim() || working.payeeIdentity
+    }
+    if (!/^(02|03)[0-9a-fA-F]{64}$/.test(ready.payerIdentity)) {
+      setActionError('Payer identity is required to close the books')
+      return
+    }
     setBusy('close')
     try {
-      const result = await closeBooks(session.wallet, url, session.identityKey, working)
+      const result = await closeBooks(session.wallet, url, session.identityKey, ready)
       const published: JoinedSession = {
         ...result.book,
         txid: result.txid,
@@ -424,14 +455,13 @@ function Shell() {
                 />
               </div>
               <div className="field">
-                <label htmlFor="payer">Payer</label>
+                <label htmlFor="payer">{FIRST_PAINT.payerLabel}</label>
                 <input
                   id="payer"
-                  value={payerIdentity}
-                  onChange={(event) => setPayerIdentity(event.target.value)}
-                  placeholder="Their account"
-                  spellCheck={false}
-                  autoComplete="off"
+                  value={payerName}
+                  onChange={(event) => setPayerName(event.target.value)}
+                  placeholder={FIRST_PAINT.payerPlaceholder}
+                  autoComplete="name"
                 />
               </div>
               <div className="field">
@@ -475,12 +505,16 @@ function Shell() {
             <p className={statusClass(working.status)}>{statusLabel(working.status)}</p>
             {totalUsd && <p className="amount-xl">{totalUsd}</p>}
             <dl className="facts">
-              <dt>Payer</dt>
-              <dd>{shortKey(working.payerIdentity)}</dd>
-              {working.payeeIdentity && (
+              {payerFace && (
+                <>
+                  <dt>Payer</dt>
+                  <dd>{payerFace}</dd>
+                </>
+              )}
+              {vendorFace && (
                 <>
                   <dt>Vendor</dt>
-                  <dd>{shortKey(working.payeeIdentity)}</dd>
+                  <dd>{vendorFace}</dd>
                 </>
               )}
               <dt>Due</dt>
@@ -616,9 +650,43 @@ function Shell() {
       )}
 
       <details className="advanced">
-        <summary>Overlay URL</summary>
+        <summary>Advanced</summary>
+        <label htmlFor="payer-id">Payer identity</label>
+        <input
+          id="payer-id"
+          value={payerIdentity}
+          onChange={(event) => setPayerIdentity(event.target.value)}
+          spellCheck={false}
+          autoComplete="off"
+        />
+        <label htmlFor="vendor-name">Vendor</label>
+        <input
+          id="vendor-name"
+          value={payeeName}
+          onChange={(event) => setPayeeName(event.target.value)}
+          autoComplete="name"
+        />
+        <label htmlFor="vendor-id">Vendor identity</label>
+        <input
+          id="vendor-id"
+          value={payeeIdentity}
+          onChange={(event) => setPayeeIdentity(event.target.value)}
+          spellCheck={false}
+          autoComplete="off"
+        />
+        {advancedSats && <p>{advancedSats}</p>}
+        {working && working.lineItems.length > 0 && (
+          <ul className="desk-list">
+            {working.lineItems.map((line, index) => (
+              <li key={`${line.receiptHash}-${index}`}>
+                <code>{line.receiptHash}</code>
+              </li>
+            ))}
+          </ul>
+        )}
+        <label htmlFor="overlay-url">Overlay URL</label>
+        <input id="overlay-url" value={url} onChange={(event) => setUrl(event.target.value)} />
         <p>Operators can point this at another indexer. Public default is overlay-us-1.</p>
-        <input value={url} onChange={(event) => setUrl(event.target.value)} />
       </details>
     </div>
   )

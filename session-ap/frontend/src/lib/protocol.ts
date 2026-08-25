@@ -45,6 +45,8 @@ export interface SessionInvoice {
   sessionId: string
   payerIdentity: string
   payeeIdentity: string
+  payerName: string
+  payeeName: string
   label: string
   dueDate: string
   createdAt: string
@@ -191,13 +193,17 @@ export function nextStatus(from: SessionStatus, action: 'close' | 'approve' | 'p
   return to
 }
 
-export function closeSession(session: SessionInvoice, payeeIdentity: string): SessionInvoice {
+export function closeSession(session: SessionInvoice, payeeIdentity: string, payeeName = ''): SessionInvoice {
+  if (!isIdentityKey(session.payerIdentity)) {
+    throw new Error('Payer identity is required to close the books')
+  }
   if (!isIdentityKey(payeeIdentity)) throw new Error('Vendor identity is required to close the books')
   if (session.lineItems.length === 0) throw new Error('Add at least one line before closing')
   if (session.lineItems.length > MAX_LINE_ITEMS) throw new Error('Too many line items')
   return {
     ...session,
     payeeIdentity: payeeIdentity.trim(),
+    payeeName: payeeName.trim() || session.payeeName,
     totalSats: rolledUpTotal(session.lineItems),
     status: nextStatus(session.status, 'close')
   }
@@ -244,12 +250,18 @@ export function filterSessionPayloads(items: Array<{ magic?: unknown }>): Sessio
 
 export function openDraft(input: {
   label: string
-  payerIdentity: string
+  payerName: string
   dueDate: string
+  payerIdentity?: string
   payeeIdentity?: string
+  payeeName?: string
 }): SessionInvoice {
   assertLabel(input.label)
-  if (!isIdentityKey(input.payerIdentity)) {
+  const payerName = input.payerName.trim()
+  if (!payerName) throw new Error('Payer name is required')
+  if (payerName.length > MAX_LABEL_CHARS) throw new Error('Payer name is too long')
+  const payer = (input.payerIdentity ?? '').trim()
+  if (payer && !isIdentityKey(payer)) {
     throw new Error('Payer identity must be a 66-character account key')
   }
   if (!isIsoDate(input.dueDate)) throw new Error('Due date must be YYYY-MM-DD')
@@ -262,8 +274,10 @@ export function openDraft(input: {
     version: SCHEMA_VERSION,
     kind: 'session',
     sessionId: newSessionId(),
-    payerIdentity: input.payerIdentity.trim(),
+    payerIdentity: payer,
     payeeIdentity: payee,
+    payerName,
+    payeeName: (input.payeeName ?? '').trim(),
     label: input.label.trim(),
     dueDate: input.dueDate,
     createdAt: new Date().toISOString(),
@@ -325,7 +339,9 @@ export function encodeSessionFields(session: Omit<SessionInvoice, 'magic' | 'ver
     stringToUtf8Bytes(session.createdAt),
     stringToUtf8Bytes(encodeLineItems(session.lineItems)),
     stringToUtf8Bytes(String(total)),
-    stringToUtf8Bytes(session.status)
+    stringToUtf8Bytes(session.status),
+    stringToUtf8Bytes(session.payerName),
+    stringToUtf8Bytes(session.payeeName)
   ]
 }
 
@@ -406,7 +422,9 @@ export function parseSessionFields(fields: Array<number[] | Uint8Array>): Sessio
         createdAt,
         lineItems,
         totalSats: rolledUpTotal(lineItems),
-        status
+        status,
+        payerName: fields.length >= 13 ? fieldString(fields, 12) : '',
+        payeeName: fields.length >= 14 ? fieldString(fields, 13) : ''
       }
     }
     if (kind === 'approval') {

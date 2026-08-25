@@ -86,22 +86,18 @@ export function resolveSpend(rawUsd: string, usdPerBsv: number, fallback = ''): 
   }
 }
 
-export function moneyActionLabel(verb: 'Pay' | 'Send', usd: string | number, sats?: number): string {
+export function moneyActionLabel(verb: 'Pay' | 'Send', usd: string | number): string {
+  if (usd === '' || usd == null) return verb
   const dollars = formatUsd(usd)
   if (!dollars) return verb
-  if (sats == null || !Number.isInteger(sats)) return `${verb} ${dollars}`
-  return `${verb} ${dollars} · ${formatSats(sats)}`
+  return `${verb} ${dollars}`
 }
 
-export function lineUsdTotal(lines: Array<{ amountUsd?: string, amountSats: number }>, usdPerBsv?: number | null): string {
+export function lineUsdTotal(lines: Array<{ amountUsd?: string }>): string {
   const fromUsd = lines.reduce((sum, line) => {
     const value = Number(line.amountUsd)
     return Number.isFinite(value) ? sum + value : sum
   }, 0)
   if (fromUsd > 0) return formatUsd(Math.round(fromUsd * 100) / 100)
-  if (usdPerBsv && usdPerBsv > 0) {
-    const usd = lines.reduce((sum, line) => sum + (line.amountSats / SATS_PER_BSV) * usdPerBsv, 0)
-    return formatUsd(Math.round(usd * 100) / 100)
-  }
   return ''
 }

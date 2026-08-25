@@ -6,6 +6,8 @@ export function bookJson(book: SessionInvoice | JoinedSession): string {
     label: book.label,
     payerIdentity: book.payerIdentity,
     payeeIdentity: book.payeeIdentity,
+    payerName: book.payerName,
+    payeeName: book.payeeName,
     dueDate: book.dueDate,
     createdAt: book.createdAt,
     status: book.status,

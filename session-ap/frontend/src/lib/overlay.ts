@@ -326,7 +326,8 @@ function encodeContextFields(parsed: SessionPayload): number[][] {
       utf8(MAGIC), utf8(parsed.version), utf8('session'), utf8(parsed.sessionId),
       utf8(parsed.payerIdentity), utf8(parsed.payeeIdentity), utf8(parsed.label),
       utf8(parsed.dueDate), utf8(parsed.createdAt), utf8(JSON.stringify(parsed.lineItems)),
-      utf8(String(parsed.totalSats)), utf8(parsed.status)
+      utf8(String(parsed.totalSats)), utf8(parsed.status),
+      utf8(parsed.payerName), utf8(parsed.payeeName)
     ]
   }
   if (parsed.kind === 'approval') {
