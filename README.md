@@ -73,3 +73,10 @@ This trip’s draw. Free stub. One winner, in the room.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/raffle/
 - How to run: [raffle/README.md](./raffle/README.md)
+
+## Spend Policy
+
+A policy. A spend that policy allows.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/spend-policy/
+- How to run: [spend-policy/README.md](./spend-policy/README.md)
