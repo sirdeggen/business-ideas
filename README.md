@@ -80,3 +80,10 @@ A policy. A spend that policy allows.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/spend-policy/
 - How to run: [spend-policy/README.md](./spend-policy/README.md)
+
+## Session AP
+
+Close a session. One invoice for many small spends.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/session/
+- How to run: [session-ap/README.md](./session-ap/README.md)
