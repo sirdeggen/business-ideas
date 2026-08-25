@@ -4,9 +4,17 @@ import { formatSats, formatUsd } from './money'
 export const PAYER_NAME_PLACEHOLDER = 'Alex'
 
 export const FIRST_PAINT = {
+  eyebrow: 'Session AP',
+  deskTitle: 'Close this session.',
   payerLabel: 'Payer',
   payerPlaceholder: PAYER_NAME_PLACEHOLDER
 } as const
+
+/** One title: session label, or the desk line. Never a second Session AP. */
+export function sheetTitle(label?: string): string {
+  const trimmed = (label ?? '').trim()
+  return trimmed || FIRST_PAINT.deskTitle
+}
 
 export function isHexIdentity(value: string): boolean {
   return /^(02|03)[0-9a-fA-F]{64}$/.test(value.trim())

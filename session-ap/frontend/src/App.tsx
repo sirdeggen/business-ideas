@@ -21,7 +21,8 @@ import {
   advancedSatsLine,
   lineFace,
   moneyActionLabel,
-  partyFaceName
+  partyFaceName,
+  sheetTitle
 } from './lib/copy'
 import { bookCsv, bookJson, downloadText } from './lib/export'
 import {
@@ -424,8 +425,8 @@ function Shell() {
     <div className="app">
       <article className="sheet">
         <header className="sheet-head">
-          <p className="eyebrow">Session AP</p>
-          <h1>{working?.label || (isInvoice ? 'This session' : 'Close this session.')}</h1>
+          <p className="eyebrow">{FIRST_PAINT.eyebrow}</p>
+          <h1>{sheetTitle(working?.label)}</h1>
           <p className="lede">Many small spends. One invoice to approve.</p>
         </header>
 

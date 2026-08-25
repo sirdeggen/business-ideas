@@ -6,7 +6,8 @@ import {
   lineFace,
   lineFaceAmount,
   moneyActionLabel,
-  partyFaceName
+  partyFaceName,
+  sheetTitle
 } from './copy'
 import { shortKey } from './config'
 
@@ -21,6 +22,14 @@ describe('first paint payer is a name', () => {
     expect(FIRST_PAINT.payerPlaceholder).not.toBe('Their account')
     expect(FIRST_PAINT.payerLabel).toBe('Payer')
   })
+
+  it('uses one title — eyebrow Session AP, H1 is the session or Close this session.', () => {
+    expect(FIRST_PAINT.eyebrow).toBe('Session AP')
+    expect(sheetTitle('')).toBe('Close this session.')
+    expect(sheetTitle('March crawls')).toBe('March crawls')
+    expect(sheetTitle('March crawls')).not.toBe('Session AP')
+    expect(sheetTitle('')).not.toBe('Session AP')
+  })
 })
 
 describe('book sheet parties are names', () => {
@@ -28,6 +37,7 @@ describe('book sheet parties are names', () => {
     expect(partyFaceName('Alex')).toBe('Alex')
     expect(partyFaceName('Northstar')).toBe('Northstar')
     expect(partyFaceName(PAYER)).toBe('')
+    expect(partyFaceName(PAYER)).not.toMatch(/^(02|03)[0-9a-fA-F]{64}$/)
     expect(partyFaceName(shortKey(PAYER))).toBe('')
     expect(partyFaceName(shortKey(PAYER))).not.toMatch(/[0-9a-fA-F]{6}/)
     expect(partyFaceName('')).toBe('')
@@ -60,6 +70,8 @@ describe('line face is label + dollars', () => {
 
 describe('Pay and Send are dollars only', () => {
   it('does not put sats on the primary', () => {
+    expect(moneyActionLabel('Pay', '1.20')).toBe('Pay $1.20')
+    expect(moneyActionLabel('Pay', '1.20')).not.toContain('8,040,268')
     expect(moneyActionLabel('Pay', '12.40')).toBe('Pay $12.40')
     expect(moneyActionLabel('Send', 0.60)).toBe('Send $0.60')
     expect(moneyActionLabel('Pay', '12.40')).not.toMatch(/sats/i)
