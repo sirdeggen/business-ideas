@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { formatSats, sampleHashOf } from '../../protocol/dataset'
+import { sampleHashOf } from '../../protocol/dataset'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import { buyDump, downloadDump, postListing } from './lib/actions'
@@ -9,6 +9,7 @@ import {
   EYEBROW,
   FOOTER,
   LEDE,
+  PAID_LINE,
   PAID_STATUS,
   POST_BUTTON,
   POST_HEADING,
@@ -31,7 +32,6 @@ interface PaidReceipt {
   title: string
   license: string
   sampleHash: string
-  paidSats: number
   payTxid: string
   dump: string
 }
@@ -134,7 +134,6 @@ function Shell() {
         title: result.title,
         license: result.license,
         sampleHash: result.sampleHash,
-        paidSats: result.paidSats,
         payTxid: result.payTxid,
         dump: result.dump
       })
@@ -194,20 +193,7 @@ function Shell() {
               {rows.map((row) => (
                 <li key={`${row.txid}.${row.outputIndex}`} className="listing">
                   <h3>{row.title}</h3>
-                  <dl className="meta">
-                    <div>
-                      <dt>License</dt>
-                      <dd>{row.license}</dd>
-                    </div>
-                    <div>
-                      <dt>Sample hash</dt>
-                      <dd><code>{shortKey(row.sampleHash)}</code></dd>
-                    </div>
-                    <div>
-                      <dt>Price</dt>
-                      <dd className="count">{formatSats(row.priceSats)}</dd>
-                    </div>
-                  </dl>
+                  <p className="job">{row.license}</p>
                   <div className="actions">
                     <button
                       type="button"
@@ -215,9 +201,13 @@ function Shell() {
                       disabled={busy !== null || connecting || overlayDown}
                       onClick={() => void runBuy(row)}
                     >
-                      {busy === 'buy' && lastBuyId === row.listingId ? 'Paying…' : BUY_BUTTON}
+                      {busy === 'buy' && lastBuyId === row.listingId ? 'Getting…' : BUY_BUTTON}
                     </button>
                   </div>
+                  <details className="advanced">
+                    <summary>Advanced</summary>
+                    <p>Sample hash <code>{shortKey(row.sampleHash)}</code></p>
+                  </details>
                 </li>
               ))}
             </ul>
@@ -232,11 +222,14 @@ function Shell() {
               <br />
               {receipt.license}
               <br />
-              Paid {formatSats(receipt.paidSats)}
-              <br />
-              Sample hash <code>{shortKey(receipt.sampleHash)}</code>
+              {PAID_LINE}
             </p>
             <pre className="dump">{receipt.dump}</pre>
+            <details className="advanced">
+              <summary>Advanced</summary>
+              <p>Sample hash <code>{shortKey(receipt.sampleHash)}</code></p>
+              <p><code>{shortKey(receipt.payTxid)}</code></p>
+            </details>
           </section>
         )}
 
@@ -263,7 +256,7 @@ function Shell() {
               />
             </div>
             <div className="field">
-              <label htmlFor="dump">Dump</label>
+              <label htmlFor="dump">File</label>
               <textarea
                 id="dump"
                 rows={5}
@@ -273,28 +266,27 @@ function Shell() {
                 spellCheck={false}
               />
             </div>
-            <div className="grid">
-              <div className="field">
-                <label htmlFor="price">Price (sats)</label>
-                <input
-                  id="price"
-                  type="number"
-                  min={1}
-                  max={100000000}
-                  value={priceSats}
-                  onChange={(event) => setPriceSats(Number(event.target.value))}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="hash">Sample hash</label>
-                <input
-                  id="hash"
-                  value={samplePreview ? shortKey(samplePreview) : ''}
-                  readOnly
-                  placeholder="Fills from the dump"
-                />
-              </div>
+            <div className="field">
+              <label htmlFor="price">Price</label>
+              <input
+                id="price"
+                type="number"
+                min={1}
+                max={100000000}
+                value={priceSats}
+                onChange={(event) => setPriceSats(Number(event.target.value))}
+              />
             </div>
+            <details className="advanced">
+              <summary>Advanced</summary>
+              <label htmlFor="hash">Sample hash</label>
+              <input
+                id="hash"
+                value={samplePreview ? shortKey(samplePreview) : ''}
+                readOnly
+                placeholder="Fills from the file"
+              />
+            </details>
           </div>
           <div className="actions">
             <button

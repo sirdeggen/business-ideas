@@ -8,6 +8,7 @@ import {
   FOOTER,
   LEDE,
   POST_BUTTON,
+  POST_JOB,
   PRIMARY_COPY,
   STALL_HEADING,
   TITLE
@@ -20,20 +21,25 @@ const cardStart = catalog.indexOf('href="./datasets/"')
 const datasetCard = catalog.slice(cardStart, catalog.indexOf('</article>', cardStart))
 
 describe('first-paint copy', () => {
-  it('names the stall and the catalog fields, not overlay jargon', () => {
+  it('names the stall and the job, not a protocol sentence', () => {
     expect(TITLE).toBe('Dataset stall')
     expect(STALL_HEADING).toBe('The stall')
-    expect(LEDE).toBe('Labs buy a listed dump (title, license, sample hash, sats).')
-    expect(BUY_BUTTON).toBe('Buy this dump')
+    expect(LEDE).toBe('Post a listing. Pay a little to take the file.')
+    expect(BUY_BUTTON).toBe('Get the file.')
     expect(POST_BUTTON).toBe('Post a listing')
+    expect(POST_JOB).toBe('Title, license, the file, and a price.')
     expect(EMPTY_LIST).toBe('No listings yet.')
     expect(FOOTER).toBe('Not a radio network. Not a crawler paywall.')
     expect(app).toContain('{STALL_HEADING}')
     expect(app).toContain('License')
-    expect(app).toContain('Sample hash')
-    expect(app).toContain('Price (sats)')
+    expect(app).toContain('htmlFor="price">Price<')
     expect(app).toContain('BUY_BUTTON')
     expect(app).toContain('POST_BUTTON')
+    expect(app).not.toContain('Price (sats)')
+    expect(app).not.toContain('price in sats')
+    expect(app).not.toContain('sample hash, sats')
+    expect(app).not.toContain('Paid 100')
+    expect(app).not.toContain('formatSats')
     expect(app).not.toContain('tm_anytx')
     expect(app).not.toContain('ls_anytx')
     expect(app).not.toContain('PushDrop')
@@ -48,6 +54,7 @@ describe('first-paint copy', () => {
       expect(line).not.toMatch(/APY/i)
       expect(line).not.toMatch(/\$0\.00/)
       expect(line).not.toMatch(/\bLive\b/)
+      expect(line).not.toMatch(/\bsats?\b/i)
     }
     expect(FOOTER).toMatch(/Not a radio network/)
     expect(app).not.toContain('Connect wallet')
@@ -60,6 +67,15 @@ describe('first-paint copy', () => {
     expect(app).not.toMatch(/\$0\.00/)
     expect(app).not.toMatch(/node operator/i)
     expect(app).not.toMatch(/\bradios?\b/i)
+  })
+
+  it('keeps sample hash under Advanced, not on the listing face', () => {
+    expect(app).toContain('<summary>Advanced</summary>')
+    expect(app).toContain('Sample hash')
+    expect(app.indexOf('<h3>{row.title}</h3>')).toBeLessThan(app.indexOf('{row.license}'))
+    expect(app).toContain('BUY_BUTTON')
+    expect(app).not.toContain('{formatSats(row.priceSats)}')
+    expect(app).not.toContain('{formatSats(receipt.paidSats)}')
   })
 
   it('shows the stall list before wallet chrome', () => {
@@ -79,7 +95,9 @@ describe('first-paint copy', () => {
     expect(datasetCard).toContain('class="badge">Server<')
     expect(datasetCard).toContain('>View<')
     expect(datasetCard).toContain('How to run')
-    expect(datasetCard).toContain('Labs buy a listed dump')
+    expect(datasetCard).toContain('Post a listing. Pay a little to take the file.')
+    expect(datasetCard).not.toContain('sample hash')
+    expect(datasetCard).not.toContain('sats')
     expect(datasetCard).not.toContain('Open UI')
     expect(datasetCard).not.toContain('soon')
     expect(datasetCard).not.toContain('Live')

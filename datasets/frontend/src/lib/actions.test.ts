@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { assertCanPost, formatSats, listingPriceSats } from './actions'
 
 describe('listing price', () => {
-  it('keeps the seller’s sats price on the sheet', () => {
+  it('stores a whole sat price without a dollar face', () => {
     expect(listingPriceSats({ priceSats: 100 })).toBe(100)
     expect(formatSats(100)).toBe('100 sats')
     expect(formatSats(1)).toBe('1 sat')

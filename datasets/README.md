@@ -1,6 +1,6 @@
 # Dataset stall (v0)
 
-Labs buy a listed dump (title, license, sample hash, sats).
+Post a listing. Pay a little to take the file.
 
 A seller posts a catalog row. A lab pays that sats price, gets the small text/jsonl dump, and a receipt is written to overlay. This is **not** a radio network, **not** a crawler paywall (402 Press), and **not** one field-reading export (signed record desk).
 
@@ -8,7 +8,7 @@ Pages defaults to the public overlay: `https://overlay-us-1.bsvb.tech`, topic `t
 
 Public UI: `https://sirdeggen.github.io/business-ideas/datasets/`
 
-Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access other apps and services on this device,” then Retry with Desktop unlocked. Use the shared funded Desktop. Do not create a new wallet. Wallet is only asked on **Post a listing** or **Buy this dump**.
+Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access other apps and services on this device,” then Retry with Desktop unlocked. Use the shared funded Desktop. Do not create a new wallet. Wallet is only asked on **Post a listing** or **Get the file.**
 
 ## Stack
 
@@ -27,8 +27,8 @@ Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access 
 ## How to try
 
 1. Open the UI. The stall list loads from overlay. No wallet prompt on first paint.
-2. Seller: title, license, a small dump, price in sats. Click **Post a listing**. Approve Desktop.
-3. Lab: read title, license, sample hash, sats with no wallet. Click **Buy this dump**.
+2. Seller: title, license, the file, and a price. Click **Post a listing**. Approve Desktop.
+3. Lab: read title and license with no wallet. Click **Get the file.**
 4. After pay, the dump is revealed and a receipt is submitted to overlay.
 
 ## Public overlay

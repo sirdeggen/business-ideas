@@ -90,7 +90,7 @@ Close a session. One invoice for many small spends.
 
 ## Dataset stall
 
-Labs buy a listed dump (title, license, sample hash, sats).
+Post a listing. Pay a little to take the file.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/datasets/
 - How to run: [datasets/README.md](./datasets/README.md)

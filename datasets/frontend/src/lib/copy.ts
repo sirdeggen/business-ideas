@@ -1,14 +1,15 @@
 export const TITLE = 'Dataset stall'
 export const EYEBROW = 'Catalog'
-export const LEDE = 'Labs buy a listed dump (title, license, sample hash, sats).'
+export const LEDE = 'Post a listing. Pay a little to take the file.'
 export const STALL_HEADING = 'The stall'
 export const EMPTY_LIST = 'No listings yet.'
-export const BUY_BUTTON = 'Buy this dump'
+export const BUY_BUTTON = 'Get the file.'
 export const POST_HEADING = 'Post a listing'
-export const POST_JOB = 'Title, license, a small text or jsonl dump, and a price in sats.'
+export const POST_JOB = 'Title, license, the file, and a price.'
 export const POST_BUTTON = 'Post a listing'
 export const RECEIPT_HEADING = 'Receipt'
-export const PAID_STATUS = 'Paid. Here’s the dump.'
+export const PAID_LINE = 'Paid'
+export const PAID_STATUS = 'Paid. Here’s the file.'
 export const FOOTER = 'Not a radio network. Not a crawler paywall.'
 
 export const PRIMARY_COPY = [
@@ -22,6 +23,7 @@ export const PRIMARY_COPY = [
   POST_JOB,
   POST_BUTTON,
   RECEIPT_HEADING,
+  PAID_LINE,
   PAID_STATUS,
   FOOTER
 ] as const
