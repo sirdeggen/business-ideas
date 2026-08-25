@@ -17,11 +17,12 @@ import {
   isIdentityKey,
   makeListingId,
   sampleHashOf,
+  validateFile,
   validateListing,
-  validatePrice,
-  type DatasetListing
+  validatePrice
 } from '../../../protocol/dataset'
 import { originator } from './config'
+import { pullFile, pullNotices, sendFile, sendPurchase } from './messagebox'
 import { submitDatasetTx, type OverlayListing } from './overlay'
 import { CONNECT_MS, CONNECT_TIMEOUT_MESSAGE, withTimeout } from './wallet'
 
@@ -49,6 +50,12 @@ export interface BuyResult {
   overlayError?: string
 }
 
+interface HeldFile {
+  listingId: string
+  dump: string
+  sampleHash: string
+}
+
 function randomKeyId(): string {
   const bytes = new Uint8Array(8)
   crypto.getRandomValues(bytes)
@@ -73,7 +80,7 @@ function hashShort(value: string): string {
   return value.length > 16 ? `${value.slice(0, 10)}…` : value
 }
 
-export function listingPriceSats(listing: Pick<DatasetListing, 'priceSats'>): number {
+export function listingPriceSats(listing: Pick<OverlayListing, 'priceSats'>): number {
   return listing.priceSats
 }
 
@@ -109,13 +116,82 @@ async function brc29PaymentOutput(
   return {
     satoshis,
     lockingScript: lockingScript.toHex(),
-    outputDescription: `Dump payment ${formatSats(satoshis)}`,
+    outputDescription: `File payment`,
     customInstructions: JSON.stringify({
       derivationPrefix,
       derivationSuffix,
       payee
     })
   }
+}
+
+function heldFromInstructions(raw: string | undefined): HeldFile | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw) as Partial<HeldFile>
+    if (typeof parsed.listingId !== 'string' || typeof parsed.dump !== 'string') return null
+    if (!parsed.dump.trim()) return null
+    return {
+      listingId: parsed.listingId,
+      dump: parsed.dump,
+      sampleHash: typeof parsed.sampleHash === 'string' ? parsed.sampleHash : sampleHashOf(parsed.dump)
+    }
+  } catch {
+    return null
+  }
+}
+
+/** Seller-only. Overlay never sees these bytes. */
+export async function readHeldDump(wallet: WalletClient, listingId: string): Promise<string | null> {
+  const listed = await wallet.listOutputs({
+    basket: BASKET,
+    includeCustomInstructions: true,
+    limit: 200
+  })
+  for (const output of listed.outputs ?? []) {
+    const held = heldFromInstructions(output.customInstructions)
+    if (held && held.listingId === listingId) return held.dump
+  }
+  return null
+}
+
+export async function fulfillPurchases(wallet: WalletClient): Promise<void> {
+  const notices = await pullNotices(wallet)
+  for (const notice of notices) {
+    if (notice.kind !== 'purchase') continue
+    const dump = await readHeldDump(wallet, notice.listingId)
+    if (!dump) continue
+    await sendFile(wallet, notice.buyer, notice.listingId, dump, sampleHashOf(dump))
+  }
+}
+
+/**
+ * After pay: file comes from this wallet’s basket or Message Box.
+ * Never from the public listing row.
+ */
+export async function unlockFile(
+  wallet: WalletClient,
+  buyer: string,
+  listing: OverlayListing,
+  payTxid: string
+): Promise<string | null> {
+  const held = await readHeldDump(wallet, listing.listingId)
+  if (held) {
+    const invalid = validateFile(held, listing.sampleHash)
+    if (invalid) throw new Error(invalid)
+    await sendFile(wallet, buyer, listing.listingId, held, listing.sampleHash)
+    return held
+  }
+
+  await sendPurchase(wallet, listing.seller, listing.listingId, buyer, payTxid)
+  const delivered = await pullFile(wallet, listing.listingId)
+  if (delivered) {
+    const invalid = validateFile(delivered, listing.sampleHash)
+    if (invalid) throw new Error(invalid)
+    return delivered
+  }
+
+  return null
 }
 
 export async function postListing(
@@ -128,15 +204,16 @@ export async function postListing(
   const timestamp = nowIso()
   const dump = input.dump
   const sampleHash = sampleHashOf(dump)
+  const fileError = validateFile(dump, sampleHash)
+  if (fileError) throw new Error(fileError)
   const listingId = makeListingId(identityKey, input.title.trim(), timestamp, randomNonce())
-  const listing: Omit<DatasetListing, 'magic' | 'version' | 'kind'> = {
+  const listing = {
     listingId,
     seller: identityKey,
     title: input.title.trim(),
     license: input.license.trim(),
     sampleHash,
     priceSats: input.priceSats,
-    dump,
     timestamp
   }
   const invalid = validateListing({
@@ -171,7 +248,10 @@ export async function postListing(
       customInstructions: JSON.stringify({
         protocolID: PROTOCOL_ID,
         keyID,
-        counterparty: 'self'
+        counterparty: 'self',
+        listingId,
+        dump,
+        sampleHash
       }),
       tags: [BASKET, 'listing', listingId]
     }],
@@ -192,6 +272,8 @@ export async function postListing(
   if (!txid || !tx) {
     throw Object.assign(new Error('Wallet did not return a listing transaction'), { cause: response })
   }
+
+  await sendFile(wallet, identityKey, listingId, dump, sampleHash)
 
   try {
     await submitDatasetTx(overlayUrl, tx)
@@ -242,7 +324,7 @@ export async function buyDump(
 
   const payment = await brc29PaymentOutput(wallet, listing.seller, paidSats)
   const response = await wallet.createAction({
-    description: `Buy dump: ${listing.title}`,
+    description: `Get the file: ${listing.title}`,
     outputs: [
       {
         satoshis: payment.satoshis,
@@ -281,12 +363,14 @@ export async function buyDump(
     throw Object.assign(new Error('Wallet did not return a payment transaction'), { cause: response })
   }
 
+  const dump = (await unlockFile(wallet, identityKey, listing, txid)) ?? ''
+
   try {
     await submitDatasetTx(overlayUrl, tx)
     return {
       payTxid: txid,
       paidSats,
-      dump: listing.dump,
+      dump,
       title: listing.title,
       license: listing.license,
       sampleHash: listing.sampleHash
@@ -296,7 +380,7 @@ export async function buyDump(
     return {
       payTxid: txid,
       paidSats,
-      dump: listing.dump,
+      dump,
       title: listing.title,
       license: listing.license,
       sampleHash: listing.sampleHash,

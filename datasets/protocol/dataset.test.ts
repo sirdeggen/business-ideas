@@ -8,6 +8,7 @@ import {
   makeListingId,
   parseDatasetFields,
   sampleHashOf,
+  validateFile,
   validateListing,
   validatePrice,
   validateReceipt,
@@ -20,24 +21,18 @@ const BUYER = `03${'cd'.repeat(32)}`
 const DUMP = '{"url":"https://example.edu/paper","text":"abstract"}\n'
 
 function listing(partial: Partial<DatasetListing> = {}): DatasetListing {
-  const dump = partial.dump ?? DUMP
-  const base = {
-    listingId: makeListingId(SELLER, 'Common Crawl snippet', '2026-08-25T10:00:00Z', 'aa'),
-    seller: SELLER,
-    title: 'Common Crawl snippet',
-    license: 'CC-BY-4.0',
-    sampleHash: sampleHashOf(dump),
-    priceSats: 100,
-    dump,
-    timestamp: '2026-08-25T10:00:00Z',
-    ...partial
-  }
   return {
     magic: MAGIC,
     version: SCHEMA_VERSION,
     kind: 'listing',
-    ...base,
-    sampleHash: partial.sampleHash ?? sampleHashOf(base.dump)
+    listingId: makeListingId(SELLER, 'Common Crawl snippet', '2026-08-25T10:00:00Z', 'aa'),
+    seller: SELLER,
+    title: 'Common Crawl snippet',
+    license: 'CC-BY-4.0',
+    sampleHash: sampleHashOf(DUMP),
+    priceSats: 100,
+    timestamp: '2026-08-25T10:00:00Z',
+    ...partial
   }
 }
 
@@ -55,11 +50,31 @@ function receipt(partial: Partial<DatasetReceipt> = {}): DatasetReceipt {
   }
 }
 
+function fieldTexts(fields: number[][]): string[] {
+  return fields.map((field) => new TextDecoder().decode(Uint8Array.from(field)))
+}
+
 describe('dataset stall protocol', () => {
-  it('round-trips a listing and keeps the sample hash of the dump', () => {
+  it('round-trips a listing without the file bytes', () => {
     const item = listing()
-    const parsed = parseDatasetFields(encodeListingFields(item))
+    const fields = encodeListingFields(item)
+    expect(fieldTexts(fields)).toEqual([
+      MAGIC,
+      SCHEMA_VERSION,
+      'listing',
+      item.listingId,
+      item.seller,
+      item.title,
+      item.license,
+      item.sampleHash,
+      String(item.priceSats),
+      item.timestamp
+    ])
+    expect(fieldTexts(fields)).not.toContain(DUMP)
+    expect(fieldTexts(fields).join('\n')).not.toContain('abstract')
+    const parsed = parseDatasetFields(fields)
     expect(parsed).toEqual(item)
+    expect(parsed).not.toHaveProperty('dump')
     expect(validateListing(parsed as DatasetListing)).toBeNull()
     expect((parsed as DatasetListing).sampleHash).toBe(sampleHashOf(DUMP))
   })
@@ -69,6 +84,21 @@ describe('dataset stall protocol', () => {
     const extra = [Array.from(new TextEncoder().encode('pubkey'))]
     const parsed = parseDatasetFields([...extra, ...encodeListingFields(item)])
     expect(parsed).toEqual(item)
+    expect(parsed).not.toHaveProperty('dump')
+  })
+
+  it('drops dump bytes if an older listing leaked them after price', () => {
+    const item = listing()
+    const fields = encodeListingFields(item)
+    const leaked = [
+      ...fields.slice(0, 9),
+      Array.from(new TextEncoder().encode(DUMP)),
+      Array.from(new TextEncoder().encode(item.timestamp))
+    ]
+    const parsed = parseDatasetFields(leaked)
+    expect(parsed).toEqual(item)
+    expect(parsed).not.toHaveProperty('dump')
+    expect(JSON.stringify(parsed)).not.toContain('abstract')
   })
 
   it('round-trips a receipt', () => {
@@ -78,10 +108,10 @@ describe('dataset stall protocol', () => {
     expect(validateReceipt(parsed as DatasetReceipt)).toBeNull()
   })
 
-  it('rejects a listing whose sample hash does not match the dump', () => {
-    expect(validateListing(listing({ sampleHash: 'ab'.repeat(32) }))).toBe(
-      'sample hash does not match dump'
-    )
+  it('keeps the sample hash check on the private file, not the listing row', () => {
+    expect(validateFile(DUMP, 'ab'.repeat(32))).toBe('sample hash does not match dump')
+    expect(validateFile(DUMP, sampleHashOf(DUMP))).toBeNull()
+    expect(validateListing(listing({ sampleHash: 'nope' }))).toBe('sample hash must be 64 hex chars')
   })
 
   it('rejects a zero-sat price and formats sats without dollars', () => {

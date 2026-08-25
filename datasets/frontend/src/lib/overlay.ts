@@ -340,8 +340,15 @@ function fromContext(context: number[] | undefined, outputIndex: number): Overla
       outputIndex?: number
     }
     if (parsed.magic !== MAGIC || !parsed.kind) return null
+    const payload = parsed.kind === 'listing'
+      ? (() => {
+        const listing = { ...parsed } as DatasetListing & { dump?: string }
+        delete listing.dump
+        return listing
+      })()
+      : parsed
     return {
-      payload: parsed as DatasetPayload,
+      payload,
       txid: typeof parsed.txid === 'string' ? parsed.txid : '',
       outputIndex: parsed.outputIndex ?? outputIndex
     }

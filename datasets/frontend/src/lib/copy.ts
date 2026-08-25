@@ -10,6 +10,7 @@ export const POST_BUTTON = 'Post a listing'
 export const RECEIPT_HEADING = 'Receipt'
 export const PAID_LINE = 'Paid'
 export const PAID_STATUS = 'Paid. Here’s the file.'
+export const PAID_WAIT = 'Paid. The seller sends the file on Message Box.'
 export const FOOTER = 'Not a radio network. Not a crawler paywall.'
 
 export const PRIMARY_COPY = [

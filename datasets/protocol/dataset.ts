@@ -1,10 +1,10 @@
 /**
  * Dataset stall protocol (PushDrop / BRC-48 fields).
  *
- * A seller posts one catalog row: title, license, sample hash, price in sats,
- * plus a small text/jsonl dump. A lab pays that sats price, gets the dump,
- * and a receipt is written to overlay. Not a radio network, not a crawler
- * paywall, not one field-reading export.
+ * A seller posts one catalog row: title, license, sample hash, price.
+ * The file is not on that row. A lab pays, then the file arrives on
+ * Message Box (or this wallet’s basket). Receipt is written to overlay.
+ * Not a radio network, not a crawler paywall, not one field-reading export.
  */
 
 import { sha256Hex } from './sha256'
@@ -16,6 +16,8 @@ export const TOPIC = 'tm_anytx'
 export const LOOKUP_SERVICE = 'ls_anytx'
 export const MAGIC = 'dataset'
 export const SCHEMA_VERSION = '1'
+export const MESSAGE_BOX = 'datasets'
+export const MESSAGE_BOX_HOST = 'https://gmb.bsvblockchain.tech'
 export const TITLE_MAX = 160
 export const LICENSE_MAX = 80
 export const DUMP_MAX = 4000
@@ -35,7 +37,6 @@ export interface DatasetListing {
   license: string
   sampleHash: string
   priceSats: number
-  dump: string
   timestamp: string
 }
 
@@ -114,7 +115,6 @@ export function encodeListingFields(
     stringToUtf8Bytes(item.license),
     stringToUtf8Bytes(item.sampleHash),
     stringToUtf8Bytes(String(item.priceSats)),
-    stringToUtf8Bytes(item.dump),
     stringToUtf8Bytes(item.timestamp)
   ]
 }
@@ -137,7 +137,14 @@ export function encodeReceiptFields(
 function listingFromFields(
   fields: Array<number[] | Uint8Array>,
   start: number
-): DatasetListing {
+): DatasetListing | null {
+  if (start + 9 >= fields.length) return null
+  const ninth = fieldUtf8(fields[start + 9])
+  const tenth = fields[start + 10] ? fieldUtf8(fields[start + 10]) : ''
+  // New row: timestamp at +9. An older leak put dump at +9 and time at +10 —
+  // keep the time, drop the dump so parse never returns file bytes.
+  const timestamp = isIsoTime(ninth) ? ninth : (isIsoTime(tenth) ? tenth : '')
+  if (!timestamp) return null
   return {
     magic: MAGIC,
     version: fieldUtf8(fields[start + 1]) as typeof SCHEMA_VERSION,
@@ -148,8 +155,7 @@ function listingFromFields(
     license: fieldUtf8(fields[start + 6]),
     sampleHash: fieldUtf8(fields[start + 7]).toLowerCase(),
     priceSats: Number(fieldUtf8(fields[start + 8])),
-    dump: fieldUtf8(fields[start + 9]),
-    timestamp: fieldUtf8(fields[start + 10])
+    timestamp
   }
 }
 
@@ -172,6 +178,7 @@ function receiptFromFields(
 /**
  * Accepts live lock() scripts where MAGIC is anywhere in the field list.
  * Extra pubkey/signature fields may sit before or after the catalog row.
+ * File bytes are never returned from a listing parse.
  */
 export function parseDatasetFields(fields: Array<number[] | Uint8Array>): DatasetPayload | null {
   const start = magicIndex(fields)
@@ -179,9 +186,8 @@ export function parseDatasetFields(fields: Array<number[] | Uint8Array>): Datase
   try {
     const kind = fieldUtf8(fields[start + 2])
     if (kind === 'listing') {
-      if (start + 10 >= fields.length) return null
       const parsed = listingFromFields(fields, start)
-      if (validateListing(parsed, { requireHashMatch: false })) return null
+      if (!parsed || validateListing(parsed)) return null
       return parsed
     }
     if (kind === 'receipt') {
@@ -209,11 +215,14 @@ export function validatePrice(sats: number): string | null {
   return null
 }
 
-export function validateListing(
-  item: DatasetListing,
-  options: { requireHashMatch?: boolean } = {}
-): string | null {
-  const requireHashMatch = options.requireHashMatch !== false
+export function validateFile(dump: string, sampleHash: string): string | null {
+  if (dump.trim().length < 1) return 'dump is required'
+  if (dump.length > DUMP_MAX) return 'dump too long for v0'
+  if (sampleHash !== sampleHashOf(dump)) return 'sample hash does not match dump'
+  return null
+}
+
+export function validateListing(item: DatasetListing): string | null {
   if (item.magic !== MAGIC) return 'wrong magic'
   if (item.version !== SCHEMA_VERSION) return 'unsupported schema version'
   if (item.kind !== 'listing') return 'kind must be listing'
@@ -226,12 +235,7 @@ export function validateListing(
   if (!HASH_HEX.test(item.sampleHash)) return 'sample hash must be 64 hex chars'
   const priceError = validatePrice(item.priceSats)
   if (priceError) return priceError
-  if (item.dump.trim().length < 1) return 'dump is required'
-  if (item.dump.length > DUMP_MAX) return 'dump too long for v0'
   if (!isIsoTime(item.timestamp)) return 'timestamp must be ISO-8601'
-  if (requireHashMatch && item.sampleHash !== sampleHashOf(item.dump)) {
-    return 'sample hash does not match dump'
-  }
   return null
 }
 

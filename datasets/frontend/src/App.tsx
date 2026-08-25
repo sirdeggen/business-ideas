@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { sampleHashOf } from '../../protocol/dataset'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
-import { buyDump, downloadDump, postListing } from './lib/actions'
+import { buyDump, downloadDump, fulfillPurchases, postListing } from './lib/actions'
 import {
   BUY_BUTTON,
   EMPTY_LIST,
@@ -11,6 +11,7 @@ import {
   LEDE,
   PAID_LINE,
   PAID_STATUS,
+  PAID_WAIT,
   POST_BUTTON,
   POST_HEADING,
   POST_JOB,
@@ -78,6 +79,11 @@ function Shell() {
     void refresh()
   }, [url])
 
+  useEffect(() => {
+    if (!wallet || !identityKey) return
+    void fulfillPurchases(wallet)
+  }, [wallet, identityKey])
+
   const ensureWallet = async () => {
     if (wallet && identityKey) return { wallet, identityKey }
     const result = await connect()
@@ -129,18 +135,23 @@ function Shell() {
     setBusy('buy')
     try {
       const result = await buyDump(session.wallet, url, session.identityKey, row)
-      downloadDump(result.title, result.dump)
-      setReceipt({
-        title: result.title,
-        license: result.license,
-        sampleHash: result.sampleHash,
-        payTxid: result.payTxid,
-        dump: result.dump
-      })
+      if (result.dump) {
+        downloadDump(result.title, result.dump)
+        setReceipt({
+          title: result.title,
+          license: result.license,
+          sampleHash: result.sampleHash,
+          payTxid: result.payTxid,
+          dump: result.dump
+        })
+      } else {
+        setReceipt(null)
+      }
       setStatus(result.overlayError
-        ? `${PAID_STATUS} Overlay submit failed: ${result.overlayError}`
-        : PAID_STATUS)
+        ? `${result.dump ? PAID_STATUS : PAID_WAIT} Overlay submit failed: ${result.overlayError}`
+        : (result.dump ? PAID_STATUS : PAID_WAIT))
       if (result.overlayError) setActionError(result.overlayError)
+      void fulfillPurchases(session.wallet)
     } catch (err) {
       console.error('Buy failed', err)
       setActionError(errorMessage(err))

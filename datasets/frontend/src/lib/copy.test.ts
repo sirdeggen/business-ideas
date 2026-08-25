@@ -76,6 +76,7 @@ describe('first-paint copy', () => {
     expect(app).toContain('BUY_BUTTON')
     expect(app).not.toContain('{formatSats(row.priceSats)}')
     expect(app).not.toContain('{formatSats(receipt.paidSats)}')
+    expect(app).not.toContain('row.dump')
   })
 
   it('shows the stall list before wallet chrome', () => {

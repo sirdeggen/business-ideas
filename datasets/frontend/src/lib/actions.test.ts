@@ -1,5 +1,12 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { assertCanPost, formatSats, listingPriceSats } from './actions'
+
+const here = dirname(fileURLToPath(import.meta.url))
+const actionsSrc = readFileSync(join(here, 'actions.ts'), 'utf8')
+const protocolSrc = readFileSync(join(here, '../../../protocol/dataset.ts'), 'utf8')
 
 describe('listing price', () => {
   it('stores a whole sat price without a dollar face', () => {
@@ -35,5 +42,18 @@ describe('listing price', () => {
       dump: '{}',
       priceSats: 0
     })).toThrow('price must be at least 1 sat')
+  })
+})
+
+describe('paywalled file', () => {
+  it('does not encode dump on the listing and buy does not read listing.dump', () => {
+    expect(protocolSrc).not.toContain('stringToUtf8Bytes(item.dump)')
+    expect(protocolSrc).not.toMatch(/encodeListingFields[\s\S]*item\.dump/)
+    expect(actionsSrc).not.toContain('listing.dump')
+    expect(actionsSrc).not.toMatch(/return\s+\{\s*[\s\S]*dump:\s*listing/)
+    expect(actionsSrc).toContain('unlockFile')
+    expect(actionsSrc).toContain('sendFile')
+    expect(actionsSrc).toContain('readHeldDump')
+    expect(actionsSrc).toContain('sendPurchase')
   })
 })
