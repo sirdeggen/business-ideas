@@ -24,7 +24,6 @@ import {
   ISSUE_JOB,
   LEDE,
   LIST_HEADING,
-  NOT_HOLDER,
   TITLE,
   TO_LABEL,
   TRANSFER_BUTTON
@@ -113,6 +112,12 @@ function Shell() {
     return held.find((item) => item.title.titleId === titleId)
   }
 
+  /** Guest: show Transfer/Export so first Export can learn identity. After that, holder only. */
+  const canActOn = (row: OverlayTitle): boolean => {
+    if (!identityKey) return true
+    return isHolder(row, identityKey)
+  }
+
   const runIssue = async (): Promise<void> => {
     setLastAction('issue')
     setActionError(null)
@@ -158,6 +163,7 @@ function Shell() {
     setActionError(null)
     setActionNeedsInstall(false)
     setStatus(null)
+    if (identityKey && !isHolder(row, identityKey)) return
     if (transferOpen !== row.titleId) {
       setTransferOpen(row.titleId)
       return
@@ -165,10 +171,7 @@ function Shell() {
     if (!(toById[row.titleId] ?? '').trim()) return
     const session = await ensureWallet()
     if (!session) return
-    if (!isHolder(row, session.identityKey)) {
-      setActionError(NOT_HOLDER)
-      return
-    }
+    if (!isHolder(row, session.identityKey)) return
     const mine = heldFor(row.titleId) ?? (await refreshHeld(session.wallet)).find((item) => item.title.titleId === row.titleId)
     if (!mine) {
       setActionError('This wallet does not hold that title yet.')
@@ -208,12 +211,10 @@ function Shell() {
     setActionError(null)
     setActionNeedsInstall(false)
     setStatus(null)
+    if (identityKey && !isHolder(row, identityKey)) return
     const session = await ensureWallet()
     if (!session) return
-    if (!isHolder(row, session.identityKey)) {
-      setActionError(NOT_HOLDER)
-      return
-    }
+    if (!isHolder(row, session.identityKey)) return
     setBusy('export')
     try {
       const mine = heldFor(row.titleId) ?? (await refreshHeld(session.wallet)).find((item) => item.title.titleId === row.titleId) ?? null
@@ -282,7 +283,7 @@ function Shell() {
                 <li key={`${row.txid}.${row.outputIndex}`} className="listing">
                   <h3>{row.label}</h3>
                   <p className="job">{heldLine(names[row.holder])}</p>
-                  {transferOpen === row.titleId && (
+                  {canActOn(row) && transferOpen === row.titleId && (
                     <div className="field">
                       <label htmlFor={`to-${row.titleId}`}>{TO_LABEL}</label>
                       <input
@@ -296,6 +297,7 @@ function Shell() {
                       />
                     </div>
                   )}
+                  {canActOn(row) && (
                   <div className="actions">
                     <button
                       type="button"
@@ -314,6 +316,7 @@ function Shell() {
                       {busy === 'export' && lastTitleId === row.titleId ? 'Exporting…' : EXPORT_BUTTON}
                     </button>
                   </div>
+                  )}
                   <details className="advanced">
                     <summary>Advanced</summary>
                     <p>Document hash <code>{shortKey(row.docHash)}</code></p>
@@ -384,6 +387,7 @@ function Shell() {
                 readOnly
                 placeholder="Fills from the document"
               />
+              <p>Amounts are in sats.</p>
             </details>
           </div>
           <div className="actions">
