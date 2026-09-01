@@ -108,3 +108,10 @@ A name for a while. Look it up. Renew before it ends.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/names/
 - How to run: [names/README.md](./names/README.md)
+
+## Title desk
+
+Issue a titled document. Transfer the title. Export if you hold it.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/titles/
+- How to run: [titles/README.md](./titles/README.md)
