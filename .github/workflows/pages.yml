@@ -38,6 +38,7 @@ jobs:
             datasets/frontend/package-lock.json
             memberships/frontend/package-lock.json
             names/frontend/package-lock.json
+            titles/frontend/package-lock.json
       - name: Install and build tickets
         working-directory: event-tickets/frontend
         env:
@@ -155,9 +156,18 @@ jobs:
           npm ci
           npm run build
           cp dist/index.html dist/404.html
+      - name: Install and build titles
+        working-directory: titles/frontend
+        env:
+          VITE_BASE: /business-ideas/titles/
+          VITE_OVERLAY_URL: https://overlay-us-1.bsvb.tech
+        run: |
+          npm ci
+          npm run build
+          cp dist/index.html dist/404.html
       - name: Compose Pages site
         run: |
-          mkdir -p site/tickets site/receivables site/invoices site/treasury site/streampay site/grants site/records site/raffle site/spend-policy site/session site/datasets site/memberships site/names
+          mkdir -p site/tickets site/receivables site/invoices site/treasury site/streampay site/grants site/records site/raffle site/spend-policy site/session site/datasets site/memberships site/names site/titles
           cp pages/index.html pages/styles.css site/
           cp -r event-tickets/frontend/dist/. site/tickets/
           cp -r receivable-desk/frontend/dist/. site/receivables/
@@ -172,6 +182,7 @@ jobs:
           cp -r datasets/frontend/dist/. site/datasets/
           cp -r memberships/frontend/dist/. site/memberships/
           cp -r names/frontend/dist/. site/names/
+          cp -r titles/frontend/dist/. site/titles/
           cp invoices/frontend/spa-404.html site/404.html
           touch site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
