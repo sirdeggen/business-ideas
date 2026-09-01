@@ -95,7 +95,7 @@ Post a listing. Pay a little to take the file.
 - Pages UI: https://sirdeggen.github.io/business-ideas/datasets/
 - How to run: [datasets/README.md](./datasets/README.md)
 
-## Memberships
+## Membership
 
 A timed key. Renew when it expires.
 

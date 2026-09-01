@@ -1,4 +1,4 @@
-# Timed Memberships (v0)
+# Timed Membership (v0)
 
 A timed key. Renew when it expires.
 

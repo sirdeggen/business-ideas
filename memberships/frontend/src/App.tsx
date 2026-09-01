@@ -12,11 +12,16 @@ import { WalletProvider, useWallet } from './context/WalletContext'
 import { assertCanCreate, createMembership, joinMembership, renewMembership } from './lib/actions'
 import {
   CREATE_BUTTON,
+  CREATING_BUTTON,
+  DURATION_LABEL,
   EXPIRED_LINE,
   EYEBROW,
   JOB,
   JOIN_BUTTON,
+  JOIN_JOB,
+  JOINING_BUTTON,
   RENEW_BUTTON,
+  RENEWING_BUTTON,
   SHOW_EXPIRED,
   SHOW_VALID,
   STRANGER_LINE,
@@ -285,7 +290,7 @@ function Shell() {
               </div>
               <div className="grid">
                 <div className="field">
-                  <label htmlFor="days">Duration</label>
+                  <label htmlFor="days">{DURATION_LABEL}</label>
                   <input
                     id="days"
                     inputMode="numeric"
@@ -313,7 +318,7 @@ function Shell() {
                 disabled={busy !== null || connecting || overlayDown}
                 onClick={() => void runCreate()}
               >
-                {busy === 'create' ? 'Approve in your wallet…' : CREATE_BUTTON}
+                {busy === 'create' ? CREATING_BUTTON : CREATE_BUTTON}
               </button>
             </div>
           </section>
@@ -350,6 +355,7 @@ function Shell() {
 
         {membership && !key && (
           <section className="slip">
+            <p className="job">{JOIN_JOB}</p>
             <div className="actions">
               <button
                 type="button"
@@ -357,7 +363,7 @@ function Shell() {
                 disabled={busy !== null || connecting || overlayDown}
                 onClick={() => void runJoin()}
               >
-                {busy === 'join' ? 'Approve in your wallet…' : JOIN_BUTTON}
+                {busy === 'join' ? JOINING_BUTTON : JOIN_BUTTON}
               </button>
             </div>
           </section>
@@ -386,7 +392,7 @@ function Shell() {
                   disabled={busy !== null || connecting || overlayDown}
                   onClick={() => void runRenew()}
                 >
-                  {busy === 'renew' ? 'Approve in your wallet…' : RENEW_BUTTON}
+                  {busy === 'renew' ? RENEWING_BUTTON : RENEW_BUTTON}
                 </button>
               </div>
             )}
