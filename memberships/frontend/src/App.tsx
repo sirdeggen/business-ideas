@@ -251,7 +251,7 @@ function Shell() {
     window.setTimeout(() => setCopied(false), 1600)
   }
 
-  const combinedError = actionError || walletError || lookupError
+  const combinedError = actionError || walletError
   const showInstall = walletMissing || actionNeedsInstall
 
   return (
