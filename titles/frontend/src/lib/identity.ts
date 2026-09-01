@@ -1,5 +1,5 @@
 import { isIdentityKey } from '../../../protocol/title'
-import { HOLDER_FALLBACK } from './copy'
+import { HELD_BY, HOLDER_FALLBACK } from './copy'
 
 const RESOLVE_MS = 4000
 
@@ -7,6 +7,13 @@ export function holderFaceName(resolved: string | null | undefined): string {
   const name = resolved?.trim()
   if (!name || isIdentityKey(name)) return HOLDER_FALLBACK
   return name
+}
+
+/** Face line: a name if we have one. Never “Held by Holder”, never hex. */
+export function heldLine(resolved: string | null | undefined): string {
+  const face = holderFaceName(resolved)
+  if (face === HOLDER_FALLBACK) return HOLDER_FALLBACK
+  return `${HELD_BY} ${face}`
 }
 
 function nameFromRecord(row: unknown): string | null {

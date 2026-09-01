@@ -11,7 +11,7 @@ import {
   issuePriceSats
 } from './actions'
 import { NOT_HOLDER } from './copy'
-import { holderFaceName } from './identity'
+import { heldLine, holderFaceName } from './identity'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const actionsSrc = readFileSync(join(here, 'actions.ts'), 'utf8')
@@ -58,6 +58,9 @@ describe('holder gates', () => {
     expect(holderFaceName(null)).toBe('Holder')
     expect(holderFaceName('Alex')).toBe('Alex')
     expect(holderFaceName(`02${'ab'.repeat(32)}`)).toBe('Holder')
+    expect(heldLine(null)).toBe('Holder')
+    expect(heldLine('Alex')).toBe('Held by Alex')
+    expect(heldLine(`02${'ab'.repeat(32)}`)).toBe('Holder')
   })
 })
 

@@ -17,10 +17,16 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url))
 const app = readFileSync(join(here, '../App.tsx'), 'utf8')
+const css = readFileSync(join(here, '../index.css'), 'utf8')
 const catalog = readFileSync(join(here, '../../../../pages/index.html'), 'utf8')
 const pages = readFileSync(join(here, '../../../../.github/workflows/pages.yml'), 'utf8')
 const cardStart = catalog.indexOf('href="./titles/"')
 const titleCard = catalog.slice(cardStart, catalog.indexOf('</article>', cardStart))
+const jsx = app.slice(app.indexOf('return ('))
+const face = jsx.slice(0, jsx.indexOf('<details'))
+const issueFn = app.slice(app.indexOf('const runIssue'), app.indexOf('const runTransfer'))
+const transferFn = app.slice(app.indexOf('const runTransfer'), app.indexOf('const runExport'))
+const exportFn = app.slice(app.indexOf('const runExport'), app.indexOf('const retry'))
 
 describe('first-paint copy', () => {
   it('names the desk and the job, not a protocol sentence', () => {
@@ -74,9 +80,22 @@ describe('first-paint copy', () => {
   it('keeps document hash under Advanced, holder as a name on the face', () => {
     expect(app).toContain('<summary>Advanced</summary>')
     expect(app).toContain('Document hash')
-    expect(app).toContain('holderFaceName(names[row.holder])')
-    expect(app).not.toContain('{formatSats')
-    expect(app).not.toContain('row.holder}')
+    expect(app).toContain('heldLine(names[row.holder])')
+    expect(face).not.toContain('shortKey')
+    expect(face).not.toContain('sats')
+    expect(face).not.toContain('Price (sats)')
+    expect(face).not.toContain('{formatSats')
+    expect(face).not.toContain('row.holder}')
+    expect(face).not.toContain('identity key')
+    expect(face).not.toContain('02…')
+    expect(face).not.toContain('Name or account')
+  })
+
+  it('paints paper-and-navy with hairlines', () => {
+    expect(css).toContain('--paper: #F7F5F2')
+    expect(css).toContain('--ink: #1F3A5F')
+    expect(css).toContain('--hair:')
+    expect(css).toContain('border: 1px solid var(--hair)')
   })
 
   it('shows the title list before wallet chrome', () => {
@@ -89,6 +108,16 @@ describe('first-paint copy', () => {
     expect(app).toContain('const showInstall = walletMissing || actionNeedsInstall')
     expect(app).toContain('isWalletMissing')
     expect(app).toContain('Install BSV Desktop')
+    expect(app).not.toContain('Connect wallet')
+    expect(app).not.toContain('Connecting…')
+  })
+
+  it('asks the wallet only on Issue / Transfer / Export, after the form is ready', () => {
+    expect(issueFn.indexOf('assertCanIssue')).toBeLessThan(issueFn.indexOf('ensureWallet'))
+    expect(transferFn.indexOf('if (transferOpen !== row.titleId)')).toBeLessThan(transferFn.indexOf('ensureWallet'))
+    expect(transferFn.indexOf('.trim()')).toBeLessThan(transferFn.indexOf('ensureWallet'))
+    expect(exportFn.indexOf('ensureWallet')).toBeGreaterThan(-1)
+    expect(app).toContain('const session = await ensureWallet()')
   })
 
   it('keeps the catalog card Server + View, not Open UI or Live', () => {

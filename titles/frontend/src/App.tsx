@@ -3,6 +3,7 @@ import { isHolder, resolveDocHash } from '../../protocol/title'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import {
+  assertCanIssue,
   downloadReading,
   exportTitle,
   fulfillTransfers,
@@ -18,7 +19,6 @@ import {
   EXPORT_BUTTON,
   EYEBROW,
   FOOTER,
-  HELD_BY,
   ISSUE_BUTTON,
   ISSUE_HEADING,
   ISSUE_JOB,
@@ -37,7 +37,7 @@ import {
   overlayCheckFailed,
   shortKey
 } from './lib/config'
-import { displayNameFor, holderFaceName } from './lib/identity'
+import { displayNameFor, heldLine } from './lib/identity'
 import { lookupTitles, type OverlayTitle } from './lib/overlay'
 
 function Shell() {
@@ -118,6 +118,12 @@ function Shell() {
     setActionError(null)
     setActionNeedsInstall(false)
     setStatus(null)
+    try {
+      assertCanIssue({ label, document, priceSats })
+    } catch (err) {
+      setActionError(errorMessage(err))
+      return
+    }
     const session = await ensureWallet()
     if (!session) return
     setBusy('issue')
@@ -156,6 +162,7 @@ function Shell() {
       setTransferOpen(row.titleId)
       return
     }
+    if (!(toById[row.titleId] ?? '').trim()) return
     const session = await ensureWallet()
     if (!session) return
     if (!isHolder(row, session.identityKey)) {
@@ -274,7 +281,7 @@ function Shell() {
               {rows.map((row) => (
                 <li key={`${row.txid}.${row.outputIndex}`} className="listing">
                   <h3>{row.label}</h3>
-                  <p className="job">{HELD_BY} {holderFaceName(names[row.holder])}</p>
+                  <p className="job">{heldLine(names[row.holder])}</p>
                   {transferOpen === row.titleId && (
                     <div className="field">
                       <label htmlFor={`to-${row.titleId}`}>{TO_LABEL}</label>
@@ -285,7 +292,7 @@ function Shell() {
                           ...current,
                           [row.titleId]: event.target.value
                         }))}
-                        placeholder="Name or account"
+                        placeholder="Name"
                       />
                     </div>
                   )}

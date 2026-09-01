@@ -1,8 +1,8 @@
 :root {
   color-scheme: light;
-  --paper: #f7f5f2;
+  --paper: #F7F5F2;
   --sheet: #fffefa;
-  --ink: #1f3a5f;
+  --ink: #1F3A5F;
   --muted: rgba(31, 58, 95, 0.58);
   --quiet: rgba(31, 58, 95, 0.38);
   --hair: rgba(31, 58, 95, 0.12);
