@@ -31,15 +31,16 @@ export async function fetchUsdPerBsv(): Promise<number> {
 }
 
 export function satsToUsd(sats: number, usdPerBsv: number): string {
-  if (!(usdPerBsv > 0) || !Number.isFinite(sats)) return ''
+  if (!(usdPerBsv > 0) || !Number.isFinite(sats) || sats <= 0) return ''
   const usd = (sats / SATS_PER_BSV) * usdPerBsv
-  return usd.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+  if (!(usd > 0)) return ''
+  const formatted = usd.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
+  // A v0 sat fee often rounds to $0.00. Do not put that on the face.
+  if (formatted === '$0.00') return ''
+  return formatted
 }
 
 export function priceFace(sats: number, usdPerBsv: number | null): string {
-  if (usdPerBsv != null) {
-    const dollars = satsToUsd(sats, usdPerBsv)
-    if (dollars) return dollars
-  }
-  return ''
+  if (usdPerBsv == null) return ''
+  return satsToUsd(sats, usdPerBsv)
 }

@@ -104,7 +104,7 @@ A timed key. Renew when it expires.
 
 ## Name lease
 
-Lease a name for a while. Look it up. Renew before it ends.
+A name for a while. Look it up. Renew before it ends.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/names/
 - How to run: [names/README.md](./names/README.md)

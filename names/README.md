@@ -1,6 +1,6 @@
 # Name lease (v0)
 
-Lease a name for a while. Look it up. Renew before it ends.
+A name for a while. Look it up. Renew before it ends.
 
 A stranger looks up a human name with no wallet. Register pays sats for a period. Overlay holds the current lease. Renew before it ends. After expiry the name is free again. This is a BSV name lease — not ENS, not a contacts list, and not invoices.
 

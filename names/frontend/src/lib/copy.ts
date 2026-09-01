@@ -7,6 +7,8 @@ export const RENEW_BUTTON = 'Renew'
 export const LOOKING = 'Looking up…'
 export const EMPTY = 'Look up a name.'
 export const COPY_LINK = 'Copy link'
+export const HOLDER_ONLY = 'Only the holder can renew'
+export const AMOUNT_IN_ADVANCED = 'Amount in Advanced'
 export const FOOTER = 'Not a contacts list. Not invoices.'
 
 export function sheetTitle(name?: string | null): string {
@@ -39,5 +41,7 @@ export const PRIMARY_COPY = [
   RENEW_BUTTON,
   EMPTY,
   COPY_LINK,
+  HOLDER_ONLY,
+  AMOUNT_IN_ADVANCED,
   FOOTER
 ] as const

@@ -23,10 +23,12 @@ import {
   shortKey
 } from './lib/config'
 import {
+  AMOUNT_IN_ADVANCED,
   COPY_LINK,
   EMPTY,
   EYEBROW,
   FOOTER,
+  HOLDER_ONLY,
   LEDE,
   LOOKING,
   LOOKUP_BUTTON,
@@ -38,6 +40,7 @@ import {
   renewedStatus,
   sheetTitle
 } from './lib/copy'
+import { canOpenWalletForRenew, leaseActions } from './lib/lease-ui'
 import { fetchUsdPerBsv, priceFace } from './lib/money'
 import { lookupName, type OverlayLease } from './lib/overlay'
 import { goToName, namePublicUrl, readNameFromLocation } from './lib/route'
@@ -68,7 +71,8 @@ function Shell() {
   const draftError = draft.trim() ? nameError(draft) : 'Enter a name.'
   const amountSats = !draftError && normalizedDraft ? leasePriceSats(normalizedDraft, periodDays) : 0
   const dollars = amountSats ? priceFace(amountSats, rate) : ''
-  const leased = Boolean(lease)
+  const priceHint = dollars || (amountSats > 0 ? AMOUNT_IN_ADVANCED : '')
+  const { showRegister, showRenew, showHolderCopy, showPeriodPicker } = leaseActions(lease, identityKey)
   const mine = Boolean(lease && identityKey && sameLessee(lease.lessee, identityKey))
 
   useEffect(() => {
@@ -142,6 +146,12 @@ function Shell() {
     if (invalid) {
       setActionError(invalid)
       return
+    }
+    if (intent === 'renew') {
+      if (!canOpenWalletForRenew(lease, identityKey)) {
+        setActionError(HOLDER_ONLY)
+        return
+      }
     }
     if (intent === 'register' && lease) {
       const blocked = decideLease({
@@ -258,45 +268,54 @@ function Shell() {
                 </div>
               </dl>
             )}
-            <div className="fields">
-              <div className="field">
-                <label>Period</label>
-                <div className="periods">
-                  {PERIODS.map((days) => (
-                    <button
-                      key={days}
-                      type="button"
-                      className={days === periodDays ? 'period active' : 'period'}
-                      onClick={() => setPeriodDays(days)}
-                    >
-                      {days} days
-                    </button>
-                  ))}
+            {showPeriodPicker && (
+              <div className="fields">
+                <div className="field">
+                  <label>Period</label>
+                  <div className="periods">
+                    {PERIODS.map((days) => (
+                      <button
+                        key={days}
+                        type="button"
+                        className={days === periodDays ? 'period active' : 'period'}
+                        onClick={() => setPeriodDays(days)}
+                      >
+                        {days} days
+                      </button>
+                    ))}
+                  </div>
+                  {dollars
+                    ? <p className="price">{dollars}</p>
+                    : priceHint && <p className="helper">{priceHint}</p>}
                 </div>
-                {dollars && <p className="price">{dollars}</p>}
               </div>
-            </div>
+            )}
             <div className="actions">
-              <button
-                type="button"
-                className="btn primary"
-                disabled={busy !== null || connecting || overlayDown || leased}
-                onClick={() => void runLease('register')}
-              >
-                {busy === 'register' ? 'Registering…' : REGISTER_BUTTON}
-              </button>
-              <button
-                type="button"
-                className="btn"
-                disabled={busy !== null || connecting || overlayDown || !leased}
-                onClick={() => void runLease('renew')}
-              >
-                {busy === 'renew' ? 'Renewing…' : RENEW_BUTTON}
-              </button>
+              {showRegister && (
+                <button
+                  type="button"
+                  className="btn primary"
+                  disabled={busy !== null || connecting || overlayDown}
+                  onClick={() => void runLease('register')}
+                >
+                  {busy === 'register' ? 'Registering…' : REGISTER_BUTTON}
+                </button>
+              )}
+              {showRenew && (
+                <button
+                  type="button"
+                  className="btn primary"
+                  disabled={busy !== null || connecting || overlayDown}
+                  onClick={() => void runLease('renew')}
+                >
+                  {busy === 'renew' ? 'Renewing…' : RENEW_BUTTON}
+                </button>
+              )}
               <button type="button" className="btn" onClick={() => void copyLink()}>
                 {COPY_LINK}
               </button>
             </div>
+            {showHolderCopy && <p className="helper">{HOLDER_ONLY}</p>}
           </section>
         )}
 

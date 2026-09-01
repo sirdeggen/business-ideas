@@ -7,6 +7,8 @@ import {
   EYEBROW,
   FOOTER,
   LEDE,
+  AMOUNT_IN_ADVANCED,
+  HOLDER_ONLY,
   LOOKUP_BUTTON,
   PRIMARY_COPY,
   REGISTER_BUTTON,
@@ -60,7 +62,9 @@ describe('first-paint copy', () => {
     expect(namesCard).toContain('class="badge">Server<')
     expect(namesCard).toContain('>View<')
     expect(namesCard).toContain('How to run')
-    expect(namesCard).toContain('Lease a name for a while. Look it up. Renew before it ends.')
+    expect(namesCard).toContain(LEDE)
+    expect(namesCard).toContain('A name for a while. Look it up. Renew before it ends.')
+    expect(LEDE).toBe('A name for a while. Look it up. Renew before it ends.')
     expect(namesCard).not.toContain('Live')
     expect(namesCard).not.toContain('Open UI')
     expect(namesCard).not.toContain('sats')
@@ -77,16 +81,29 @@ describe('first-paint copy', () => {
     expect(app).toContain('shortKey(lease.txid')
   })
 
-  it('asks the wallet only on Register and Renew', () => {
+  it('asks the wallet only on Register and the holder’s Renew', () => {
     expect(app).toContain('const session = await ensureWallet()')
     expect(app).toContain('void runLease(\'register\')')
     expect(app).toContain('void runLease(\'renew\')')
     const lookupFn = app.slice(app.indexOf('const runLookup'), app.indexOf('const runLease'))
     expect(lookupFn).not.toContain('ensureWallet')
     expect(lookupFn).not.toContain('connect()')
+    const beforeWallet = app.slice(app.indexOf('const runLease'), app.indexOf('const session = await ensureWallet()'))
+    expect(beforeWallet).toContain('canOpenWalletForRenew')
+    expect(beforeWallet).toContain('HOLDER_ONLY')
+    expect(app).toContain('{showRenew &&')
+    expect(app).toContain('{showHolderCopy &&')
+    expect(app).toContain('{HOLDER_ONLY}')
     expect(app).toContain('Install BSV Desktop')
     expect(app).toContain('const showInstall = walletMissing || actionNeedsInstall')
     expect(app).toContain('DECLINED_SPEND')
+  })
+
+  it('hints Amount in Advanced when dollars are not on the face', () => {
+    expect(AMOUNT_IN_ADVANCED).toBe('Amount in Advanced')
+    expect(face).toContain('AMOUNT_IN_ADVANCED')
+    expect(face).toContain('priceHint')
+    expect(face).not.toContain('$—')
   })
 
   it('shares ?name= and stays off ENS pricing copy', () => {
