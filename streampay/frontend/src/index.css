@@ -3,11 +3,14 @@
   --paper: #f7f5f2;
   --sheet: #fffcf8;
   --ink: #1a1916;
+  --title: #2a7a4a;
   --muted: #5c5a56;
   --rule: #e4e1db;
   --navy: #1f3a5f;
-  --paid: #1f7a4d;
+  --chip: #c9a46a;
+  --paid: #2a7a4a;
   --failed: #8c2e2e;
+  --shadow: 0 2px 4px rgba(26, 25, 22, 0.04);
   --sans: ui-sans-serif, system-ui, sans-serif;
   --serif: "Source Serif 4", "Iowan Old Style", Georgia, "Times New Roman", serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -32,9 +35,51 @@ button, input, textarea, select {
 
 a { color: var(--navy); }
 
+.room {
+  min-height: 100%;
+  background: var(--paper);
+}
+
+.scene-crop {
+  position: relative;
+  overflow: hidden;
+  background: #3a3228;
+}
+
+.scene-crop .scene {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 36% 82%;
+}
+
+.scene-crop.hero {
+  aspect-ratio: 16 / 9;
+  max-height: 440px;
+}
+
+.scene-crop.sliver {
+  aspect-ratio: 6 / 1;
+  max-height: 104px;
+}
+
+.scene-crop::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 72px;
+  background: linear-gradient(to bottom, rgb(247 245 242 / 0), var(--paper));
+  pointer-events: none;
+}
+
 .app {
-  margin: 0 auto;
-  padding: 32px 16px 64px;
+  position: relative;
+  z-index: 1;
+  margin: -36px auto 0;
+  padding: 0 16px 64px;
 }
 
 .app.create { max-width: 720px; }
@@ -44,6 +89,7 @@ a { color: var(--navy); }
   background: var(--sheet);
   border: 1px solid var(--rule);
   border-radius: 6px;
+  box-shadow: var(--shadow);
   padding: 32px 32px 28px;
 }
 
@@ -70,6 +116,24 @@ h1 {
   color: var(--ink);
 }
 
+.product-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--sans);
+  font-size: 30px;
+  font-weight: 650;
+  color: var(--title);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.chip {
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
+  background: var(--chip);
+}
+
 .lede {
   color: var(--muted);
   max-width: 46ch;
@@ -79,22 +143,34 @@ h1 {
 
 .amount-xl,
 .money {
+  font-family: var(--sans);
   font-variant-numeric: tabular-nums lining-nums;
 }
 
 .amount-xl {
   margin: 12px 0 0;
+  font-family: var(--sans);
   font-size: 36px;
   line-height: 1.15;
   font-weight: 560;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .amount-run {
   margin: 12px 0 0;
+  font-family: var(--sans);
   font-size: 24px;
   line-height: 1.2;
   font-weight: 560;
   font-variant-numeric: tabular-nums lining-nums;
+}
+
+.lede.amount-run {
+  max-width: none;
+  font-size: 18px;
+  line-height: 1.35;
+  font-weight: 560;
+  color: var(--ink);
 }
 
 .paid-hero .amount-xl {
@@ -113,6 +189,23 @@ h1 {
   font-size: 13px;
   font-weight: 500;
   margin-bottom: 12px;
+}
+
+.product-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--title);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.product-link .chip {
+  flex-basis: 8px;
+  width: 8px;
+  height: 8px;
 }
 
 .fields {
@@ -179,6 +272,7 @@ input:focus, textarea:focus {
   padding: 0 12px;
   background: #fff;
   gap: 6px;
+  font-family: var(--sans);
 }
 
 .dollar span {
@@ -333,13 +427,12 @@ dd.money {
 }
 
 .ghost {
-  max-width: 240px;
+  max-width: 280px;
   margin: 0 0 24px;
   padding: 12px 14px;
-  border: 1px solid var(--rule);
+  border: 1px solid rgb(201 164 106 / 0.38);
   border-radius: 4px;
-  background: var(--paper);
-  opacity: 0.72;
+  background: #f4efe6;
 }
 
 .ghost-head {
@@ -350,19 +443,21 @@ dd.money {
 }
 
 .ghost .memo {
-  margin: 8px 0 0;
+  margin: 0;
   font-size: 14px;
 }
 
 .ghost .money {
   font-size: 14px;
-  font-weight: 560;
+  font-weight: 650;
+  color: var(--title);
 }
 
 .ghost .meta {
   margin: 6px 0 0;
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 13px;
+  font-variant-numeric: tabular-nums lining-nums;
 }
 
 .helper {
@@ -440,13 +535,23 @@ dd.money {
 }
 
 @media (max-width: 700px) {
+  .scene-crop.hero {
+    aspect-ratio: 3 / 2;
+    max-height: 240px;
+  }
+  .scene-crop.sliver {
+    max-height: 80px;
+  }
+  .app { margin-top: -24px; }
   .sheet { padding: 24px 20px 20px; }
   .grid { display: block; }
   .grid .field + .field { margin-top: 16px; }
   h1 { font-size: 20px; }
+  .product-title { font-size: 26px; }
   .amount-xl,
   .paid-hero .amount-xl { font-size: 32px; }
   .amount-run { font-size: 22px; }
+  .lede.amount-run { font-size: 16px; }
   .paid-hero { display: block; }
   .taxi { flex-direction: column; }
 }
