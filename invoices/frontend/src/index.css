@@ -47,28 +47,30 @@ a { color: var(--navy); }
 }
 
 .scene-crop .scene {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: 50% 28%;
+  object-position: 50% 30%;
 }
 
 .scene-crop.hero {
-  aspect-ratio: 12 / 5;
-  max-height: 300px;
+  aspect-ratio: 16 / 9;
+  max-height: 440px;
 }
 
 .scene-crop.sliver {
-  aspect-ratio: 8 / 1;
-  max-height: 88px;
+  aspect-ratio: 6 / 1;
+  max-height: 104px;
 }
 
 .scene-crop::after {
   content: "";
   position: absolute;
   inset: auto 0 0;
-  height: 64px;
+  height: 72px;
   background: linear-gradient(to bottom, rgb(247 245 242 / 0), var(--paper));
   pointer-events: none;
 }
@@ -76,7 +78,7 @@ a { color: var(--navy); }
 .app {
   position: relative;
   z-index: 1;
-  margin: -40px auto 0;
+  margin: -36px auto 0;
   padding: 0 16px 64px;
 }
 
@@ -508,13 +510,13 @@ dd {
 
 @media (max-width: 700px) {
   .scene-crop.hero {
-    aspect-ratio: 16 / 9;
-    max-height: 220px;
+    aspect-ratio: 3 / 2;
+    max-height: 240px;
   }
   .scene-crop.sliver {
-    max-height: 72px;
+    max-height: 80px;
   }
-  .app { margin-top: -28px; }
+  .app { margin-top: -24px; }
   .sheet { padding: 24px 20px 20px; }
   .grid { display: block; }
   .grid .field + .field { margin-top: 16px; }
