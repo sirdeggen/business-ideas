@@ -3,16 +3,18 @@
   --paper: #f7f5f2;
   --sheet: #fffcf8;
   --ink: #1a1916;
+  --title: #1a2744;
   --muted: #5c5a56;
   --rule: #e4e1db;
   --navy: #1f3a5f;
-  --paid: #1f7a4d;
+  --chip: #2f6b4f;
+  --paid: #2f6b4f;
   --failed: #8c2e2e;
   --shadow: 0 2px 4px rgba(26, 25, 22, 0.04);
   --sans: ui-sans-serif, system-ui, sans-serif;
   --serif: "Source Serif 4", "Iowan Old Style", Georgia, "Times New Roman", serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 16px;
   line-height: 1.45;
   color: var(--ink);
@@ -33,9 +35,49 @@ button, input, textarea, select {
 
 a { color: var(--navy); }
 
+.room {
+  min-height: 100%;
+  background: var(--paper);
+}
+
+.scene-crop {
+  position: relative;
+  overflow: hidden;
+  background: #2c241c;
+}
+
+.scene-crop .scene {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 28%;
+}
+
+.scene-crop.hero {
+  aspect-ratio: 12 / 5;
+  max-height: 300px;
+}
+
+.scene-crop.sliver {
+  aspect-ratio: 8 / 1;
+  max-height: 88px;
+}
+
+.scene-crop::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 64px;
+  background: linear-gradient(to bottom, rgb(247 245 242 / 0), var(--paper));
+  pointer-events: none;
+}
+
 .app {
-  margin: 0 auto;
-  padding: 32px 16px 64px;
+  position: relative;
+  z-index: 1;
+  margin: -40px auto 0;
+  padding: 0 16px 64px;
 }
 
 .app.create { max-width: 720px; }
@@ -61,14 +103,32 @@ a { color: var(--navy); }
 }
 
 h1 {
+  font-family: var(--serif);
   font-size: 22px;
   line-height: 1.25;
   margin: 0;
-  font-weight: 560;
+  font-weight: 600;
   color: var(--ink);
 }
 
+.product-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 30px;
+  font-weight: 600;
+  color: var(--title);
+}
+
+.chip {
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
+  background: var(--chip);
+}
+
 .lede {
+  font-family: var(--sans);
   color: var(--muted);
   max-width: 46ch;
   margin: 8px 0 0;
@@ -77,25 +137,26 @@ h1 {
 
 .amount-xl {
   margin: 0;
+  font-family: var(--serif);
   font-size: 36px;
   line-height: 1.15;
-  font-weight: 560;
+  font-weight: 600;
   font-variant-numeric: tabular-nums lining-nums;
 }
 
 .amount-run {
   margin: 12px 0 0;
+  font-family: var(--serif);
   font-size: 24px;
   line-height: 1.2;
-  font-weight: 560;
+  font-weight: 600;
   font-variant-numeric: tabular-nums lining-nums;
 }
 
-.paid-hero .amount-xl,
-.paid-hero .status-word.paid {
+.paid-hero .amount-xl {
   font-size: 36px;
   line-height: 1.15;
-  font-weight: 560;
+  font-weight: 600;
 }
 
 .text-link {
@@ -108,6 +169,22 @@ h1 {
   font-size: 13px;
   font-weight: 500;
   margin-bottom: 12px;
+}
+
+.product-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--title);
+}
+
+.product-link .chip {
+  flex-basis: 8px;
+  width: 8px;
+  height: 8px;
 }
 
 .fields {
@@ -155,7 +232,7 @@ textarea {
 input[type="date"] {
   appearance: none;
   -webkit-appearance: none;
-  font-family: var(--serif);
+  font-family: var(--sans);
   color: var(--ink);
 }
 
@@ -309,14 +386,30 @@ dd {
 .status-word.processing { color: var(--muted); }
 .status-word.draft { color: var(--muted); }
 
+.status-word.paid.stamp {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1.5px solid var(--paid);
+  padding: 3px 8px 2px;
+  transform: rotate(-7deg);
+  background: rgb(255 252 248 / 0.92);
+}
+
+.paid-hero .status-word.paid.stamp {
+  font-size: 15px;
+  padding: 5px 12px 4px;
+}
+
 .ghost {
   max-width: 220px;
   margin: 0 0 24px;
   padding: 12px 14px;
-  border: 1px solid var(--rule);
+  border: 1px solid rgb(47 107 79 / 0.22);
   border-radius: 4px;
-  background: var(--paper);
-  opacity: 0.72;
+  background: #f4efe6;
+  font-family: var(--serif);
 }
 
 .ghost-head {
@@ -414,14 +507,22 @@ dd {
 }
 
 @media (max-width: 700px) {
+  .scene-crop.hero {
+    aspect-ratio: 16 / 9;
+    max-height: 220px;
+  }
+  .scene-crop.sliver {
+    max-height: 72px;
+  }
+  .app { margin-top: -28px; }
   .sheet { padding: 24px 20px 20px; }
   .grid { display: block; }
   .grid .field + .field { margin-top: 16px; }
   h1 { font-size: 20px; }
+  .product-title { font-size: 26px; }
   .amount-xl,
-  .paid-hero .amount-xl,
-  .paid-hero .status-word.paid { font-size: 32px; }
+  .paid-hero .amount-xl { font-size: 32px; }
   .amount-run { font-size: 22px; }
   .paid-hero { display: block; }
-  .paid-hero .status-word.paid { display: block; margin-bottom: 8px; }
+  .paid-hero .status-word.paid.stamp { display: inline-block; margin-bottom: 10px; }
 }
