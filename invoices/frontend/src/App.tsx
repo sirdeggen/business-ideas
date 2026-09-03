@@ -42,11 +42,44 @@ import {
 } from './lib/route'
 
 type View = 'home' | 'create' | 'invoice'
+type SceneKind = 'hero' | 'sliver'
 
 const NOT_FOUND = 'This invoice wasn’t found.'
+const SCENE_SRC = `${import.meta.env.BASE_URL}scenes/invoices.webp`
+const SCENE_ALT = 'A treasurer sliding a payable across the desk.'
 
 const CHROME_HINT =
   'Chrome may ask to allow this site to talk to apps on this device. Allow, then Retry, with Desktop unlocked.'
+
+function SceneCrop({ kind }: { kind: SceneKind }) {
+  const hero = kind === 'hero'
+  return (
+    <div className={`scene-crop ${kind}`} aria-hidden={hero ? undefined : true}>
+      <img
+        className="scene"
+        src={SCENE_SRC}
+        alt={hero ? SCENE_ALT : ''}
+        width={1800}
+        height={1200}
+        decoding="async"
+        {...(hero ? { fetchPriority: 'high' as const } : { loading: 'lazy' as const })}
+      />
+    </div>
+  )
+}
+
+function Chip() {
+  return <span className="chip" aria-hidden="true" />
+}
+
+function HomeLink({ onClick }: { onClick: () => void }) {
+  return (
+    <button className="text-link product-link" onClick={onClick}>
+      <Chip />
+      Invoices
+    </button>
+  )
+}
 
 function ChromeHint() {
   return <p className="helper chrome-hint">{CHROME_HINT}</p>
@@ -78,16 +111,21 @@ function InstallPrompt({
 function Page({
   variant,
   advanced,
+  scene,
   children
 }: {
   variant: 'create' | 'invoice'
   advanced?: boolean
+  scene: SceneKind
   children: ReactNode
 }) {
   return (
-    <div className={`app ${variant}`}>
-      <article className="sheet">{children}</article>
-      {advanced ? <Advanced /> : null}
+    <div className={`room scene-${scene}`}>
+      <SceneCrop kind={scene} />
+      <div className={`app ${variant}`}>
+        <article className="sheet">{children}</article>
+        {advanced ? <Advanced /> : null}
+      </div>
     </div>
   )
 }
@@ -156,9 +194,12 @@ function Advanced() {
 
 function Home({ onCreate }: { onCreate: () => void }) {
   return (
-    <Page variant="create" advanced>
+    <Page variant="create" scene="hero" advanced>
       <header className="sheet-head">
-        <h1>Invoices</h1>
+        <h1 className="product-title">
+          <Chip />
+          Invoices
+        </h1>
         <p className="lede">Send a payable. When they pay, it marks itself paid.</p>
       </header>
 
@@ -168,7 +209,7 @@ function Home({ onCreate }: { onCreate: () => void }) {
           <strong className="money">$50.00</strong>
         </div>
         <p className="meta">Riverside Community Church</p>
-        <p className="status-word paid">Paid</p>
+        <p className="status-word paid stamp">Paid</p>
       </div>
       <p className="empty-sell">Get paid for the first time.</p>
       <button className="btn primary" onClick={onCreate}>Create an invoice</button>
@@ -292,9 +333,9 @@ function Create({
   }
 
   return (
-    <Page variant="create" advanced>
+    <Page variant="create" scene="sliver" advanced>
       <header className="sheet-head">
-        <button className="text-link" onClick={onBack}>Invoices</button>
+        <HomeLink onClick={onBack} />
         <div className="title-row">
           <h1>New invoice</h1>
           <span className={statusWordClass('draft')}>Draft</span>
@@ -487,9 +528,9 @@ function InvoicePage({
 
   if (!invoice && error === NOT_FOUND) {
     return (
-      <Page variant="invoice">
+      <Page variant="invoice" scene="sliver">
         <header className="sheet-head">
-          <button className="text-link" onClick={onHome}>Invoices</button>
+          <HomeLink onClick={onHome} />
           <div className="title-row">
             <h1>Invoice</h1>
             <span className={statusWordClass('missing')}>Not found</span>
@@ -505,9 +546,9 @@ function InvoicePage({
 
   if (!invoice) {
     return (
-      <Page variant="invoice">
+      <Page variant="invoice" scene="sliver">
         <header className="sheet-head">
-          <button className="text-link" onClick={onHome}>Invoices</button>
+          <HomeLink onClick={onHome} />
           <h1>Invoice</h1>
         </header>
         <p className="meta">{error || 'Loading invoice…'}</p>
@@ -522,11 +563,11 @@ function InvoicePage({
 
   if (paid) {
     return (
-      <Page variant="invoice">
+      <Page variant="invoice" scene="sliver">
         <header className="sheet-head">
-          <button className="text-link" onClick={onHome}>Invoices</button>
+          <HomeLink onClick={onHome} />
           <div className="paid-hero">
-            <h1 className={statusWordClass('paid')}>Paid</h1>
+            <h1 className={`${statusWordClass('paid')} stamp`}>Paid</h1>
             {amount && <p className="amount-xl">{amount}</p>}
           </div>
         </header>
@@ -554,9 +595,9 @@ function InvoicePage({
   }
 
   return (
-    <Page variant="invoice">
+    <Page variant="invoice" scene="sliver">
       <header className="sheet-head">
-        <button className="text-link" onClick={onHome}>Invoices</button>
+        <HomeLink onClick={onHome} />
         <div className="title-row">
           {amount && <h1 className="amount-xl">{amount}</h1>}
           <span className={statusWordClass(status)}>{statusLabel(status)}</span>
