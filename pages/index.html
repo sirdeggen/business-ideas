@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@500;600&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./styles.css" />
@@ -22,8 +22,16 @@
       </p>
       <p class="runtime">Live is on Pages. Server needs a local runtime.</p>
 
-      <article class="featured">
+      <article class="featured demo-invoices">
         <a class="hit" href="./invoices/">
+          <img
+            class="scene"
+            src="./scenes/invoices.webp"
+            alt="A clerk handing over a paid invoice."
+            width="1800"
+            height="1200"
+            fetchpriority="high"
+          />
           <p class="badge">Server</p>
           <h1>Invoices</h1>
           <p class="job">Send a payable. Get a receipt.</p>
@@ -49,10 +57,18 @@
       </article>
 
       <section class="ledger" aria-label="Ledger">
-        <article class="row">
+        <article class="row demo-receivables">
           <a class="hit" href="./receivables/">
-            <span class="badge">Server</span>
+            <img
+              class="scene"
+              src="./scenes/receivables.webp"
+              alt="A clerk pointing at a chase card on the board."
+              width="1400"
+              height="933"
+              loading="lazy"
+            />
             <div class="copy">
+              <span class="badge">Server</span>
               <h2>Receivable desk</h2>
               <p class="job">Who do we chase today?</p>
             </div>
@@ -64,10 +80,18 @@
           >How to run</a>
         </article>
 
-        <article class="row">
+        <article class="row demo-records">
           <a class="hit" href="./records/">
-            <span class="badge">Server</span>
+            <img
+              class="scene"
+              src="./scenes/records.webp"
+              alt="A field researcher writing a signed reading in a ledger."
+              width="1400"
+              height="933"
+              loading="lazy"
+            />
             <div class="copy">
+              <span class="badge">Server</span>
               <h2>Signed record desk</h2>
               <p class="job">Post a signed reading. Pay a little to export.</p>
             </div>
@@ -79,10 +103,18 @@
           >How to run</a>
         </article>
 
-        <article class="row">
+        <article class="row demo-tickets">
           <a class="hit" href="./tickets/">
-            <span class="badge">Server</span>
+            <img
+              class="scene"
+              src="./scenes/tickets.webp"
+              alt="A ticket taker inspecting a gold pass at the door."
+              width="1600"
+              height="1067"
+              loading="lazy"
+            />
             <div class="copy">
+              <span class="badge">Server</span>
               <h2>Event tickets</h2>
               <p class="job">Send, show, spend at the door.</p>
             </div>
@@ -94,10 +126,18 @@
           >How to run</a>
         </article>
 
-        <article class="row inert">
+        <article class="row inert demo-press">
           <div class="hit">
-            <span class="badge">Server</span>
+            <img
+              class="scene"
+              src="./scenes/402-press.webp"
+              alt="A shopkeeper taking coins for a printed page."
+              width="1400"
+              height="933"
+              loading="lazy"
+            />
             <div class="copy">
+              <span class="badge">Server</span>
               <h2>402 Press</h2>
               <p class="job">Readers pay a little. Crawlers pay more.</p>
             </div>
@@ -108,10 +148,18 @@
           >How to run</a>
         </article>
 
-        <article class="row inert">
+        <article class="row inert demo-mcp">
           <div class="hit">
-            <span class="badge">Server</span>
+            <img
+              class="scene"
+              src="./scenes/402-mcp.webp"
+              alt="A worker feeding a coin into a machine meter."
+              width="1400"
+              height="933"
+              loading="lazy"
+            />
             <div class="copy">
+              <span class="badge">Server</span>
               <h2>402 MCP</h2>
               <p class="job">Charge per call. No API keys.</p>
             </div>
@@ -122,10 +170,18 @@
           >How to run</a>
         </article>
 
-        <article class="row">
+        <article class="row demo-treasury">
           <a class="hit" href="./treasury/">
-            <span class="badge">Server</span>
+            <img
+              class="scene"
+              src="./scenes/treasury.webp"
+              alt="Two people signing yes on a board record."
+              width="1600"
+              height="1067"
+              loading="lazy"
+            />
             <div class="copy">
+              <span class="badge">Server</span>
               <h2>Treasury</h2>
               <p class="job">Two people have to say yes. Read a board.</p>
             </div>
@@ -137,10 +193,18 @@
           >How to run</a>
         </article>
 
-        <article class="row">
+        <article class="row demo-streampay">
           <a class="hit" href="./streampay/">
-            <span class="badge">Live</span>
+            <img
+              class="scene"
+              src="./scenes/streampay.webp"
+              alt="A contractor tallying hours as they work."
+              width="1400"
+              height="933"
+              loading="lazy"
+            />
             <div class="copy">
+              <span class="badge">Live</span>
               <h2>StreamPay</h2>
               <p class="job">Pay as they work.</p>
             </div>
@@ -152,10 +216,18 @@
           >How to run</a>
         </article>
 
-        <article class="row">
+        <article class="row demo-grants">
           <a class="hit" href="./grants/">
-            <span class="badge">Live</span>
+            <img
+              class="scene"
+              src="./scenes/grants.webp"
+              alt="A neighbor handing over a purpose-bound gift envelope."
+              width="1400"
+              height="933"
+              loading="lazy"
+            />
             <div class="copy">
+              <span class="badge">Live</span>
               <h2>Grant receipt</h2>
               <p class="job">A gift for a purpose. A receipt bound to that purpose.</p>
             </div>
@@ -167,10 +239,18 @@
           >How to run</a>
         </article>
 
-        <article class="row">
+        <article class="row demo-raffle">
           <a class="hit" href="./raffle/">
-            <span class="badge">Server</span>
+            <img
+              class="scene"
+              src="./scenes/raffle.webp"
+              alt="A host drawing a stub from a red raffle drum."
+              width="1400"
+              height="933"
+              loading="lazy"
+            />
             <div class="copy">
+              <span class="badge">Server</span>
               <h2>Raffle</h2>
               <p class="job">This trip’s draw. Free stub. One winner, in the room.</p>
             </div>
@@ -182,10 +262,18 @@
           >How to run</a>
         </article>
 
-        <article class="row">
+        <article class="row demo-spend-policy">
           <a class="hit" href="./spend-policy/">
-            <span class="badge">Server</span>
+            <img
+              class="scene"
+              src="./scenes/spend-policy.webp"
+              alt="An administrator checking a receipt against the spend policy."
+              width="1400"
+              height="933"
+              loading="lazy"
+            />
             <div class="copy">
+              <span class="badge">Server</span>
               <h2>Spend Policy</h2>
               <p class="job">A policy. A spend that policy allows.</p>
             </div>
@@ -197,10 +285,18 @@
           >How to run</a>
         </article>
 
-        <article class="row">
+        <article class="row demo-session">
           <a class="hit" href="./session/">
-            <span class="badge">Server</span>
+            <img
+              class="scene"
+              src="./scenes/session-ap.webp"
+              alt="A diner check being opened at the end of a session."
+              width="1400"
+              height="933"
+              loading="lazy"
+            />
             <div class="copy">
+              <span class="badge">Server</span>
               <h2>Session AP</h2>
               <p class="job">Close a session. One invoice for many small spends.</p>
             </div>
@@ -212,10 +308,18 @@
           >How to run</a>
         </article>
 
-        <article class="row">
+        <article class="row demo-datasets">
           <a class="hit" href="./datasets/">
-            <span class="badge">Server</span>
+            <img
+              class="scene"
+              src="./scenes/datasets.webp"
+              alt="A stallholder with prints ready to take."
+              width="1400"
+              height="933"
+              loading="lazy"
+            />
             <div class="copy">
+              <span class="badge">Server</span>
               <h2>Dataset stall</h2>
               <p class="job">Post a listing. Pay a little to take the file.</p>
             </div>
@@ -227,10 +331,18 @@
           >How to run</a>
         </article>
 
-        <article class="row">
+        <article class="row demo-memberships">
           <a class="hit" href="./memberships/">
-            <span class="badge">Server</span>
+            <img
+              class="scene"
+              src="./scenes/memberships.webp"
+              alt="A member handing over a timed keycard."
+              width="1600"
+              height="1067"
+              loading="lazy"
+            />
             <div class="copy">
+              <span class="badge">Server</span>
               <h2>Membership</h2>
               <p class="job">A timed key. Renew when it expires.</p>
             </div>
@@ -242,10 +354,18 @@
           >How to run</a>
         </article>
 
-        <article class="row">
+        <article class="row demo-names">
           <a class="hit" href="./names/">
-            <span class="badge">Server</span>
+            <img
+              class="scene"
+              src="./scenes/names.webp"
+              alt="Two people hanging a leased shop name."
+              width="1400"
+              height="933"
+              loading="lazy"
+            />
             <div class="copy">
+              <span class="badge">Server</span>
               <h2>Name lease</h2>
               <p class="job">A name for a while. Look it up. Renew before it ends.</p>
             </div>
@@ -257,10 +377,18 @@
           >How to run</a>
         </article>
 
-        <article class="row">
+        <article class="row demo-titles">
           <a class="hit" href="./titles/">
-            <span class="badge">Server</span>
+            <img
+              class="scene"
+              src="./scenes/titles.webp"
+              alt="Dock workers handing off a bill of lading."
+              width="1400"
+              height="933"
+              loading="lazy"
+            />
             <div class="copy">
+              <span class="badge">Server</span>
               <h2>Title desk</h2>
               <p class="job">Issue a titled document. Transfer the title. Export if you hold it.</p>
             </div>

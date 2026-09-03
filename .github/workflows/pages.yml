@@ -167,8 +167,9 @@ jobs:
           cp dist/index.html dist/404.html
       - name: Compose Pages site
         run: |
-          mkdir -p site/tickets site/receivables site/invoices site/treasury site/streampay site/grants site/records site/raffle site/spend-policy site/session site/datasets site/memberships site/names site/titles
+          mkdir -p site/tickets site/receivables site/invoices site/treasury site/streampay site/grants site/records site/raffle site/spend-policy site/session site/datasets site/memberships site/names site/titles site/scenes
           cp pages/index.html pages/styles.css site/
+          cp -r pages/scenes/. site/scenes/
           cp -r event-tickets/frontend/dist/. site/tickets/
           cp -r receivable-desk/frontend/dist/. site/receivables/
           cp -r invoices/frontend/dist/. site/invoices/
