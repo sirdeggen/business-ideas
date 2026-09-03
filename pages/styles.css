@@ -99,6 +99,7 @@ footer a:focus-visible {
 .scene {
   display: block;
   width: 100%;
+  height: auto;
   object-fit: cover;
   background: #e8e4de;
 }
