@@ -18,6 +18,7 @@
   --title-weight: 600;
   --title-tracking: 0;
   --title-transform: none;
+  --title-caps: normal;
   --title-style: normal;
   --title-nums: normal;
 }
@@ -282,6 +283,7 @@ footer a:hover {
   font-style: var(--title-style);
   letter-spacing: var(--title-tracking);
   text-transform: var(--title-transform);
+  font-variant-caps: var(--title-caps);
   font-variant-numeric: var(--title-nums);
   line-height: 1.15;
   color: var(--title);
@@ -330,6 +332,10 @@ footer a:hover {
   --chip: #c4b89a;
   --title: #2b2b2b;
   --title-font: var(--serif);
+  --title-size: 20px;
+  --title-weight: 600;
+  --title-tracking: 0.06em;
+  --title-caps: small-caps;
 }
 
 .demo-tickets {
@@ -385,8 +391,8 @@ footer a:hover {
 }
 
 .demo-spend-policy {
-  --chip: #243656;
-  --title: #243656;
+  --chip: #2f5fa8;
+  --title: #2f5fa8;
   --title-font: var(--sans);
   --title-size: 19px;
   --title-weight: 600;
