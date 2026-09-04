@@ -45,9 +45,43 @@ import { goHome, goToStream, parseStreamLocation, streamPublicUrl } from './lib/
 import { streamPageState } from './lib/stream-load'
 
 type View = 'home' | 'create' | 'stream'
+type SceneKind = 'hero' | 'sliver'
+
+const SCENE_SRC = `${import.meta.env.BASE_URL}scenes/streampay.webp`
+const SCENE_ALT = 'A contractor tallying hours as they work.'
 
 const CHROME_HINT =
   'Chrome may ask to allow this site to talk to apps on this device. Allow, then Retry, with Desktop unlocked.'
+
+function SceneCrop({ kind }: { kind: SceneKind }) {
+  const hero = kind === 'hero'
+  return (
+    <div className={`scene-crop ${kind}`} aria-hidden={hero ? undefined : true}>
+      <img
+        className="scene"
+        src={SCENE_SRC}
+        alt={hero ? SCENE_ALT : ''}
+        width={1400}
+        height={933}
+        decoding="async"
+        {...(hero ? { fetchPriority: 'high' as const } : { loading: 'lazy' as const })}
+      />
+    </div>
+  )
+}
+
+function Chip() {
+  return <span className="chip" aria-hidden="true" />
+}
+
+function HomeLink({ onClick }: { onClick: () => void }) {
+  return (
+    <button className="text-link product-link" onClick={onClick}>
+      <Chip />
+      StreamPay
+    </button>
+  )
+}
 
 function ChromeHint() {
   return <p className="helper chrome-hint">{CHROME_HINT}</p>
@@ -80,16 +114,21 @@ function InstallPrompt({
 function Page({
   variant,
   advanced,
+  scene,
   children
 }: {
   variant: 'create' | 'stream'
   advanced?: ReactNode
+  scene: SceneKind
   children: ReactNode
 }) {
   return (
-    <div className={`app ${variant}`}>
-      {children}
-      {advanced}
+    <div className={`room scene-${scene}`}>
+      <SceneCrop kind={scene} />
+      <div className={`app ${variant}`}>
+        {children}
+        {advanced}
+      </div>
     </div>
   )
 }
@@ -126,7 +165,7 @@ function Advanced({ children }: { children?: ReactNode }) {
 function GhostCard() {
   const [startIso] = useState(() => new Date(Date.now() - 3 * 86_400_000).toISOString())
   const durationSec = DEFAULT_DURATION_DAYS * 86_400
-  const elapsed = dayPhrase({
+  const ghost = {
     amountSats: DEFAULT_AMOUNT_SATS,
     startIso,
     durationSec,
@@ -134,11 +173,16 @@ function GhostCard() {
     claimedSats: 0,
     freezeIso: '',
     rateSatsPerSec: rateSatsPerSec(DEFAULT_AMOUNT_SATS, durationSec)
-  })
+  }
+  const elapsed = dayPhrase(ghost)
+  const running = displaySats(accrue(ghost).earnedSats)
 
   return (
     <div className="ghost" aria-hidden="true">
-      <p className="memo">{GHOST_MEMO}</p>
+      <div className="ghost-head">
+        <p className="memo">{GHOST_MEMO}</p>
+        <strong className="money">{running}</strong>
+      </div>
       <p className="meta">{elapsed}</p>
     </div>
   )
@@ -152,10 +196,13 @@ function Home({
   notice?: string | null
 }) {
   return (
-    <Page variant="create" advanced={<Advanced />}>
+    <Page variant="create" scene="hero" advanced={<Advanced />}>
       <article className="sheet">
         <header className="sheet-head">
-          <h1>StreamPay</h1>
+          <h1 className="product-title">
+            <Chip />
+            StreamPay
+          </h1>
           <p className="lede">Pay as they work.</p>
         </header>
         <GhostCard />
@@ -281,6 +328,7 @@ function Create({
   return (
     <Page
       variant="create"
+      scene="sliver"
       advanced={(
         <Advanced>
           <label htmlFor="identity">Contractor identity</label>
@@ -299,7 +347,7 @@ function Create({
     >
       <article className="sheet">
         <header className="sheet-head">
-          <button className="text-link" onClick={onBack}>StreamPay</button>
+          <HomeLink onClick={onBack} />
           <h1>Open a stream</h1>
           <p className="lede">You fund the stream. They claim what’s accrued from it. You can freeze the clock.</p>
         </header>
@@ -524,10 +572,10 @@ function StreamPage({
   const clockStopped = Boolean(stream && (status === 'frozen' || status === 'finished'))
 
   return (
-    <Page variant="stream">
+    <Page variant="stream" scene="sliver">
       <article className="sheet">
         <header className="sheet-head">
-          <button className="text-link" onClick={onHome}>StreamPay</button>
+          <HomeLink onClick={onHome} />
           <div className="title-row">
             <h1>{streamHeading(stream)}</h1>
             {showStatusStamp(stream) && (
@@ -557,8 +605,8 @@ function StreamPage({
               {dayPhrase(stream, viewedAt)}
               {rate ? ` · ${rate} / day` : ''}
             </p>
-            <p className="lede">{accruedLine(stream, viewedAt)}</p>
-            <p className="meta">Claimable {displayMoney(math.claimableSats, stream)}</p>
+            <p className="lede amount-run">{accruedLine(stream, viewedAt)}</p>
+            <p className="meta">Claimable <span className="money">{displayMoney(math.claimableSats, stream)}</span></p>
             <p className="helper">Anyone with this link can see the rate, what’s accrued, and whether it’s frozen. No wallet needed to look.</p>
             {clockStopped && <p className="helper">{CLOCK_STOPPED}</p>}
             {(stream.satoshis ?? 1) < math.claimableSats && (
