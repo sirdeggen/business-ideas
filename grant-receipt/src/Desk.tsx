@@ -209,8 +209,8 @@ export function Desk({ orgIdentity = '' }: { orgIdentity?: string }) {
   return (
     <>
       <p className="job">
-        Incoming gifts arrive already tagged with a purpose. Acknowledge the
-        purpose, then issue a receipt bound to it. This is not a vault and
+        Incoming gifts arrive already tagged with a purpose. Acknowledge it,
+        then issue a receipt bound to that purpose. This is not a vault and
         not a tax letter.
       </p>
 
