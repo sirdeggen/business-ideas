@@ -122,3 +122,10 @@ Pay a little to register a receipt. Look it up.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/trace/
 - How to run: [trace/README.md](./trace/README.md)
+
+## Job escrow
+
+Fund a job. Lock until the hash lands.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/job-escrow/
+- How to run: [job-escrow/README.md](./job-escrow/README.md)
