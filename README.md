@@ -115,3 +115,10 @@ Issue a titled document. Transfer the title. Export if you hold it.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/titles/
 - How to run: [titles/README.md](./titles/README.md)
+
+## Vault claim
+
+Claim a vaulted item. Transfer the claim. Burn it to redeem.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/vault-claim/
+- How to run: [vault-claim/README.md](./vault-claim/README.md)

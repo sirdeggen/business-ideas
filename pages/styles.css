@@ -442,11 +442,21 @@ footer a:hover {
   --title-transform: uppercase;
 }
 
+.demo-vault-claim {
+  --chip: #c45c26;
+  --title: #8b3a1a;
+  --title-font: var(--serif);
+  --title-size: 22px;
+  --title-weight: 700;
+  --title-style: italic;
+}
+
 .demo-tickets .scene { object-position: 50% 35%; }
 .demo-memberships .scene { object-position: 50% 40%; }
 .demo-treasury .scene { object-position: 50% 40%; }
 .demo-grants .scene { object-position: 50% 35%; }
 .demo-names .scene { object-position: 50% 40%; }
+.demo-vault-claim .scene { object-position: 50% 42%; }
 
 footer {
   margin-top: 36px;
