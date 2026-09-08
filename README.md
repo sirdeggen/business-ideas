@@ -129,3 +129,10 @@ Fund a job. Lock until the hash lands.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/job-escrow/
 - How to run: [job-escrow/README.md](./job-escrow/README.md)
+
+## Vault Claim
+
+Claim a vaulted item. Transfer the claim. Burn it to redeem.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/vault-claim/
+- How to run: [vault-claim/README.md](./vault-claim/README.md)
