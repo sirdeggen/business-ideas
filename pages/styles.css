@@ -451,12 +451,23 @@ footer a:hover {
   --title-tracking: 0.02em;
 }
 
+.demo-job-escrow {
+  --chip: #e85d04;
+  --title: #9a3412;
+  --title-font: var(--mono);
+  --title-size: 17px;
+  --title-weight: 600;
+  --title-tracking: 0.12em;
+  --title-transform: uppercase;
+}
+
 .demo-tickets .scene { object-position: 50% 35%; }
 .demo-memberships .scene { object-position: 50% 40%; }
 .demo-treasury .scene { object-position: 50% 40%; }
 .demo-grants .scene { object-position: 50% 35%; }
 .demo-names .scene { object-position: 50% 40%; }
 .demo-trace .scene { object-position: 50% 35%; }
+.demo-job-escrow .scene { object-position: 42% 58%; }
 
 footer {
   margin-top: 36px;
