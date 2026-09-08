@@ -461,6 +461,15 @@ footer a:hover {
   --title-transform: uppercase;
 }
 
+.demo-vault-claim {
+  --chip: #a67c3d;
+  --title: #4a3524;
+  --title-font: var(--serif);
+  --title-size: 22px;
+  --title-weight: 600;
+  --title-style: italic;
+}
+
 .demo-tickets .scene { object-position: 50% 35%; }
 .demo-memberships .scene { object-position: 50% 40%; }
 .demo-treasury .scene { object-position: 50% 40%; }
@@ -468,6 +477,7 @@ footer a:hover {
 .demo-names .scene { object-position: 50% 40%; }
 .demo-trace .scene { object-position: 50% 35%; }
 .demo-job-escrow .scene { object-position: 42% 58%; }
+.demo-vault-claim .scene { object-position: 50% 38%; }
 
 footer {
   margin-top: 36px;
