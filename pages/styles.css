@@ -442,11 +442,21 @@ footer a:hover {
   --title-transform: uppercase;
 }
 
+.demo-trace {
+  --chip: #9a3412;
+  --title: #5c2a14;
+  --title-font: var(--serif);
+  --title-size: 22px;
+  --title-weight: 700;
+  --title-tracking: 0.02em;
+}
+
 .demo-tickets .scene { object-position: 50% 35%; }
 .demo-memberships .scene { object-position: 50% 40%; }
 .demo-treasury .scene { object-position: 50% 40%; }
 .demo-grants .scene { object-position: 50% 35%; }
 .demo-names .scene { object-position: 50% 40%; }
+.demo-trace .scene { object-position: 50% 35%; }
 
 footer {
   margin-top: 36px;

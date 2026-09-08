@@ -115,3 +115,10 @@ Issue a titled document. Transfer the title. Export if you hold it.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/titles/
 - How to run: [titles/README.md](./titles/README.md)
+
+## Trace receipt
+
+Pay a little to register a receipt. Look it up.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/trace/
+- How to run: [trace/README.md](./trace/README.md)
