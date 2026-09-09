@@ -46,7 +46,7 @@ type SceneKind = 'hero' | 'sliver'
 
 const NOT_FOUND = 'This invoice wasn’t found.'
 const SCENE_SRC = `${import.meta.env.BASE_URL}scenes/invoices.webp`
-const SCENE_ALT = 'A treasurer sliding a payable across the desk.'
+const SCENE_ALT = 'A founder confirming a payable just marked paid.'
 
 const CHROME_HINT =
   'Chrome may ask to allow this site to talk to apps on this device. Allow, then Retry, with Desktop unlocked.'
@@ -59,8 +59,8 @@ function SceneCrop({ kind }: { kind: SceneKind }) {
         className="scene"
         src={SCENE_SRC}
         alt={hero ? SCENE_ALT : ''}
-        width={1800}
-        height={1200}
+        width={1280}
+        height={720}
         decoding="async"
         {...(hero ? { fetchPriority: 'high' as const } : { loading: 'lazy' as const })}
       />

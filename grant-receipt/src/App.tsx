@@ -8,7 +8,7 @@ import { parseLocation, roleHref, type AppRole } from './lib/config'
 type SceneKind = 'hero' | 'sliver'
 
 const SCENE_SRC = `${import.meta.env.BASE_URL}scenes/grants.webp`
-const SCENE_ALT = 'A neighbor handing over a purpose-bound gift envelope.'
+const SCENE_ALT = 'Two teammates exchanging a purpose-bound gift envelope.'
 
 function SceneCrop({ kind }: { kind: SceneKind }) {
   const hero = kind === 'hero'
@@ -18,8 +18,8 @@ function SceneCrop({ kind }: { kind: SceneKind }) {
         className="scene"
         src={SCENE_SRC}
         alt={hero ? SCENE_ALT : ''}
-        width={1400}
-        height={933}
+        width={1280}
+        height={720}
         decoding="async"
         {...(hero ? { fetchPriority: 'high' as const } : { loading: 'lazy' as const })}
       />
