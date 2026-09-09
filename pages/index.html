@@ -14,50 +14,102 @@
   </head>
   <body>
     <main class="page">
-      <p class="mark">Business ideas</p>
-
-      <p class="lede">
-        Invoices first: send a payable, get a receipt. The receivable desk
-        is a collections list, not a bank. Tickets sit after invoices.
-      </p>
-      <p class="runtime">Live is on Pages. Server needs a local runtime.</p>
+      <header class="hero">
+        <p class="mark">Business ideas</p>
+        <p class="lede">
+          Invoices first: send a payable, get a receipt. A studio of desks for
+          work that already happens.
+        </p>
+        <p class="runtime">Live is on Pages. Server needs a local runtime.</p>
+      </header>
 
       <article class="featured demo-invoices">
         <a class="hit" href="./invoices/">
-          <img
-            class="scene"
-            src="./scenes/invoices.webp"
-            alt="A treasurer sliding a payable across the desk."
-            width="1800"
-            height="1200"
-            fetchpriority="high"
-          />
+          <div class="stage">
+            <img
+              class="scene"
+              src="./scenes/invoices.webp"
+              alt="A founder confirming a payable just marked paid."
+              width="1280"
+              height="720"
+              fetchpriority="high"
+            />
+            <aside class="fragment" aria-hidden="true">
+              <p class="fragment-mark">Sample</p>
+              <p class="fragment-status"><span></span>Paid</p>
+              <p class="fragment-title">Invoice</p>
+              <dl>
+                <div>
+                  <dt>Payable</dt>
+                  <dd></dd>
+                </div>
+                <div>
+                  <dt>Receipt</dt>
+                  <dd></dd>
+                </div>
+              </dl>
+            </aside>
+          </div>
           <p class="badge">Server</p>
           <h1><span class="chip" aria-hidden="true"></span>Invoices</h1>
           <p class="job">Send a payable. Get a receipt.</p>
           <span class="action">View</span>
-          <aside class="fragment" aria-hidden="true">
-            <p class="fragment-mark">Sample</p>
-            <p class="fragment-title">Invoice</p>
-            <dl>
-              <div>
-                <dt>Payable</dt>
-                <dd></dd>
-              </div>
-              <div>
-                <dt>Receipt</dt>
-                <dd></dd>
-              </div>
-            </dl>
-          </aside>
         </a>
         <p class="run">
           <a href="https://github.com/sirdeggen/business-ideas/blob/main/invoices/README.md">How to run</a>
         </p>
       </article>
 
-      <section class="ledger" aria-label="Ledger">
-        <article class="row demo-receivables">
+      <section class="spotlight" aria-label="Live">
+        <article class="card demo-streampay">
+          <a class="hit" href="./streampay/">
+            <img
+              class="scene"
+              src="./scenes/streampay.webp"
+              alt="An engineer watching pay accrue while the job runs."
+              width="1280"
+              height="720"
+              loading="lazy"
+            />
+            <span class="badge">Live</span>
+            <div class="copy">
+              <h2><span class="chip" aria-hidden="true"></span>StreamPay</h2>
+              <p class="job">Pay as they work.</p>
+            </div>
+            <span class="action">Open</span>
+          </a>
+          <a
+            class="run"
+            href="https://github.com/sirdeggen/business-ideas/blob/main/streampay/README.md"
+          >How to run</a>
+        </article>
+
+        <article class="card demo-grants">
+          <a class="hit" href="./grants/">
+            <img
+              class="scene"
+              src="./scenes/grants.webp"
+              alt="Two teammates exchanging a purpose-bound gift envelope."
+              width="1280"
+              height="720"
+              loading="lazy"
+            />
+            <span class="badge">Live</span>
+            <div class="copy">
+              <h2><span class="chip" aria-hidden="true"></span>Grant receipt</h2>
+              <p class="job">A gift for a purpose. A receipt bound to that purpose.</p>
+            </div>
+            <span class="action">Open</span>
+          </a>
+          <a
+            class="run"
+            href="https://github.com/sirdeggen/business-ideas/blob/main/grant-receipt/README.md"
+          >How to run</a>
+        </article>
+      </section>
+
+      <section class="ledger" aria-label="Server">
+        <article class="card demo-receivables">
           <a class="hit" href="./receivables/">
             <img
               class="scene"
@@ -80,7 +132,7 @@
           >How to run</a>
         </article>
 
-        <article class="row demo-records">
+        <article class="card demo-records">
           <a class="hit" href="./records/">
             <img
               class="scene"
@@ -103,7 +155,7 @@
           >How to run</a>
         </article>
 
-        <article class="row demo-tickets">
+        <article class="card demo-tickets">
           <a class="hit" href="./tickets/">
             <img
               class="scene"
@@ -126,7 +178,7 @@
           >How to run</a>
         </article>
 
-        <article class="row inert demo-press">
+        <article class="card inert demo-press">
           <div class="hit">
             <img
               class="scene"
@@ -148,7 +200,7 @@
           >How to run</a>
         </article>
 
-        <article class="row inert demo-mcp">
+        <article class="card inert demo-mcp">
           <div class="hit">
             <img
               class="scene"
@@ -170,14 +222,14 @@
           >How to run</a>
         </article>
 
-        <article class="row demo-treasury">
+        <article class="card demo-treasury">
           <a class="hit" href="./treasury/">
             <img
               class="scene"
               src="./scenes/treasury.webp"
-              alt="Two people signing yes on a board record."
-              width="1600"
-              height="1067"
+              alt="Two board members approving the same decision together."
+              width="1280"
+              height="720"
               loading="lazy"
             />
             <span class="badge">Server</span>
@@ -193,53 +245,7 @@
           >How to run</a>
         </article>
 
-        <article class="row demo-streampay">
-          <a class="hit" href="./streampay/">
-            <img
-              class="scene"
-              src="./scenes/streampay.webp"
-              alt="A contractor tallying hours as they work."
-              width="1400"
-              height="933"
-              loading="lazy"
-            />
-            <span class="badge">Live</span>
-            <div class="copy">
-              <h2><span class="chip" aria-hidden="true"></span>StreamPay</h2>
-              <p class="job">Pay as they work.</p>
-            </div>
-            <span class="action">Open</span>
-          </a>
-          <a
-            class="run"
-            href="https://github.com/sirdeggen/business-ideas/blob/main/streampay/README.md"
-          >How to run</a>
-        </article>
-
-        <article class="row demo-grants">
-          <a class="hit" href="./grants/">
-            <img
-              class="scene"
-              src="./scenes/grants.webp"
-              alt="A neighbor handing over a purpose-bound gift envelope."
-              width="1400"
-              height="933"
-              loading="lazy"
-            />
-            <span class="badge">Live</span>
-            <div class="copy">
-              <h2><span class="chip" aria-hidden="true"></span>Grant receipt</h2>
-              <p class="job">A gift for a purpose. A receipt bound to that purpose.</p>
-            </div>
-            <span class="action">Open</span>
-          </a>
-          <a
-            class="run"
-            href="https://github.com/sirdeggen/business-ideas/blob/main/grant-receipt/README.md"
-          >How to run</a>
-        </article>
-
-        <article class="row demo-raffle">
+        <article class="card demo-raffle">
           <a class="hit" href="./raffle/">
             <img
               class="scene"
@@ -262,7 +268,7 @@
           >How to run</a>
         </article>
 
-        <article class="row demo-spend-policy">
+        <article class="card demo-spend-policy">
           <a class="hit" href="./spend-policy/">
             <img
               class="scene"
@@ -285,7 +291,7 @@
           >How to run</a>
         </article>
 
-        <article class="row demo-session">
+        <article class="card demo-session">
           <a class="hit" href="./session/">
             <img
               class="scene"
@@ -308,7 +314,7 @@
           >How to run</a>
         </article>
 
-        <article class="row demo-datasets">
+        <article class="card demo-datasets">
           <a class="hit" href="./datasets/">
             <img
               class="scene"
@@ -331,7 +337,7 @@
           >How to run</a>
         </article>
 
-        <article class="row demo-memberships">
+        <article class="card demo-memberships">
           <a class="hit" href="./memberships/">
             <img
               class="scene"
@@ -354,7 +360,7 @@
           >How to run</a>
         </article>
 
-        <article class="row demo-names">
+        <article class="card demo-names">
           <a class="hit" href="./names/">
             <img
               class="scene"
@@ -377,7 +383,7 @@
           >How to run</a>
         </article>
 
-        <article class="row demo-titles">
+        <article class="card demo-titles">
           <a class="hit" href="./titles/">
             <img
               class="scene"
@@ -400,7 +406,7 @@
           >How to run</a>
         </article>
 
-        <article class="row demo-trace">
+        <article class="card demo-trace">
           <a class="hit" href="./trace/">
             <img
               class="scene"
@@ -423,7 +429,7 @@
           >How to run</a>
         </article>
 
-        <article class="row demo-job-escrow">
+        <article class="card demo-job-escrow">
           <a class="hit" href="./job-escrow/">
             <img
               class="scene"
@@ -446,14 +452,14 @@
           >How to run</a>
         </article>
 
-        <article class="row demo-vault-claim">
+        <article class="card demo-vault-claim">
           <a class="hit" href="./vault-claim/">
             <img
               class="scene"
               src="./scenes/vault-claim.webp"
-              alt="A vault clerk sliding a brass claim token for one specific collectible."
-              width="1400"
-              height="933"
+              alt="A vault associate presenting a claim token for one specific item."
+              width="1280"
+              height="720"
               loading="lazy"
             />
             <span class="badge">Server</span>

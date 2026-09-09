@@ -54,7 +54,7 @@ a { color: var(--navy); }
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: 50% 36%;
+  object-position: 50% 45%;
 }
 
 .scene-crop.hero {

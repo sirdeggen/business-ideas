@@ -48,7 +48,7 @@ type View = 'home' | 'create' | 'stream'
 type SceneKind = 'hero' | 'sliver'
 
 const SCENE_SRC = `${import.meta.env.BASE_URL}scenes/streampay.webp`
-const SCENE_ALT = 'A contractor tallying hours as they work.'
+const SCENE_ALT = 'An engineer watching pay accrue while the job runs.'
 
 const CHROME_HINT =
   'Chrome may ask to allow this site to talk to apps on this device. Allow, then Retry, with Desktop unlocked.'
@@ -61,8 +61,8 @@ function SceneCrop({ kind }: { kind: SceneKind }) {
         className="scene"
         src={SCENE_SRC}
         alt={hero ? SCENE_ALT : ''}
-        width={1400}
-        height={933}
+        width={1280}
+        height={720}
         decoding="async"
         {...(hero ? { fetchPriority: 'high' as const } : { loading: 'lazy' as const })}
       />
