@@ -143,3 +143,10 @@ Verify who’s behind an agent before it acts.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/kya/
 - How to run: [kya/README.md](./kya/README.md)
+
+## Vouch Desk
+
+Stake a slashable vouch. Attest. Slash on bad faith.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/vouch/
+- How to run: [vouch/README.md](./vouch/README.md)
