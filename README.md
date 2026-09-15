@@ -150,3 +150,10 @@ Stake a slashable vouch. Attest. Slash on bad faith.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/vouch/
 - How to run: [vouch/README.md](./vouch/README.md)
+
+## Handoff Desk
+
+List a digital asset. Fund escrow. Confirm the handoff. Release.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/handoff/
+- How to run: [handoff/README.md](./handoff/README.md)
