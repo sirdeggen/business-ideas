@@ -136,3 +136,10 @@ Claim a vaulted item. Transfer the claim. Burn it to redeem.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/vault-claim/
 - How to run: [vault-claim/README.md](./vault-claim/README.md)
+
+## KYA
+
+Verify who’s behind an agent before it acts.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/kya/
+- How to run: [kya/README.md](./kya/README.md)

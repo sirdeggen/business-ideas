@@ -576,6 +576,15 @@ a.card .hit,
   --title-style: italic;
 }
 
+.demo-kya {
+  --chip: #7c3aed;
+  --title: #4c1d95;
+  --title-font: var(--sans);
+  --title-size: 20px;
+  --title-weight: 650;
+  --title-tracking: -0.02em;
+}
+
 .demo-tickets .scene { object-position: 50% 35%; }
 .demo-memberships .scene { object-position: 50% 40%; }
 .demo-treasury .scene { object-position: 50% 42%; }
@@ -585,6 +594,7 @@ a.card .hit,
 .demo-trace .scene { object-position: 50% 35%; }
 .demo-job-escrow .scene { object-position: 42% 58%; }
 .demo-vault-claim .scene { object-position: 48% 32%; }
+.demo-kya .scene { object-position: 42% 28%; }
 
 footer {
   margin-top: 36px;
