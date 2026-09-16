@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { BusinessCase } from './BusinessCase'
 import { Desk } from './components/Desk'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { Register } from './components/Register'
@@ -29,6 +30,8 @@ function Shell() {
             {`${overlayCheckFailed(probeError, url)} This page is pointed at ${url}. Wallet is not required to read the list.`}
           </p>
         )}
+
+        {tab === 'desk' && <BusinessCase />}
 
         <nav className="tabs">
           {([
