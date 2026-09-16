@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { sampleHashOf } from '../../protocol/dataset'
+import { BusinessCase } from './BusinessCase'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import { buyDump, downloadDump, fulfillPurchases, postListing } from './lib/actions'
@@ -181,6 +182,8 @@ function Shell() {
           <h1>{TITLE}</h1>
           <p className="lede">{LEDE}</p>
         </header>
+
+        <BusinessCase />
 
         {online === false && (
           <p className="status err">
