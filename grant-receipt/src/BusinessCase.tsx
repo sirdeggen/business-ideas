@@ -12,10 +12,9 @@ export function BusinessCase() {
           <dt>Why it exists</dt>
           <dd>
             Funders give money for a purpose and need a receipt that ties the
-            gift to that purpose — not a vague donation acknowledgment. A
-            purpose-bound grant receipt makes “this was for X” portable: grantee
-            proves they received restricted funds; funder keeps an audit trail
-            without a custom grant portal.
+            gift to that purpose — not a vague donation acknowledgment.
+            Purpose-bound proof should travel with the gift without a custom
+            grant portal.
           </dd>
         </div>
         <div>
@@ -23,23 +22,17 @@ export function BusinessCase() {
           <dd>
             Foundations, DAFs, corporate CSR, and grassroots donors who restrict
             gifts; nonprofits and project leads who must show purpose-bound
-            receipt. Enterprise grantmakers already buy grant-management
-            software; grassroots campaigns want the same proof without
-            enterprise tooling.
+            receipt.
           </dd>
         </div>
         <div>
           <dt>Market signal</dt>
           <dd>
             <p>
-              U.S. charitable giving <strong>$592.5B in 2024</strong> (Giving
-              USA 2025); foundation giving <strong>$109.8B</strong>. DAFs held{' '}
-              <strong>$326.5B</strong> and granted <strong>$64.9B</strong> in
-              FY2024 (Annual DAF Report 2025). Share that is strictly
-              “restricted / purpose-bound” vs unrestricted is{' '}
-              <strong>unknown</strong> in public aggregates — what would prove
-              it: IRS/Form 990 restricted-net-asset totals or funder software
-              ARPU tied to restricted-gift modules.
+              U.S. charitable giving was $592.5B in 2024 (Giving USA 2025);
+              foundation giving $109.8B. DAFs held $326.5B and granted $64.9B
+              in FY2024. Share that is strictly purpose-bound is unknown in
+              public aggregates.
             </p>
             <p className="cite-chips">
               <a
@@ -66,16 +59,13 @@ export function BusinessCase() {
           <dd>
             <ul>
               <li>
-                Other-chain analog: Gitcoin / on-chain grant rounds prove donors
-                pay fees and grantees accept crypto grants; protocol-level
-                “restricted gift receipt” revenue is <strong>unknown</strong>.
+                Other-chain analog: Gitcoin and on-chain grant rounds show
+                donors already move restricted gifts digitally.
               </li>
               <li>
-                Non-chain analog: Foundations and DAFs already operate at
-                nine-figure annual grant outflows; grant-management and
-                receipting tools (Fluxx, Blackbaud, DAF sponsor platforms) are
-                paid products — exact restricted-gift software TAM{' '}
-                <strong>unknown</strong> from open sources here.
+                Non-chain analog: Grant-management and DAF platforms (Fluxx,
+                Blackbaud, DAF sponsors) are paid products for receipting and
+                restriction.
               </li>
             </ul>
           </dd>
@@ -83,9 +73,8 @@ export function BusinessCase() {
         <div>
           <dt>Demo goal</dt>
           <dd>
-            Prove a v0: funder sends a purpose-tagged grant → grantee gets a
-            receipt bound to that purpose → both can show the restriction later.
-            Not a full grants CRM.
+            Funder sends a purpose-tagged grant; grantee gets a receipt bound
+            to that purpose; both can show the restriction later.
           </dd>
         </div>
       </dl>
