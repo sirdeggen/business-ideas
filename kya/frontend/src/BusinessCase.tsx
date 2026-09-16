@@ -1,0 +1,62 @@
+import {
+  BUSINESS_CASE_CITATIONS,
+  BUSINESS_CASE_DEMO,
+  BUSINESS_CASE_MARKET,
+  BUSINESS_CASE_PROOF,
+  BUSINESS_CASE_TITLE,
+  BUSINESS_CASE_WHO,
+  BUSINESS_CASE_WHY
+} from './lib/copy'
+
+export function BusinessCase() {
+  return (
+    <section className="business-case" aria-labelledby="business-case-heading">
+      <h2 id="business-case-heading">{BUSINESS_CASE_TITLE}</h2>
+      <dl>
+        <div>
+          <dt>Why it exists</dt>
+          <dd>{BUSINESS_CASE_WHY}</dd>
+        </div>
+        <div>
+          <dt>Who pays</dt>
+          <dd>{BUSINESS_CASE_WHO}</dd>
+        </div>
+        <div>
+          <dt>Market signal</dt>
+          <dd>
+            <p>{BUSINESS_CASE_MARKET}</p>
+            {BUSINESS_CASE_CITATIONS.length > 0 && (
+              <p className="cite-chips">
+                {BUSINESS_CASE_CITATIONS.map((cite) => (
+                  <a
+                    key={cite.label}
+                    className="cite-chip"
+                    href={cite.href}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {cite.label}
+                  </a>
+                ))}
+              </p>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>Proof people pay</dt>
+          <dd>
+            <ul>
+              {BUSINESS_CASE_PROOF.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          </dd>
+        </div>
+        <div>
+          <dt>Demo goal</dt>
+          <dd>{BUSINESS_CASE_DEMO}</dd>
+        </div>
+      </dl>
+    </section>
+  )
+}

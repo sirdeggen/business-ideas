@@ -4,6 +4,17 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { sheetTitle } from '../../../protocol/kya'
 import {
+  BUSINESS_CASE_CITATIONS,
+  BUSINESS_CASE_DEMO,
+  BUSINESS_CASE_FIELDS,
+  BUSINESS_CASE_MARKET,
+  BUSINESS_CASE_PROOF,
+  BUSINESS_CASE_PROOF_CHAIN,
+  BUSINESS_CASE_PROOF_FIAT,
+  BUSINESS_CASE_PROOF_NETWORK,
+  BUSINESS_CASE_TITLE,
+  BUSINESS_CASE_WHO,
+  BUSINESS_CASE_WHY,
   EYEBROW,
   FEE_LINE,
   ISSUE_BUTTON,
@@ -179,5 +190,79 @@ describe('first-paint copy', () => {
     ]) {
       expect(pagesYml).toContain(`site/${slug}`)
     }
+  })
+})
+
+describe('Business case page copy is locked', () => {
+  it('uses the exact title and five fields in PATTERN order', () => {
+    expect(BUSINESS_CASE_TITLE).toBe('Business case')
+    expect([...BUSINESS_CASE_FIELDS]).toEqual([
+      'Why it exists',
+      'Who pays',
+      'Market signal',
+      'Proof people pay',
+      'Demo goal'
+    ])
+  })
+
+  it('keeps the locked bodies and does not dump Revandrew or Sources', () => {
+    expect(BUSINESS_CASE_WHY).toBe(
+      'Before an agent spends, attests, or acts for an org, counterparties need to know which agent it is and who stands behind it — agent identity as an audit object, not a passport cosplay.'
+    )
+    expect(BUSINESS_CASE_WHO).toBe(
+      'Primary GTM: enterprise risk / compliance / platform trust teams that budget for agent verification and continuous monitoring before spend or attest (card networks, wallets, marketplaces, agent platforms). Grassroots: small orgs running agents who need the same look-up. End fee schedules for KYA-as-a-product are still forming — public product ARR is unknown.'
+    )
+    expect(BUSINESS_CASE_MARKET).toBe(
+      'Visa + Mastercard + Ant International (Sep 2026): collaboration on a Know-Your-Agent interoperability framework linking Visa Trusted Agent Protocol, Mastercard Verifiable Intent, and Ant’s Agentic Mobile Protocol — operator traceability, shared certification, continuous monitoring. Public KYA fee / revenue figures are unknown. Ant cites Alipay+ scale (150M merchants, 2B user accounts) as the wallet/merchant surface agents would ride; that is ecosystem size, not KYA revenue.'
+    )
+    expect(BUSINESS_CASE_PROOF_NETWORK).toBe(
+      'Network analog (not other-chain): Card-network Trusted Agent / Verifiable Intent / AMP KYA stacks — Visa, Mastercard, and Ant already investing in agent identity rails before spend (fee take unknown).'
+    )
+    expect(BUSINESS_CASE_PROOF_FIAT).toBe(
+      'Non-chain analog: KYC/KYB vendors, vendor-risk platforms, OAuth app reviews — orgs already pay for “who is this counterparty?” before access or spend.'
+    )
+    expect(BUSINESS_CASE_PROOF_CHAIN).toBe(
+      'Emerging on-chain standards (e.g. draft ERC-8004) exist; public paid product revenue for on-chain agent identity is unknown — not treated as proof until a fee signal appears.'
+    )
+    expect([...BUSINESS_CASE_PROOF]).toEqual([
+      BUSINESS_CASE_PROOF_NETWORK,
+      BUSINESS_CASE_PROOF_FIAT,
+      BUSINESS_CASE_PROOF_CHAIN
+    ])
+    expect(BUSINESS_CASE_DEMO).toBe(
+      'Org registers an agent with a named backer → counterparty looks up the trust object before a spend/attest → pass/fail is readable on one URL (fee or monitoring charge marked even if v0 is free). One visit: register → look up → trust proof.'
+    )
+    const joined = [
+      BUSINESS_CASE_WHY,
+      BUSINESS_CASE_WHO,
+      BUSINESS_CASE_MARKET,
+      ...BUSINESS_CASE_PROOF,
+      BUSINESS_CASE_DEMO
+    ].join('\n')
+    expect(joined).not.toMatch(/Revandrew/)
+    expect(joined).not.toMatch(/## Sources/)
+    expect(joined).not.toMatch(/Margaret/)
+    expect(joined).not.toMatch(/protocol-priced/)
+  })
+
+  it('offers at most three citation chips and invents none', () => {
+    expect(BUSINESS_CASE_CITATIONS.length).toBeLessThanOrEqual(3)
+    expect(BUSINESS_CASE_CITATIONS).toEqual([])
+  })
+
+  it('sits on the default view only, below the head and above the desk', () => {
+    expect(app).toMatch(/\{!agentId && <BusinessCase \/>\}/)
+    expect(app.split('<BusinessCase />')).toHaveLength(2)
+    const head = app.indexOf('<header className="pass-head">')
+    const caseMark = app.indexOf('{!agentId && <BusinessCase />}')
+    const desk = app.indexOf('{REGISTER_JOB}')
+    expect(head).toBeGreaterThan(-1)
+    expect(caseMark).toBeGreaterThan(head)
+    expect(desk).toBeGreaterThan(caseMark)
+
+    expect(kyaCard).toContain('<span class="badge">Server</span>')
+    expect(kyaCard).toContain('>View<')
+    expect(kyaCard).not.toContain('Live')
+    expect(kyaCard).not.toContain('Business case')
   })
 })
