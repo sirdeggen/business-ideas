@@ -3,6 +3,15 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  BUSINESS_CASE_CITATIONS,
+  BUSINESS_CASE_DEMO,
+  BUSINESS_CASE_FIELDS,
+  BUSINESS_CASE_MARKET,
+  BUSINESS_CASE_PROOF_CHAIN,
+  BUSINESS_CASE_PROOF_FIAT,
+  BUSINESS_CASE_TITLE,
+  BUSINESS_CASE_WHO,
+  BUSINESS_CASE_WHY,
   EMPTY_LIST,
   EXPORT_BUTTON,
   FOOTER,
@@ -138,6 +147,7 @@ describe('first-paint copy', () => {
     expect(titleCard).not.toContain('Live')
     expect(titleCard).not.toContain('sats')
     expect(titleCard).not.toContain('CargoX')
+    expect(titleCard).not.toContain('Business case')
   })
 
   it('adds titles to Pages without a sibling deploy job', () => {
@@ -166,8 +176,79 @@ describe('first-paint copy', () => {
     expect(catalog).toContain('href="./memberships/"')
     expect(catalog).toContain('href="./names/"')
     expect(catalog).toContain('href="./titles/"')
-    expect(catalog).toContain('<h2>Membership</h2>')
-    expect(catalog).toContain('<h2>Name lease</h2>')
-    expect(catalog).toContain('<h2>Title desk</h2>')
+    expect(catalog).toContain('>Membership</h2>')
+    expect(catalog).toContain('>Name lease</h2>')
+    expect(catalog).toContain('>Title desk</h2>')
+  })
+})
+
+describe('Business case page copy is locked', () => {
+  it('uses the exact title and five fields in PATTERN order', () => {
+    expect(BUSINESS_CASE_TITLE).toBe('Business case')
+    expect([...BUSINESS_CASE_FIELDS]).toEqual([
+      'Why it exists',
+      'Who pays',
+      'Market signal',
+      'Proof people pay',
+      'Demo goal'
+    ])
+  })
+
+  it('keeps the locked bodies and does not dump Margaret, Status, or Sources', () => {
+    expect(BUSINESS_CASE_WHY).toBe(
+      'A titled document is an object someone holds — issue it, transfer who holds the title, export only if you hold it. The pain is “who owns this paper now?” without a fax chain or a PDF anyone can copy.'
+    )
+    expect(BUSINESS_CASE_WHO).toBe(
+      'Issuers (carriers, freight forwarders, document desks, clubs) pay to issue the titled document. Holders or receiving parties pay the transfer / custody fee when title moves. Enterprise document desks and grassroots clubs both open a wallet on that path.'
+    )
+    expect(BUSINESS_CASE_MARKET).toBe(
+      'CargoX platform announcements: more than 10M electronic trade documents transferred by mid-2025, later citing 12M. Exact platform fee take-rate and eBL-only revenue are unknown in public filings.'
+    )
+    expect(BUSINESS_CASE_PROOF_CHAIN).toBe(
+      'Other-chain / digital-title analog: CargoX Blockchain Document Transfer — carriers and traders already move electronic bills of lading and related titles as transferable documents.'
+    )
+    expect(BUSINESS_CASE_PROOF_FIAT).toBe(
+      'Non-chain analog: Title insurance workflows, certificate registries, diploma verification portals — budgets already exist for “who holds the title now?”'
+    )
+    expect(BUSINESS_CASE_DEMO).toBe(
+      'Issue a titled document → transfer the title (transfer/custody fee visible) → export only if holder, on a public desk.'
+    )
+    const joined = [
+      BUSINESS_CASE_WHY,
+      BUSINESS_CASE_WHO,
+      BUSINESS_CASE_MARKET,
+      BUSINESS_CASE_PROOF_CHAIN,
+      BUSINESS_CASE_PROOF_FIAT,
+      BUSINESS_CASE_DEMO
+    ].join('\n')
+    expect(joined).not.toMatch(/Margaret/)
+    expect(joined).not.toMatch(/## Sources/)
+    expect(joined).not.toMatch(/Status:/)
+  })
+
+  it('offers at most three citation chips', () => {
+    expect(BUSINESS_CASE_CITATIONS.length).toBeLessThanOrEqual(3)
+    expect(BUSINESS_CASE_CITATIONS.map((cite) => cite.label)).toEqual([
+      'CargoX 10M',
+      'CargoX 12M'
+    ])
+  })
+
+  it('sits once below the head and above the desk, on the default view only', () => {
+    expect(app).toContain('<BusinessCase />')
+    expect(app.split('<BusinessCase />')).toHaveLength(2)
+    const head = app.indexOf('<p className="lede">{LEDE}</p>')
+    const caseMark = app.indexOf('<BusinessCase />')
+    const desk = app.indexOf('<section className="slip">')
+    const install = app.indexOf('{showInstall &&')
+    expect(head).toBeGreaterThan(-1)
+    expect(caseMark).toBeGreaterThan(head)
+    expect(desk).toBeGreaterThan(caseMark)
+    expect(install).toBeGreaterThan(desk)
+
+    expect(titleCard).toContain('class="badge">Server<')
+    expect(titleCard).toContain('>View<')
+    expect(titleCard).not.toContain('Live')
+    expect(titleCard).not.toContain('Business case')
   })
 })
