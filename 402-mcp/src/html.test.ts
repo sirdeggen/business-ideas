@@ -60,9 +60,12 @@ describe('402 MCP Business case', () => {
 
   it('sits on free GET / first paint, below the head and above the desk', () => {
     const server = readFileSync(resolve(here, 'server.ts'), 'utf8')
-    const getRoot = server.slice(server.indexOf("app.get('/')"))
+    const start = server.indexOf("app.get('/',")
+    const end = server.indexOf("app.all('/mcp'")
+    assert.ok(start > -1 && end > start)
+    const getRoot = server.slice(start, end)
     assert.match(getRoot, /res\.type\('html'\)\.send\(indexPage\(/)
-    assert.doesNotMatch(getRoot.slice(0, getRoot.indexOf("app.all('/mcp'")), /getServerWallet/)
+    assert.doesNotMatch(getRoot, /getServerWallet/)
 
     const html = indexPage(10)
     assert.match(html, /Charge per call\. No API keys\./)
