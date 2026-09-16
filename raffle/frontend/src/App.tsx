@@ -25,6 +25,7 @@ import {
   isWalletMissing,
   overlayCheckFailed
 } from './lib/config'
+import { BusinessCase } from './BusinessCase'
 import { lookupRaffle, type OverlayDraw, type OverlayHeader, type OverlayTicket } from './lib/overlay'
 
 const NO_DRAW_IN_THIS_LINK = 'No draw in this link.'
@@ -357,6 +358,8 @@ function Shell() {
               : 'This trip’s draw. Free stub. One winner, in the room.'}
           </p>
         </header>
+
+        {!raffleId && <BusinessCase />}
 
         {online === false && (
           <p className="status err">
