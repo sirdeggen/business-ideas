@@ -13,6 +13,39 @@ export const FREEZE_HINT =
 export const CLOCK_STOPPED =
   'The clock is stopped. Already-accrued can still be claimed. The remaining pot does not earn.'
 
+export const BUSINESS_CASE_TITLE = 'Business case'
+
+export const BUSINESS_CASE_WHY =
+  'Salaries, retainers, and vesting don’t have to arrive as lump sums. Streaming pay settles continuously so the recipient can withdraw accrued value anytime and the payer can stop or top up without rewriting the deal.'
+
+export const BUSINESS_CASE_WHO =
+  'Crypto-native companies and DAOs that already stream vesting or payroll; freelancers who want ongoing retainers instead of monthly invoices. Enterprise payroll buyers remain a stretch until fiat rails and compliance are clear.'
+
+export const BUSINESS_CASE_MARKET =
+  'Sablier (Jul 2023–Feb 2026): ~534K streams, ~$43M stablecoin volume. Sablier 2025: 892K transactions, ~$30M stablecoin volume. Superfluid ~$6M TVL (live snapshot). Broader fiat streaming-payroll TAM is unknown.'
+
+export const BUSINESS_CASE_PROOF_CHAIN =
+  'Other-chain analog: Sablier and Superfluid are live streaming protocols with multi-year volume/TVL for vesting, payroll, and grants.'
+
+export const BUSINESS_CASE_PROOF_FIAT =
+  'Non-chain analog: ADP, Gusto, and Rippling prove employers pay for scheduled pay rails — public “per-second stream” revenue is unknown; the closest paid habit is recurring payroll subscriptions.'
+
+export const BUSINESS_CASE_DEMO =
+  'Create a continuous payable → recipient withdraws accrued amount → stop or top-up works. Show streaming is legible next to lump-sum invoices.'
+
+export const BUSINESS_CASE_CITATIONS = [
+  { href: 'https://sablier.com', label: 'Sablier' },
+  { href: 'https://www.superfluid.finance', label: 'Superfluid' }
+] as const
+
+export const BUSINESS_CASE_FIELDS = [
+  'Why it exists',
+  'Who pays',
+  'Market signal',
+  'Proof people pay',
+  'Demo goal'
+] as const
+
 export function remainingPotSats(stream: OverlayStream): number {
   const accounted = Math.max(0, stream.amountSats - stream.claimedSats)
   if (stream.claimedSats > 0) return accounted

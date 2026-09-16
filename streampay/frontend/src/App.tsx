@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { WalletClient } from '@bsv/sdk'
+import { BusinessCase } from './BusinessCase'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import {
@@ -205,6 +206,7 @@ function Home({
           </h1>
           <p className="lede">Pay as they work.</p>
         </header>
+        <BusinessCase />
         <GhostCard />
         {notice && <p className="status err">{notice}</p>}
         <button className="btn primary" onClick={onCreate}>Open a stream</button>
