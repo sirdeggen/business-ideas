@@ -3,6 +3,15 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  BUSINESS_CASE_CITATIONS,
+  BUSINESS_CASE_DEMO,
+  BUSINESS_CASE_FIELDS,
+  BUSINESS_CASE_MARKET,
+  BUSINESS_CASE_PROOF_CHAIN,
+  BUSINESS_CASE_PROOF_FIAT,
+  BUSINESS_CASE_TITLE,
+  BUSINESS_CASE_WHO,
+  BUSINESS_CASE_WHY,
   BUY_BUTTON,
   EMPTY_LIST,
   FOOTER,
@@ -103,5 +112,77 @@ describe('first-paint copy', () => {
     expect(datasetCard).not.toContain('soon')
     expect(datasetCard).not.toContain('Live')
     expect(datasetCard).not.toContain('radio')
+  })
+})
+
+describe('Business case page copy is locked', () => {
+  it('uses the exact title and five fields in PATTERN order', () => {
+    expect(BUSINESS_CASE_TITLE).toBe('Business case')
+    expect([...BUSINESS_CASE_FIELDS]).toEqual([
+      'Why it exists',
+      'Who pays',
+      'Market signal',
+      'Proof people pay',
+      'Demo goal'
+    ])
+  })
+
+  it('keeps the locked bodies and does not dump Margaret or Sources', () => {
+    expect(BUSINESS_CASE_WHY).toBe(
+      'Sellers of files and dumps need a stall: list title, license, and price; keep the bytes off the public row; unlock the file only after pay. Buyers (labs, analysts) want a sample hash and a receipt — not another free scrape wall or API key negotiation.'
+    )
+    expect(BUSINESS_CASE_WHO).toBe(
+      'Primary GTM — buyers: AI labs and analysts who pay per dump for licensed training, web, or curated data. Secondary — sellers: data brokers and indie curators who list (listing fee and/or take rate on unlock). GTM leads with lab/analyst buyers.'
+    )
+    expect(BUSINESS_CASE_MARKET).toBe(
+      'Grass (official Jul 2026 holder call): $17M revenue in 2025; ~$17M in H1 2026 alone; full-year 2026 training-data outlook ~$65–75M. Non-chain data marketplaces (AWS Data Exchange, Bright Data, and peers) exist; public stall-level GMV for “pay-for-dump” catalogs is unknown beyond named sellers.'
+    )
+    expect(BUSINESS_CASE_PROOF_CHAIN).toBe(
+      'Other-chain analog: Grass — AI labs already pay for ethically sourced web/training data collected via a distributed network; disclosed multi-million revenue.'
+    )
+    expect(BUSINESS_CASE_PROOF_FIAT).toBe(
+      'Non-chain analog: AWS Data Exchange / commercial data brokers and dataset marketplaces — enterprises buy licensed dumps and feeds with invoices, not free torrents.'
+    )
+    expect(BUSINESS_CASE_DEMO).toBe(
+      'Post a listing (title, license, sample hash, price) → lab pays → file arrives privately → receipt on the public stall. Catalog readable with no wallet.'
+    )
+    const joined = [
+      BUSINESS_CASE_WHY,
+      BUSINESS_CASE_WHO,
+      BUSINESS_CASE_MARKET,
+      BUSINESS_CASE_PROOF_CHAIN,
+      BUSINESS_CASE_PROOF_FIAT,
+      BUSINESS_CASE_DEMO
+    ].join('\n')
+    expect(joined).not.toMatch(/Margaret/)
+    expect(joined).not.toMatch(/## Sources/)
+    expect(joined).not.toMatch(/Status:/)
+  })
+
+  it('offers at most three citation chips', () => {
+    expect(BUSINESS_CASE_CITATIONS.length).toBeLessThanOrEqual(3)
+    expect(BUSINESS_CASE_CITATIONS.map((cite) => cite.label)).toEqual([
+      'Grass Jul 2026',
+      'AWS Data Exchange'
+    ])
+  })
+
+  it('sits once below the head and above the desk, with catalog still Server', () => {
+    expect(app).toMatch(/<BusinessCase \/>/)
+    expect(app.split('<BusinessCase />')).toHaveLength(2)
+    const head = app.indexOf('<p className="lede">{LEDE}</p>')
+    const caseMark = app.indexOf('<BusinessCase />')
+    const stall = app.indexOf('{STALL_HEADING}')
+    const post = app.indexOf('{POST_HEADING}')
+    const install = app.indexOf('{showInstall &&')
+    expect(head).toBeGreaterThan(-1)
+    expect(caseMark).toBeGreaterThan(head)
+    expect(stall).toBeGreaterThan(caseMark)
+    expect(post).toBeGreaterThan(stall)
+    expect(install).toBeGreaterThan(post)
+
+    expect(datasetCard).toContain('class="badge">Server<')
+    expect(datasetCard).toContain('Dataset stall')
+    expect(datasetCard).not.toContain('Business case')
   })
 })
