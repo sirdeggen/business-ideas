@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FEE_SATS, formatSats, formatWhen, normalizeQuery } from '../../protocol/trace'
+import { BusinessCase } from './BusinessCase'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import { assertCanRegister, registerReceipt } from './lib/actions'
@@ -184,6 +185,8 @@ function Shell() {
           <h1>{title}</h1>
           <p className="lede">{LEDE}</p>
         </header>
+
+        <BusinessCase />
 
         {online === false && (
           <p className="status err">
