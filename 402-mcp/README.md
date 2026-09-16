@@ -4,7 +4,7 @@ Extract the main article text from a public URL. Each paid call is **10 sats**. 
 
 Payment is the credential. This is not Coinbase x402.
 
-`extract_article` GETs a public URL and returns the **main article text** (Mozilla Readability). Not raw HTML. Local/private hosts are rejected. Discovery (`initialize`, `tools/list`) and `GET /health` are free. Local `GET /` is a few lines of text that name the job and `POST /mcp`. There is no public app.
+`extract_article` GETs a public URL and returns the **main article text** (Mozilla Readability). Not raw HTML. Local/private hosts are rejected. Discovery (`initialize`, `tools/list`) and `GET /health` are free. Local `GET /` is a free HTML index: the job, the Business case, and `POST /mcp`. There is no public app.
 
 ## How to run
 
@@ -101,7 +101,8 @@ Do not bake a real private key into the image.
 
 ## Layout
 
-- `src/server.ts` — Express + Streamable HTTP MCP (`@modelcontextprotocol/server` v2); local `GET /` is the tiny text surface
+- `src/server.ts` — Express + Streamable HTTP MCP (`@modelcontextprotocol/server` v2); local `GET /` is the free HTML index
+- `src/html.ts` — Business case + job copy for `GET /`
 - `src/payment.ts` — `validatePayment` / `send402` on `tools/call` only
 - `src/wallet.ts` — `ServerWallet.create`
 - `src/extract-article.ts` — paid tool (Readability)
