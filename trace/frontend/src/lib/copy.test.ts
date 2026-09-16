@@ -4,6 +4,15 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   AMOUNT_IN_ADVANCED,
+  BUSINESS_CASE_CITATIONS,
+  BUSINESS_CASE_DEMO,
+  BUSINESS_CASE_FIELDS,
+  BUSINESS_CASE_MARKET,
+  BUSINESS_CASE_PROOF_CHAIN,
+  BUSINESS_CASE_PROOF_FIAT,
+  BUSINESS_CASE_TITLE,
+  BUSINESS_CASE_WHO,
+  BUSINESS_CASE_WHY,
   DEFAULT_TITLE,
   EYEBROW,
   FOOTER,
@@ -134,5 +143,80 @@ describe('first-paint copy', () => {
         expect(line).not.toContain('signed record')
       }
     }
+  })
+})
+
+describe('Business case page copy is locked', () => {
+  it('uses the exact title and five fields in PATTERN order', () => {
+    expect(BUSINESS_CASE_TITLE).toBe('Business case')
+    expect([...BUSINESS_CASE_FIELDS]).toEqual([
+      'Why it exists',
+      'Who pays',
+      'Market signal',
+      'Proof people pay',
+      'Demo goal'
+    ])
+  })
+
+  it('keeps the locked bodies and does not dump Margaret or Sources', () => {
+    expect(BUSINESS_CASE_WHY).toBe(
+      'When data moves into AI or supply workflows, buyers need a receipt that says where it came from, under what consent, and who contributed it — not a spreadsheet promise. Register provenance once; audit it later.'
+    )
+    expect(BUSINESS_CASE_WHO).toBe(
+      'Data marketplaces, AI labs, and enterprise buyers who must prove lineage (enterprise: compliance / data procurement; grassroots: contributor apps and small providers). Providers pay to register; auditors consume the public receipt.'
+    )
+    expect(BUSINESS_CASE_MARKET).toBe(
+      'DATA Trace (DATA Foundation / IP Strategy, Jun 2026): flagship integrator Kled began registering 1.5 billion user-contributed records on DATA Network; Trace is the public audit / receipt layer (staging API as of docs). Per-record registration fee take-rate is unknown in public pricing.'
+    )
+    expect(BUSINESS_CASE_PROOF_CHAIN).toBe(
+      'Other-chain analog: DATA Trace + Kled — AI data marketplaces already push provenance registration on-chain at billion-record scale (fee schedule unknown).'
+    )
+    expect(BUSINESS_CASE_PROOF_FIAT).toBe(
+      'Non-chain analog: Supply-chain / lab LIMS audit trails and enterprise data catalogs — orgs already budget for lineage and consent proof even without a chain.'
+    )
+    expect(BUSINESS_CASE_DEMO).toBe(
+      'Provider registers provenance (fee marked or paid) → buyer/auditor opens a public receipt URL → lineage + consent object proves without a spreadsheet. One visit: register → receipt → audit proof.'
+    )
+    const joined = [
+      BUSINESS_CASE_WHY,
+      BUSINESS_CASE_WHO,
+      BUSINESS_CASE_MARKET,
+      BUSINESS_CASE_PROOF_CHAIN,
+      BUSINESS_CASE_PROOF_FIAT,
+      BUSINESS_CASE_DEMO
+    ].join('\n')
+    expect(joined).not.toMatch(/Margaret/)
+    expect(joined).not.toMatch(/## Sources/)
+    expect(joined).not.toMatch(/Revandrew/)
+    expect(joined).not.toMatch(/Status:/)
+    expect(joined).not.toMatch(/\bBSV\b/)
+  })
+
+  it('offers at most three citation chips', () => {
+    expect(BUSINESS_CASE_CITATIONS.length).toBeLessThanOrEqual(3)
+    expect(BUSINESS_CASE_CITATIONS.map((cite) => cite.label)).toEqual([
+      'DATA Foundation',
+      'IP Strategy Jun 2026'
+    ])
+  })
+
+  it('sits once below the head and above the desk, with catalog still Server', () => {
+    expect(app).toMatch(/<BusinessCase \/>/)
+    expect(app.split('<BusinessCase />')).toHaveLength(2)
+    const head = app.indexOf('<p className="lede">{LEDE}</p>')
+    const caseMark = app.indexOf('<BusinessCase />')
+    const lookup = app.indexOf('<h2>Look up</h2>')
+    const register = app.indexOf('<h2>Register</h2>')
+    const install = app.indexOf('{showInstall &&')
+    expect(head).toBeGreaterThan(-1)
+    expect(caseMark).toBeGreaterThan(head)
+    expect(lookup).toBeGreaterThan(caseMark)
+    expect(register).toBeGreaterThan(lookup)
+    expect(install).toBeGreaterThan(register)
+
+    expect(traceCard).toContain('class="badge">Server<')
+    expect(traceCard).toContain('Trace receipt')
+    expect(traceCard).not.toContain('Live')
+    expect(traceCard).not.toContain('Business case')
   })
 })
