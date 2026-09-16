@@ -10,6 +10,39 @@ export const FIRST_PAINT = {
   payerPlaceholder: PAYER_NAME_PLACEHOLDER
 } as const
 
+export const BUSINESS_CASE_TITLE = 'Business case'
+
+export const BUSINESS_CASE_WHY =
+  'Bookkeepers collect many tiny spends — receipts, card swipes, small payables — and need one payable the treasurer can approve once. Rolling lines into a single session invoice closes the books without a dozen one-shot payments or a spreadsheet chase.'
+
+export const BUSINESS_CASE_WHO =
+  'Finance ops and bookkeepers who already buy expense / AP tools; grassroots treasurers who batch a trip or project’s small spends. Payers settle one total; the buyer of the product is the team that closes sessions.'
+
+export const BUSINESS_CASE_MARKET =
+  'Expensify FY2025: $142.1M revenue (+2% YoY); Expensify Card interchange $21.3M (+24%); ~650K paid members (Q4 2025). Habit signal: roll many expenses → one report / one pay. Broader “session close-out” share of AP automation GMV is unknown.'
+
+export const BUSINESS_CASE_PROOF_CHAIN =
+  'Other-chain analog: Request Finance Expenses — Web3 teams submit, approve, and mass-pay reimbursements in crypto/fiat; platform reported >$1.3B all-time payment volume by Jan 2026 (processing volume, not product ARR).'
+
+export const BUSINESS_CASE_PROOF_FIAT =
+  'Non-chain analog: Expensify, Ramp, and Concur — companies pay to capture many receipts and close them as one reimbursable or payable batch; corporate card statement close-out is the same habit without crypto.'
+
+export const BUSINESS_CASE_DEMO =
+  'Open a session → attach many small lines → close books → treasurer reads one invoice → approve → pay once → export lines.'
+
+export const BUSINESS_CASE_CITATIONS = [
+  { href: 'https://investor.wedbush.com/wedbush/article/bizwire-2026-2-26-expensify-announces-q4-and-full-year-fiscal-2025-results', label: 'Expensify FY2025' },
+  { href: 'https://www.request.finance/post/introducing-an-expenses-app-for-crypto', label: 'Request Finance' }
+] as const
+
+export const BUSINESS_CASE_FIELDS = [
+  'Why it exists',
+  'Who pays',
+  'Market signal',
+  'Proof people pay',
+  'Demo goal'
+] as const
+
 /** One title: session label, or the desk line. Never a second Session AP. */
 export function sheetTitle(label?: string): string {
   const trimmed = (label ?? '').trim()
