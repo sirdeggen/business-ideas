@@ -10,6 +10,7 @@ import {
   sameLessee,
   type PeriodDays
 } from '../../protocol/namelease'
+import { BusinessCase } from './BusinessCase'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import { leaseName } from './lib/actions'
@@ -211,6 +212,8 @@ function Shell() {
           <h1>{title}</h1>
           <p className="lede">{LEDE}</p>
         </header>
+
+        <BusinessCase />
 
         {online === false && (
           <p className="status err">
