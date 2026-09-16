@@ -12,6 +12,7 @@ import {
   isSeller,
   type AssetType
 } from '../../protocol/handoff'
+import { BusinessCase } from './BusinessCase'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import {
@@ -366,6 +367,8 @@ function Shell() {
             <h1>{TITLE}</h1>
             <p className="lede">{LEDE}</p>
           </header>
+
+          {!listingId && <BusinessCase />}
 
           {online === false && (
             <p className="status err">

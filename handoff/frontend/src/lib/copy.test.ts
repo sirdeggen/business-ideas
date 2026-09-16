@@ -3,6 +3,15 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  BUSINESS_CASE_CITATIONS,
+  BUSINESS_CASE_DEMO,
+  BUSINESS_CASE_FIELDS,
+  BUSINESS_CASE_MARKET,
+  BUSINESS_CASE_PROOF_CHAIN,
+  BUSINESS_CASE_PROOF_FIAT,
+  BUSINESS_CASE_TITLE,
+  BUSINESS_CASE_WHO,
+  BUSINESS_CASE_WHY,
   CONFIRM_BUTTON,
   CONFIRMING_BUTTON,
   EYEBROW,
@@ -23,6 +32,7 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url))
 const app = readFileSync(join(here, '../App.tsx'), 'utf8')
+const businessCase = readFileSync(join(here, '../BusinessCase.tsx'), 'utf8')
 const css = readFileSync(join(here, '../index.css'), 'utf8')
 const html = readFileSync(join(here, '../../index.html'), 'utf8')
 const readme = readFileSync(join(here, '../../../README.md'), 'utf8')
@@ -254,5 +264,91 @@ describe('first-paint copy', () => {
     expect(list).toBeGreaterThan(-1)
     expect(listForm).toBeGreaterThan(list)
     expect(install).toBeGreaterThan(listForm)
+  })
+})
+
+describe('Business case page copy is locked', () => {
+  it('uses the exact title and five fields in PATTERN order', () => {
+    expect(BUSINESS_CASE_TITLE).toBe('Business case')
+    expect([...BUSINESS_CASE_FIELDS]).toEqual([
+      'Why it exists',
+      'Who pays',
+      'Market signal',
+      'Proof people pay',
+      'Demo goal'
+    ])
+    const why = businessCase.indexOf('<dt>Why it exists</dt>')
+    const who = businessCase.indexOf('<dt>Who pays</dt>')
+    const market = businessCase.indexOf('<dt>Market signal</dt>')
+    const proof = businessCase.indexOf('<dt>Proof people pay</dt>')
+    const demo = businessCase.indexOf('<dt>Demo goal</dt>')
+    expect(why).toBeGreaterThan(-1)
+    expect(who).toBeGreaterThan(why)
+    expect(market).toBeGreaterThan(who)
+    expect(proof).toBeGreaterThan(market)
+    expect(demo).toBeGreaterThan(proof)
+    expect(businessCase).toContain('{BUSINESS_CASE_TITLE}')
+    expect(businessCase).not.toContain('Margaret')
+    expect(businessCase).not.toContain('## Sources')
+  })
+
+  it('keeps the locked bodies and does not dump Margaret or Sources', () => {
+    expect(BUSINESS_CASE_WHY).toBe(
+      'Two parties moving a digital asset need neither side to walk until both confirm — list, fund escrow, confirm, release. Clean handoff for domains, IP, or contract ownership — not a floor-price marketplace.'
+    )
+    expect(BUSINESS_CASE_WHO).toBe(
+      'Sellers and buyers of controllable digital assets — domains, IP rights, and contract ownership (enterprise: finance and IP ops; grassroots: small teams doing OTC handoffs). Parties split or assign an escrow fee on the deal.'
+    )
+    expect(BUSINESS_CASE_MARKET).toBe(
+      'L.A.U.R.A. Ownership Market / The Lab (Clutch Markets, Sep 2026 reporting): lists smart-contract ownership with escrow until payment, then transferOwnership — published take ~1%; completed sales volume at launch coverage was unknown / none yet reported. Escrow.com (public fee table): Standard fee 2.6% ($50 min) under $5K, stepping down to ~1.0% in the $1M–$3M band — people already pay mid-single-digit to ~1% for digital-asset and domain handoffs off-chain.'
+    )
+    expect(BUSINESS_CASE_PROOF_CHAIN).toBe(
+      'Other-chain analog: L.A.U.R.A. Ownership Market — on-chain ownership escrow at ~1% for contract handoffs.'
+    )
+    expect(BUSINESS_CASE_PROOF_FIAT).toBe(
+      'Non-chain analog: Escrow.com digital goods / domain escrow — funded → inspected → released with a published percentage fee.'
+    )
+    expect(BUSINESS_CASE_DEMO).toBe(
+      'Two parties complete a handoff on one URL with a clear funded → confirmed → released path.'
+    )
+    const joined = [
+      BUSINESS_CASE_WHY,
+      BUSINESS_CASE_WHO,
+      BUSINESS_CASE_MARKET,
+      BUSINESS_CASE_PROOF_CHAIN,
+      BUSINESS_CASE_PROOF_FIAT,
+      BUSINESS_CASE_DEMO
+    ].join('\n')
+    expect(joined).not.toMatch(/Margaret/)
+    expect(joined).not.toMatch(/## Sources/)
+    expect(joined).not.toMatch(/Status:/)
+  })
+
+  it('offers at most three citation chips', () => {
+    expect(BUSINESS_CASE_CITATIONS.length).toBeLessThanOrEqual(3)
+    expect(BUSINESS_CASE_CITATIONS.map((cite) => cite.label)).toEqual([
+      'Clutch Markets, Sep 2026',
+      'Escrow.com fees'
+    ])
+  })
+
+  it('sits once below the head and above the desk, with catalog still Server', () => {
+    expect(app).toMatch(/!listingId && <BusinessCase \/>/)
+    expect(app.split('<BusinessCase />')).toHaveLength(2)
+    const head = app.indexOf('<p className="lede">{LEDE}</p>')
+    const caseMark = app.indexOf('<BusinessCase />')
+    const list = app.indexOf('{LIST_HEADING}')
+    const listForm = app.indexOf('{LIST_JOB}')
+    const install = app.indexOf('{showInstall &&')
+    expect(head).toBeGreaterThan(-1)
+    expect(caseMark).toBeGreaterThan(head)
+    expect(list).toBeGreaterThan(caseMark)
+    expect(listForm).toBeGreaterThan(list)
+    expect(install).toBeGreaterThan(listForm)
+
+    expect(handoffCard).toContain('class="badge">Server<')
+    expect(handoffCard).toContain('Handoff Desk')
+    expect(handoffCard).not.toContain('Business case')
+    expect(handoffCard).not.toContain('Live')
   })
 })
