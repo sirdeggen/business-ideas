@@ -20,6 +20,34 @@ export const NOT_OWNER = 'This wallet didn’t register the agent.'
 export const NO_CREDENTIAL = 'Issue the credential before anyone can verify.'
 export const FEE_LINE = 'A tiny protocol fee is labeled separately from the verify fee.'
 
+export const BUSINESS_CASE_TITLE = 'Business case'
+
+export const BUSINESS_CASE_WHY =
+  'Before an agent spends, attests, or acts for an org, counterparties need to know which agent it is and who stands behind it — agent identity as an audit object, not a passport cosplay.'
+
+export const BUSINESS_CASE_WHO =
+  'Primary GTM: enterprise risk / compliance / platform trust teams that budget for agent verification and continuous monitoring before spend or attest (card networks, wallets, marketplaces, agent platforms). Grassroots: small orgs running agents who need the same look-up. End fee schedules for KYA-as-a-product are still forming — public product ARR is unknown.'
+
+export const BUSINESS_CASE_MARKET =
+  'Visa + Mastercard + Ant International (Sep 2026): collaboration on a Know-Your-Agent interoperability framework linking Visa Trusted Agent Protocol, Mastercard Verifiable Intent, and Ant’s Agentic Mobile Protocol — operator traceability, shared certification, continuous monitoring. Public KYA fee / revenue figures are unknown. Ant cites Alipay+ scale (150M merchants, 2B user accounts) as the wallet/merchant surface agents would ride; that is ecosystem size, not KYA revenue.'
+
+export const BUSINESS_CASE_PROOF = [
+  'Network analog (not other-chain): Card-network Trusted Agent / Verifiable Intent / AMP KYA stacks — Visa, Mastercard, and Ant already investing in agent identity rails before spend (fee take unknown).',
+  'Non-chain analog: KYC/KYB vendors, vendor-risk platforms, OAuth app reviews — orgs already pay for “who is this counterparty?” before access or spend.',
+  'Emerging on-chain standards (e.g. draft ERC-8004) exist; public paid product revenue for on-chain agent identity is unknown — not treated as proof until a fee signal appears.'
+] as const
+
+export const BUSINESS_CASE_DEMO =
+  'Org registers an agent with a named backer → counterparty looks up the trust object before a spend/attest → pass/fail is readable on one URL (fee or monitoring charge marked even if v0 is free). One visit: register → look up → trust proof.'
+
+export const BUSINESS_CASE_FIELDS = [
+  'Why it exists',
+  'Who pays',
+  'Market signal',
+  'Proof people pay',
+  'Demo goal'
+] as const
+
 export function formatWhen(value: string): string {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value

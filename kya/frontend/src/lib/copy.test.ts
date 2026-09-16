@@ -4,6 +4,13 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { sheetTitle } from '../../../protocol/kya'
 import {
+  BUSINESS_CASE_DEMO,
+  BUSINESS_CASE_FIELDS,
+  BUSINESS_CASE_MARKET,
+  BUSINESS_CASE_PROOF,
+  BUSINESS_CASE_TITLE,
+  BUSINESS_CASE_WHO,
+  BUSINESS_CASE_WHY,
   EYEBROW,
   FEE_LINE,
   ISSUE_BUTTON,
@@ -179,5 +186,93 @@ describe('first-paint copy', () => {
     ]) {
       expect(pagesYml).toContain(`site/${slug}`)
     }
+  })
+
+  it('shows Business case once below the head, above the desk, without a wallet', () => {
+    expect(app).toContain('<BusinessCase />')
+    expect(app.split('<BusinessCase />')).toHaveLength(2)
+    const head = app.indexOf('<p className="lede">{JOB}</p>')
+    const caseMark = app.indexOf('<BusinessCase />')
+    const desk = app.indexOf('{!agentId && (')
+    expect(head).toBeGreaterThan(-1)
+    expect(caseMark).toBeGreaterThan(head)
+    expect(desk).toBeGreaterThan(caseMark)
+    const aroundCase = app.slice(Math.max(0, caseMark - 80), caseMark + 40)
+    expect(aroundCase).not.toMatch(/wallet/i)
+    expect(aroundCase).not.toMatch(/identityKey/)
+    expect(kyaCard).toContain('class="badge">Server<')
+    expect(kyaCard).toContain('>View<')
+    expect(kyaCard).not.toContain('Live')
+    expect(kyaCard).not.toContain('Business case')
+  })
+})
+
+describe('Business case page copy is locked', () => {
+  it('uses the exact title and five fields in PATTERN order', () => {
+    expect(BUSINESS_CASE_TITLE).toBe('Business case')
+    expect([...BUSINESS_CASE_FIELDS]).toEqual([
+      'Why it exists',
+      'Who pays',
+      'Market signal',
+      'Proof people pay',
+      'Demo goal'
+    ])
+  })
+
+  it('keeps the locked bodies and does not dump Revandrew, Margaret, or Sources', () => {
+    expect(BUSINESS_CASE_WHY).toBe(
+      'Before an agent spends, attests, or acts for an org, counterparties need to know which agent it is and who stands behind it — agent identity as an audit object, not a passport cosplay.'
+    )
+    expect(BUSINESS_CASE_WHO).toBe(
+      'Primary GTM: enterprise risk / compliance / platform trust teams that budget for agent verification and continuous monitoring before spend or attest (card networks, wallets, marketplaces, agent platforms). Grassroots: small orgs running agents who need the same look-up. End fee schedules for KYA-as-a-product are still forming — public product ARR is unknown.'
+    )
+    expect(BUSINESS_CASE_MARKET).toBe(
+      'Visa + Mastercard + Ant International (Sep 2026): collaboration on a Know-Your-Agent interoperability framework linking Visa Trusted Agent Protocol, Mastercard Verifiable Intent, and Ant’s Agentic Mobile Protocol — operator traceability, shared certification, continuous monitoring. Public KYA fee / revenue figures are unknown. Ant cites Alipay+ scale (150M merchants, 2B user accounts) as the wallet/merchant surface agents would ride; that is ecosystem size, not KYA revenue.'
+    )
+    expect([...BUSINESS_CASE_PROOF]).toEqual([
+      'Network analog (not other-chain): Card-network Trusted Agent / Verifiable Intent / AMP KYA stacks — Visa, Mastercard, and Ant already investing in agent identity rails before spend (fee take unknown).',
+      'Non-chain analog: KYC/KYB vendors, vendor-risk platforms, OAuth app reviews — orgs already pay for “who is this counterparty?” before access or spend.',
+      'Emerging on-chain standards (e.g. draft ERC-8004) exist; public paid product revenue for on-chain agent identity is unknown — not treated as proof until a fee signal appears.'
+    ])
+    expect(BUSINESS_CASE_DEMO).toBe(
+      'Org registers an agent with a named backer → counterparty looks up the trust object before a spend/attest → pass/fail is readable on one URL (fee or monitoring charge marked even if v0 is free). One visit: register → look up → trust proof.'
+    )
+    const joined = [
+      BUSINESS_CASE_WHY,
+      BUSINESS_CASE_WHO,
+      BUSINESS_CASE_MARKET,
+      ...BUSINESS_CASE_PROOF,
+      BUSINESS_CASE_DEMO
+    ].join('\n')
+    expect(joined).not.toMatch(/Revandrew/)
+    expect(joined).not.toMatch(/Margaret/)
+    expect(joined).not.toMatch(/## Sources/)
+    expect(joined).not.toMatch(/Status:/)
+  })
+
+  it('renders the locked fields from copy and not a wallet gate', () => {
+    const panel = readFileSync(join(here, '../BusinessCase.tsx'), 'utf8')
+    expect(panel).toContain('{BUSINESS_CASE_TITLE}')
+    expect(panel).toContain('<dt>Why it exists</dt>')
+    expect(panel).toContain('<dt>Who pays</dt>')
+    expect(panel).toContain('<dt>Market signal</dt>')
+    expect(panel).toContain('<dt>Proof people pay</dt>')
+    expect(panel).toContain('<dt>Demo goal</dt>')
+    expect(panel).toContain('{BUSINESS_CASE_WHY}')
+    expect(panel).toContain('{BUSINESS_CASE_WHO}')
+    expect(panel).toContain('{BUSINESS_CASE_MARKET}')
+    expect(panel).toContain('{BUSINESS_CASE_PROOF.map')
+    expect(panel).toContain('{BUSINESS_CASE_DEMO}')
+    expect(panel).not.toMatch(/wallet/i)
+    expect(panel).not.toMatch(/Margaret/)
+    expect(panel).not.toMatch(/Sources/)
+    expect(panel).not.toMatch(/cite-chip/)
+
+    expect(css).toContain('.business-case')
+    expect(css).toContain('border-left: 3px solid var(--iris)')
+    expect(css).toContain('color: var(--cyan)')
+    expect(css).toContain('background: var(--glass)')
+    expect(css).not.toContain('--navy')
+    expect(css).not.toContain('--paper')
   })
 })
