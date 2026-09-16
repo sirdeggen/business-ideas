@@ -7,6 +7,7 @@ import {
   remainingDailyCap,
   type AllowedPayee
 } from '../../protocol/spendpolicy'
+import { BusinessCase } from './BusinessCase'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import { assertCanWrite, spendAgainstPolicy, writePolicy } from './lib/actions'
@@ -267,6 +268,8 @@ function Shell() {
           <h1>Spend Policy</h1>
           <p className="lede">{JOB}</p>
         </header>
+
+        <BusinessCase />
 
         {online === false && (
           <p className="status err">

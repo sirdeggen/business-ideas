@@ -2,7 +2,17 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { paidLine } from './copy'
+import {
+  BUSINESS_CASE_DEMO,
+  BUSINESS_CASE_FIELDS,
+  BUSINESS_CASE_MARKET,
+  BUSINESS_CASE_PROOF_CHAIN,
+  BUSINESS_CASE_PROOF_FIAT,
+  BUSINESS_CASE_TITLE,
+  BUSINESS_CASE_WHO,
+  BUSINESS_CASE_WHY,
+  paidLine
+} from './copy'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const app = readFileSync(join(here, '../App.tsx'), 'utf8')
@@ -94,6 +104,22 @@ describe('first-paint copy', () => {
     expect(app).toContain('row.payeeName?.trim() || \'Payee\'')
   })
 
+  it('shows Business case once below the head, above the desk, without a wallet', () => {
+    expect(app).toContain('<BusinessCase />')
+    expect(app.split('<BusinessCase />')).toHaveLength(2)
+    const head = app.indexOf('<p className="lede">{JOB}</p>')
+    const caseMark = app.indexOf('<BusinessCase />')
+    const desk = app.indexOf('<h2>Policy</h2>')
+    expect(head).toBeGreaterThan(-1)
+    expect(caseMark).toBeGreaterThan(head)
+    expect(desk).toBeGreaterThan(caseMark)
+    const aroundCase = app.slice(Math.max(0, caseMark - 80), caseMark + 40)
+    expect(aroundCase).not.toMatch(/wallet/i)
+    expect(aroundCase).not.toMatch(/identityKey/)
+    expect(spendCard).toContain('class="badge">Server<')
+    expect(spendCard).not.toContain('Business case')
+  })
+
   it('asks the wallet only on Write policy and Spend', () => {
     expect(app).toContain('const session = await ensureWallet()')
     expect(app).toContain('if (!decision.ok) {\n      setActionError(decision.reason)\n      return\n    }')
@@ -101,5 +127,69 @@ describe('first-paint copy', () => {
     expect(app.indexOf('if (!decision.ok)')).toBeLessThan(app.lastIndexOf('const session = await ensureWallet()'))
     expect(app).toContain('Install BSV Desktop')
     expect(app).toContain('const showInstall = walletMissing || actionNeedsInstall')
+  })
+})
+
+describe('Business case page copy is locked', () => {
+  it('uses the exact title and five fields in PATTERN order', () => {
+    expect(BUSINESS_CASE_TITLE).toBe('Business case')
+    expect([...BUSINESS_CASE_FIELDS]).toEqual([
+      'Why it exists',
+      'Who pays',
+      'Market signal',
+      'Proof people pay',
+      'Demo goal'
+    ])
+  })
+
+  it('keeps the locked bodies and does not dump Margaret or Sources', () => {
+    expect(BUSINESS_CASE_WHY).toBe(
+      'Treasurers need to let someone spend without handing them the whole purse. A written policy (allowed payees, daily cap, expiry) plus a spend that only clears if the policy allows turns “trust me” into a checkable rule strangers can read.'
+    )
+    expect(BUSINESS_CASE_WHO).toBe(
+      'Finance teams that issue scoped cards or allowance rules to employees and agents; grassroots clubs that give a volunteer a capped float. The buyer is the policy author (treasurer / finance), not the spender.'
+    )
+    expect(BUSINESS_CASE_MARKET).toBe(
+      'Rain (Jan 2026 Series C): $250M raised at $1.95B valuation; >$3B annualized payment volume across 200+ partners; scoped / agent control cards are a named product line. Ramp (Fortune, Sep 2025): ~$1B annualized revenue as a card + spend-management platform. Demo share of “policy-before-spend” GMV is unknown.'
+    )
+    expect(BUSINESS_CASE_PROOF_CHAIN).toBe(
+      'Other-chain analog: Rain scoped virtual cards + Agent Control Layer — partners already issue merchant/MCC/amount/expiry-limited cards for humans and agents.'
+    )
+    expect(BUSINESS_CASE_PROOF_FIAT).toBe(
+      'Non-chain analog: Ramp / Brex / Expensify Card merchant rules and spend limits — companies pay for “this person may only spend X at Y.”'
+    )
+    expect(BUSINESS_CASE_DEMO).toBe(
+      'Write a policy (payees, daily cap, expiry) → stranger reads it → spender pays only if allowed; over-cap or wrong payee is refused before payment.'
+    )
+    const joined = [
+      BUSINESS_CASE_WHY,
+      BUSINESS_CASE_WHO,
+      BUSINESS_CASE_MARKET,
+      BUSINESS_CASE_PROOF_CHAIN,
+      BUSINESS_CASE_PROOF_FIAT,
+      BUSINESS_CASE_DEMO
+    ].join('\n')
+    expect(joined).not.toMatch(/Margaret/)
+    expect(joined).not.toMatch(/## Sources/)
+    expect(joined).not.toMatch(/Status:/)
+  })
+
+  it('renders the locked fields from copy and not a wallet gate', () => {
+    const panel = readFileSync(join(here, '../BusinessCase.tsx'), 'utf8')
+    expect(panel).toContain('{BUSINESS_CASE_TITLE}')
+    expect(panel).toContain('<dt>Why it exists</dt>')
+    expect(panel).toContain('<dt>Who pays</dt>')
+    expect(panel).toContain('<dt>Market signal</dt>')
+    expect(panel).toContain('<dt>Proof people pay</dt>')
+    expect(panel).toContain('<dt>Demo goal</dt>')
+    expect(panel).toContain('{BUSINESS_CASE_WHY}')
+    expect(panel).toContain('{BUSINESS_CASE_WHO}')
+    expect(panel).toContain('{BUSINESS_CASE_MARKET}')
+    expect(panel).toContain('{BUSINESS_CASE_PROOF_CHAIN}')
+    expect(panel).toContain('{BUSINESS_CASE_PROOF_FIAT}')
+    expect(panel).toContain('{BUSINESS_CASE_DEMO}')
+    expect(panel).not.toMatch(/wallet/i)
+    expect(panel).not.toMatch(/Margaret/)
+    expect(panel).not.toMatch(/Sources/)
   })
 })
