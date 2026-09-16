@@ -95,5 +95,61 @@ describe('first-paint copy', () => {
     expect(raffleCard).not.toContain('soon')
     expect(raffleCard).not.toContain('Live')
     expect(raffleCard).not.toContain('eyebrow')
+    expect(raffleCard).not.toContain('Business case')
+  })
+})
+
+describe('Business case page copy is locked', () => {
+  const caseFile = readFileSync(join(here, '../BusinessCase.tsx'), 'utf8')
+
+  it('uses the exact title and five fields in PATTERN order', () => {
+    expect(caseFile).toContain('>Business case<')
+    expect(caseFile.indexOf('Why it exists')).toBeLessThan(caseFile.indexOf('Who pays'))
+    expect(caseFile.indexOf('Who pays')).toBeLessThan(caseFile.indexOf('Market signal'))
+    expect(caseFile.indexOf('Market signal')).toBeLessThan(caseFile.indexOf('Proof people pay'))
+    expect(caseFile.indexOf('Proof people pay')).toBeLessThan(caseFile.indexOf('Demo goal'))
+  })
+
+  it('keeps the locked bodies and does not dump Margaret, Status, or Sources', () => {
+    expect(caseFile).toContain(
+      'Company offsites need a fair, in-room draw: free stubs, one winner, everyone present can see the result. Paper tombolas lose stubs; opaque “random” spreadsheets invite arguments. A digital stub book with a live draw is the fix — not a paid lottery.'
+    )
+    expect(caseFile).toContain(
+      'People ops and event hosts at companies running offsites; meetup and club organizers who run a free prize draw. Guests do not buy tickets — the host buys the software (or uses a free tool).'
+    )
+    expect(caseFile).toContain(
+      'Public TAM for company-offsite free-stub raffle software is unknown. Category proof is product existence and paid plans (SimplyRaffle, RandomPicker, MeetingPulse raffle), not a published market size. On-chain raffle GMV for this use case is unknown.'
+    )
+    expect(caseFile).toContain(
+      'Non-chain analog (paid SaaS): Corporate raffle apps (SimplyRaffle, RandomPicker, MeetingPulse) — orgs already pay for roster import, QR entry, projector reveal, and audit logs for employee prize draws.'
+    )
+    expect(caseFile).toContain(
+      'Non-chain analog (baseline): Paper stubs and hat-draws — the zero-software default this product replaces when fairness and audit matter.'
+    )
+    expect(caseFile).toContain(
+      'Host commits (starts an event they’d pay software for) → guests take free stubs → live fair draw in the room → named winner + audit proof Legal/People Ops can keep. Not a sold raffle or casino.'
+    )
+    expect(caseFile).not.toMatch(/Margaret/)
+    expect(caseFile).not.toMatch(/## Sources/)
+    expect(caseFile).not.toMatch(/Status:/)
+  })
+
+  it('offers at most three citation chips', () => {
+    const chips = [...caseFile.matchAll(/className="cite-chip"/g)]
+    expect(chips.length).toBeLessThanOrEqual(3)
+    expect(caseFile).toContain('SimplyRaffle')
+    expect(caseFile).toContain('RandomPicker')
+    expect(caseFile).toContain('MeetingPulse')
+  })
+
+  it('sits once below the head and above the desk, on the default view only', () => {
+    expect(app).toContain('{!raffleId && <BusinessCase />}')
+    expect(app.split('<BusinessCase />')).toHaveLength(2)
+    const head = app.indexOf('</header>')
+    const caseMark = app.indexOf('<BusinessCase />')
+    const desk = app.indexOf('<section className="block">')
+    expect(head).toBeGreaterThan(-1)
+    expect(caseMark).toBeGreaterThan(head)
+    expect(desk).toBeGreaterThan(caseMark)
   })
 })
