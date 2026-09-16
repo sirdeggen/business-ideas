@@ -10,6 +10,7 @@ import {
   sheetTitle,
   type JobStatus
 } from '../../protocol/jobescrow'
+import { BusinessCase } from './BusinessCase'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import {
@@ -338,6 +339,8 @@ function Shell() {
             <h1>{title}</h1>
             <p className="lede">{JOB}</p>
           </header>
+
+          {!jobId && <BusinessCase />}
 
           {online === false && (
             <p className="status err">

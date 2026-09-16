@@ -4,6 +4,15 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { sheetTitle } from '../../../protocol/jobescrow'
 import {
+  BUSINESS_CASE_CITATIONS,
+  BUSINESS_CASE_DEMO,
+  BUSINESS_CASE_FIELDS,
+  BUSINESS_CASE_MARKET,
+  BUSINESS_CASE_PROOF_CHAIN,
+  BUSINESS_CASE_PROOF_FIAT,
+  BUSINESS_CASE_TITLE,
+  BUSINESS_CASE_WHO,
+  BUSINESS_CASE_WHY,
   CHALLENGE_BUTTON,
   CHALLENGING_BUTTON,
   EYEBROW,
@@ -68,10 +77,8 @@ describe('first-paint copy', () => {
     expect(app).not.toContain('PushDrop')
     expect(app).not.toContain('UTXO')
     expect(app).not.toContain('BRC-')
-    expect(app).not.toContain('GMV')
     expect(app).not.toMatch(/StreamPay/)
     expect(app).not.toMatch(/Session AP/)
-    expect(app).not.toMatch(/TermiX/)
   })
 
   it('keeps one title: quieter Shop eyebrow, h1 Job / Submit / Release', () => {
@@ -105,7 +112,8 @@ describe('first-paint copy', () => {
     expect(face).not.toContain('htmlFor="provider-key"')
     expect(face).not.toContain('02…')
     expect(face).not.toContain('03…')
-    expect(face).not.toMatch(/\$\d/)
+    const desk = face.slice(face.indexOf('<section className="block">'))
+    expect(desk).not.toMatch(/\$\d/)
     expect(advanced).toContain('Amounts are in sats.')
     expect(advanced).toContain('htmlFor="provider-key">Provider key<')
     expect(advanced).toContain('Advanced')
@@ -193,5 +201,73 @@ describe('first-paint copy', () => {
     ]) {
       expect(pagesYml).toContain(`site/${slug}`)
     }
+  })
+})
+
+describe('Business case page copy is locked', () => {
+  it('uses the exact title and five fields in PATTERN order', () => {
+    expect(BUSINESS_CASE_TITLE).toBe('Business case')
+    expect([...BUSINESS_CASE_FIELDS]).toEqual([
+      'Why it exists',
+      'Who pays',
+      'Market signal',
+      'Proof people pay',
+      'Demo goal'
+    ])
+  })
+
+  it('keeps the locked bodies and does not dump Revandrew or Sources', () => {
+    expect(BUSINESS_CASE_WHY).toBe(
+      'Someone funds a discrete job and wants the money locked until the deliverable hash lands — a work order, not a perpetual stream. Don’t release until proof of work.'
+    )
+    expect(BUSINESS_CASE_WHO).toBe(
+      'Buyers funding contractor or agent jobs (enterprise: procurement / AI ops; grassroots: freelancers and small shops). Buyer funds escrow; the desk takes a cut on settlement.'
+    )
+    expect(BUSINESS_CASE_MARKET).toBe(
+      'TermiX (DefiLlama, fetched Sep 2026): 2% protocol fee on each escrow/campaign settlement; ~$307K fees in the last 30d; ~$428K cumulative — early but live job-escrow GNP. Request Network (public pricing): flat 0.9% per crypto payment (cap $500) — adjacent paid settlement rail, not a job-escrow TAM. Demo share of global freelance escrow GMV is unknown.'
+    )
+    expect(BUSINESS_CASE_PROOF_CHAIN).toBe(
+      'Other-chain analog: TermiX agent job escrow — fund → settle → 2% fee; Request Network paid requests for crypto settlement.'
+    )
+    expect(BUSINESS_CASE_PROOF_FIAT).toBe(
+      'Non-chain analog: Upwork / milestone holds and construction retainage — buyers already pay platforms to lock funds until deliverable acceptance.'
+    )
+    expect(BUSINESS_CASE_DEMO).toBe(
+      'Fund → lock → hash lands → release, readable on a public receipt.'
+    )
+    const joined = [
+      BUSINESS_CASE_WHY,
+      BUSINESS_CASE_WHO,
+      BUSINESS_CASE_MARKET,
+      BUSINESS_CASE_PROOF_CHAIN,
+      BUSINESS_CASE_PROOF_FIAT,
+      BUSINESS_CASE_DEMO
+    ].join('\n')
+    expect(joined).not.toMatch(/Revandrew/)
+    expect(joined).not.toMatch(/## Sources/)
+    expect(joined).not.toMatch(/Margaret/)
+  })
+
+  it('offers at most three citation chips', () => {
+    expect(BUSINESS_CASE_CITATIONS.length).toBeLessThanOrEqual(3)
+  })
+
+  it('sits on the default view only, below the head and above the desk, with catalog still Server', () => {
+    expect(app).toMatch(/\{!jobId && <BusinessCase \/>\}/)
+    expect(app.split('<BusinessCase />')).toHaveLength(2)
+    const head = app.indexOf('<p className="lede">{JOB}</p>')
+    const caseMark = app.indexOf('{!jobId && <BusinessCase />}')
+    const desk = app.indexOf('<p className="job">{FUND_JOB}</p>')
+    expect(head).toBeGreaterThan(-1)
+    expect(caseMark).toBeGreaterThan(head)
+    expect(desk).toBeGreaterThan(caseMark)
+
+    expect(jobCard).toContain('class="badge">Server<')
+    expect(jobCard).toContain('Job escrow')
+    expect(jobCard).not.toContain('Live')
+    expect(jobCard).not.toContain('Business case')
+    expect(css).toContain('.business-case')
+    expect(css).toContain('--safety')
+    expect(css).not.toContain('#1f3a5f')
   })
 })

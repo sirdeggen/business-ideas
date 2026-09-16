@@ -129,6 +129,101 @@ a { color: var(--ink); }
   border-bottom: 2px dashed rgba(28, 20, 12, 0.28);
 }
 
+.business-case {
+  margin: 0 0 18px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--ticket-edge);
+  border-left: 3px solid var(--safety);
+  background: rgba(255, 252, 230, 0.62);
+}
+
+.business-case > h2 {
+  font-family: var(--condensed);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--safety);
+  margin: 0 0 12px;
+}
+
+.business-case dl {
+  display: block;
+  margin: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+.business-case dl > div {
+  display: block;
+}
+
+.business-case dl > div + div {
+  margin-top: 12px;
+}
+
+.business-case dt {
+  font-family: var(--condensed);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+
+.business-case dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+  overflow-wrap: break-word;
+}
+
+.business-case dd p {
+  margin: 0;
+}
+
+.business-case dd ul {
+  margin: 0;
+  padding-left: 1.15em;
+}
+
+.business-case dd li + li {
+  margin-top: 6px;
+}
+
+.business-case .cite-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.business-case .cite-chip {
+  display: inline-block;
+  font-family: var(--condensed);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.3;
+  color: var(--carbon);
+  text-decoration: none;
+  border: 1px solid var(--carbon);
+  border-radius: 0;
+  padding: 3px 8px;
+  background: rgba(255, 252, 230, 0.85);
+}
+
+.business-case .cite-chip:hover,
+.business-case .cite-chip:focus-visible {
+  border-color: var(--safety);
+  color: var(--safety);
+}
+
 .eyebrow {
   margin: 0 0 4px;
   font-family: var(--condensed);

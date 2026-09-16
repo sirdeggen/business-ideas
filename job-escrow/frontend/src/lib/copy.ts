@@ -27,6 +27,36 @@ export const NOT_PROVIDER = 'This wallet isn’t the named provider.'
 export const NOT_HOLDING = 'This wallet doesn’t hold the locked job.'
 export const FEE_STORY = 'A tiny protocol fee, about 2%, is the product story. v0 does not take it.'
 
+export const BUSINESS_CASE_TITLE = 'Business case'
+
+export const BUSINESS_CASE_WHY =
+  'Someone funds a discrete job and wants the money locked until the deliverable hash lands — a work order, not a perpetual stream. Don’t release until proof of work.'
+
+export const BUSINESS_CASE_WHO =
+  'Buyers funding contractor or agent jobs (enterprise: procurement / AI ops; grassroots: freelancers and small shops). Buyer funds escrow; the desk takes a cut on settlement.'
+
+export const BUSINESS_CASE_MARKET =
+  'TermiX (DefiLlama, fetched Sep 2026): 2% protocol fee on each escrow/campaign settlement; ~$307K fees in the last 30d; ~$428K cumulative — early but live job-escrow GNP. Request Network (public pricing): flat 0.9% per crypto payment (cap $500) — adjacent paid settlement rail, not a job-escrow TAM. Demo share of global freelance escrow GMV is unknown.'
+
+export const BUSINESS_CASE_PROOF_CHAIN =
+  'Other-chain analog: TermiX agent job escrow — fund → settle → 2% fee; Request Network paid requests for crypto settlement.'
+
+export const BUSINESS_CASE_PROOF_FIAT =
+  'Non-chain analog: Upwork / milestone holds and construction retainage — buyers already pay platforms to lock funds until deliverable acceptance.'
+
+export const BUSINESS_CASE_DEMO =
+  'Fund → lock → hash lands → release, readable on a public receipt.'
+
+export const BUSINESS_CASE_CITATIONS = [] as const
+
+export const BUSINESS_CASE_FIELDS = [
+  'Why it exists',
+  'Who pays',
+  'Market signal',
+  'Proof people pay',
+  'Demo goal'
+] as const
+
 export function formatAmount(amount: number): string {
   return amount.toLocaleString('en-US')
 }
