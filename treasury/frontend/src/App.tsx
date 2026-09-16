@@ -19,6 +19,7 @@ import {
   resolveCreateTxid,
   type OverlayLookupStatus
 } from '../../protocol/lookup'
+import { BusinessCase } from './BusinessCase'
 import {
   boardBanner,
   minutesAsDocument,
@@ -319,6 +320,8 @@ function Shell() {
           </div>
         )}
       </header>
+
+      {!boardMode && <BusinessCase />}
 
       {banner && (
         <p className={`banner ${overlayStatus}`}>

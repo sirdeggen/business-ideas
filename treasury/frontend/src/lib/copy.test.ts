@@ -1,7 +1,19 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import { describe, it } from 'node:test'
+import { fileURLToPath } from 'node:url'
 import type { FeedEvent, Proposal, Treasury } from '../../../protocol/events'
 import {
+  BUSINESS_CASE_CITATIONS,
+  BUSINESS_CASE_DEMO,
+  BUSINESS_CASE_FIELDS,
+  BUSINESS_CASE_MARKET,
+  BUSINESS_CASE_PROOF_CHAIN,
+  BUSINESS_CASE_PROOF_FIAT,
+  BUSINESS_CASE_TITLE,
+  BUSINESS_CASE_WHO,
+  BUSINESS_CASE_WHY,
   boardBanner,
   minutesAsDocument,
   motionSentence,
@@ -102,5 +114,85 @@ describe('treasury frontend display copy', () => {
 
     const paid = proposal({ status: 'paid' })
     assert.equal(motionStatusWord(paid, board), 'Paid')
+  })
+})
+
+describe('Business case page copy is locked', () => {
+  it('uses the exact title and five fields in PATTERN order', () => {
+    assert.equal(BUSINESS_CASE_TITLE, 'Business case')
+    assert.deepEqual([...BUSINESS_CASE_FIELDS], [
+      'Why it exists',
+      'Who pays',
+      'Market signal',
+      'Proof people pay',
+      'Demo goal'
+    ])
+  })
+
+  it('keeps the locked bodies and does not dump Revandrew or Sources', () => {
+    assert.equal(
+      BUSINESS_CASE_WHY,
+      'Groups that hold money together cannot trust one person’s account. A multi-approver vault turns “two people have to say yes” into readable minutes: propose → approve → pay — a board can audit who signed without learning a new dialect.'
+    )
+    assert.equal(
+      BUSINESS_CASE_WHO,
+      'Clubs, churches, HOAs, DAOs, and small companies that already run dual-control spending. The buyer is the group that needs joint custody, not the payee — enterprise treasury / AP dual control and grassroots volunteer treasurers alike.'
+    )
+    assert.equal(
+      BUSINESS_CASE_MARKET,
+      'Safe (formerly Gnosis Safe), Q2 2026: ~$27.24B self-custodied assets; 63.4M accounts; ~$39.3B Q2 transfer volume. Lifetime value processed cited >$1.4T. Share that is club/HOA dual-control vs DeFi/DAO is unknown.'
+    )
+    assert.equal(
+      BUSINESS_CASE_PROOF_CHAIN,
+      'Other-chain analog: Safe / Gnosis Safe — teams already coordinate serious capital through multi-approver smart accounts.'
+    )
+    assert.equal(
+      BUSINESS_CASE_PROOF_FIAT,
+      'Non-chain analog: BILL Dual Control and multi-approver AP workflows; banks’ dual-authorization wires — enterprises pay for “initiator ≠ approver” every day.'
+    )
+    assert.equal(
+      BUSINESS_CASE_DEMO,
+      '2-of-2 or 2-of-3 vault → propose → two approvals → pay; a stranger can read board minutes without joining the vault.'
+    )
+    const joined = [
+      BUSINESS_CASE_WHY,
+      BUSINESS_CASE_WHO,
+      BUSINESS_CASE_MARKET,
+      BUSINESS_CASE_PROOF_CHAIN,
+      BUSINESS_CASE_PROOF_FIAT,
+      BUSINESS_CASE_DEMO
+    ].join('\n')
+    assert.doesNotMatch(joined, /Revandrew/)
+    assert.doesNotMatch(joined, /## Sources/)
+    assert.doesNotMatch(joined, /Margaret/)
+  })
+
+  it('offers at most three citation chips', () => {
+    assert.ok(BUSINESS_CASE_CITATIONS.length <= 3)
+    assert.deepEqual(BUSINESS_CASE_CITATIONS.map((cite) => cite.label), [
+      'Safe Q2 2026',
+      'BILL Dual Control'
+    ])
+  })
+
+  it('sits on the default view only, below the head and above the desk', () => {
+    const here = dirname(fileURLToPath(import.meta.url))
+    const app = readFileSync(resolve(here, '../App.tsx'), 'utf8')
+    assert.match(app, /\{!boardMode && <BusinessCase \/>\}/)
+    assert.equal(app.split('<BusinessCase />').length, 2)
+    const head = app.indexOf('<header className="masthead">')
+    const caseMark = app.indexOf('{!boardMode && <BusinessCase />}')
+    const desk = app.indexOf('<h2>Open a board</h2>')
+    assert.ok(head > -1)
+    assert.ok(caseMark > head)
+    assert.ok(desk > caseMark)
+
+    const catalog = readFileSync(resolve(here, '../../../../pages/index.html'), 'utf8')
+    const treasuryCard = catalog.slice(
+      catalog.indexOf('demo-treasury'),
+      catalog.indexOf('demo-raffle')
+    )
+    assert.match(treasuryCard, /<span class="badge">Server<\/span>/)
+    assert.doesNotMatch(treasuryCard, /Business case/)
   })
 })

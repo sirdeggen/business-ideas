@@ -12,6 +12,39 @@ const KIND_RANK: Record<string, number> = {
   paid: 6
 }
 
+export const BUSINESS_CASE_TITLE = 'Business case'
+
+export const BUSINESS_CASE_WHY =
+  'Groups that hold money together cannot trust one person’s account. A multi-approver vault turns “two people have to say yes” into readable minutes: propose → approve → pay — a board can audit who signed without learning a new dialect.'
+
+export const BUSINESS_CASE_WHO =
+  'Clubs, churches, HOAs, DAOs, and small companies that already run dual-control spending. The buyer is the group that needs joint custody, not the payee — enterprise treasury / AP dual control and grassroots volunteer treasurers alike.'
+
+export const BUSINESS_CASE_MARKET =
+  'Safe (formerly Gnosis Safe), Q2 2026: ~$27.24B self-custodied assets; 63.4M accounts; ~$39.3B Q2 transfer volume. Lifetime value processed cited >$1.4T. Share that is club/HOA dual-control vs DeFi/DAO is unknown.'
+
+export const BUSINESS_CASE_PROOF_CHAIN =
+  'Other-chain analog: Safe / Gnosis Safe — teams already coordinate serious capital through multi-approver smart accounts.'
+
+export const BUSINESS_CASE_PROOF_FIAT =
+  'Non-chain analog: BILL Dual Control and multi-approver AP workflows; banks’ dual-authorization wires — enterprises pay for “initiator ≠ approver” every day.'
+
+export const BUSINESS_CASE_DEMO =
+  '2-of-2 or 2-of-3 vault → propose → two approvals → pay; a stranger can read board minutes without joining the vault.'
+
+export const BUSINESS_CASE_CITATIONS = [
+  { href: 'https://safefoundation.org/blog/safe-q2-2026-quarterly-report', label: 'Safe Q2 2026' },
+  { href: 'https://www.bill.com/product/accounts-payable-controls', label: 'BILL Dual Control' }
+] as const
+
+export const BUSINESS_CASE_FIELDS = [
+  'Why it exists',
+  'Who pays',
+  'Market signal',
+  'Proof people pay',
+  'Demo goal'
+] as const
+
 export function pageTitle(boardName?: string | null): string {
   const name = boardName?.trim()
   return name || 'Treasury'
