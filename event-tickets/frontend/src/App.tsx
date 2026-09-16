@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { BusinessCase } from './BusinessCase'
 import { Attendee } from './components/Attendee'
 import { Door } from './components/Door'
 import { Organizer } from './components/Organizer'
@@ -51,6 +52,7 @@ function Shell() {
         ))}
       </nav>
 
+      {role === 'organizer' && <BusinessCase />}
       {role === 'organizer' && <Organizer />}
       {role === 'attendee' && <Attendee onMakeTickets={() => setRole('organizer')} />}
       {role === 'door' && <Door />}
