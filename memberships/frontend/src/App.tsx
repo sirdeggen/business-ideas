@@ -7,6 +7,7 @@ import {
   isKeyValid,
   sheetTitle
 } from '../../protocol/membership'
+import { BusinessCase } from './BusinessCase'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import { assertCanCreate, createMembership, joinMembership, renewMembership } from './lib/actions'
@@ -267,6 +268,8 @@ function Shell() {
           <h1>{title}</h1>
           <p className="lede">{JOB}</p>
         </header>
+
+        {!membershipId && <BusinessCase />}
 
         {online === false && (
           <p className="status err">
