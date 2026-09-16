@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { BusinessCase } from './BusinessCase'
 import { WalletProvider } from './context/WalletContext'
 import { Desk } from './Desk'
 import { Give } from './Give'
@@ -72,6 +73,8 @@ function Shell() {
               <p className="lede">A gift for a purpose. A receipt bound to that purpose.</p>
             )}
           </header>
+
+          {!receiptTxid && role === 'desk' && <BusinessCase />}
 
           {receiptTxid ? (
             <ReceiptView txid={receiptTxid} deskName={name} />
