@@ -83,6 +83,55 @@ header.mast {
   border-radius: 999px;
 }
 .lede { font-size: 1.15rem; color: var(--muted); margin-bottom: 28px; }
+.business-case {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  padding: 20px 22px 16px;
+  margin: 0 0 28px;
+}
+.business-case > h2 {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+.business-case dl { margin: 0; }
+.business-case .field { margin-bottom: 14px; }
+.business-case .field:last-child { margin-bottom: 0; }
+.business-case dt {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.business-case dd { margin: 0; font-size: 0.98rem; }
+.business-case dd p { margin: 0; }
+.business-case ul {
+  margin: 0;
+  padding-left: 1.15em;
+}
+.business-case li + li { margin-top: 4px; }
+.cite-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.cite-chip {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.72rem;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 3px 9px;
+  border-radius: 999px;
+  text-decoration: none;
+}
 .card {
   display: block;
   text-decoration: none;
@@ -144,6 +193,47 @@ export function pageShell(title: string, body: string): string {
 </html>`
 }
 
+function businessCaseSection(): string {
+  return `
+<section class="business-case" aria-labelledby="business-case-title">
+  <h2 id="business-case-title">Business case</h2>
+  <dl>
+    <div class="field">
+      <dt>Why it exists</dt>
+      <dd>Publishers want readers and crawlers to pay differently for the same page: humans a small fetch price, AI crawlers a higher one — a price tag, not a hard wall. The publisher keeps the meter and the audience relationship, without a membership middleman taking a cut of every paid unlock.</dd>
+    </div>
+    <div class="field">
+      <dt>Who pays</dt>
+      <dd>Independent publishers and media brands testing pay-per-crawl; writers leaving high-take platforms. Crawlers and AI labs that choose to pay for access. Hosting customers already pay for the press; 402 is an extra monetization surface.</dd>
+    </div>
+    <div class="field">
+      <dt>Market signal</dt>
+      <dd>
+        <p>Ghost: ~$11.1M ARR, ~30.6K active customers (ghost.org/about, Sep 2026). x402 (Coinbase): ~500K transactions in one Oct 2025 week; peak day ~$332K volume — early protocol activity, not publisher ARR. Cloudflare Pay Per Crawl public GMV is unknown.</p>
+        <p class="cite-chips">
+          <a class="cite-chip" href="https://ghost.org/about/" target="_blank" rel="noopener noreferrer">Ghost about</a>
+          <a class="cite-chip" href="https://crypto.news/coinbase-x402-protocol-logs-500000-transactions/" target="_blank" rel="noopener noreferrer">x402</a>
+          <a class="cite-chip" href="https://blog.cloudflare.com/introducing-pay-per-crawl/" target="_blank" rel="noopener noreferrer">Cloudflare PPC</a>
+        </p>
+      </dd>
+    </div>
+    <div class="field">
+      <dt>Proof people pay</dt>
+      <dd>
+        <ul>
+          <li>Other-chain analog: Coinbase x402 — agents and humans paying on 402 challenges with measurable Oct 2025 spikes.</li>
+          <li>Non-chain analog: Ghost(Pro) hosting ARR and Cloudflare Pay Per Crawl prove both sides of “readers/crawlers pay for content access.”</li>
+        </ul>
+      </dd>
+    </div>
+    <div class="field">
+      <dt>Demo goal</dt>
+      <dd>Publish a few articles → human fetch at one price → crawler fetch at a higher price → payment unlocks content.</dd>
+    </div>
+  </dl>
+</section>`
+}
+
 export function indexPage(): string {
   const cards = articles
     .map(
@@ -162,6 +252,7 @@ export function indexPage(): string {
   <span>Crawlers ${crawlerSats()} sats</span>
 </div>
 <p class="lede">A Ghost-class page that charges people and bots for the same articles — HTTP 402 on BSV, priced in sats. The index is free. The essays are not.</p>
+${businessCaseSection()}
 ${cards}`
 
   return pageShell('402 Press', body)
