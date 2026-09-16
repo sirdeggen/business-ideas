@@ -83,6 +83,52 @@ header.mast {
   border-radius: 999px;
 }
 .lede { font-size: 1.15rem; color: var(--muted); margin-bottom: 28px; }
+.business-case {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  padding: 20px 22px 16px;
+  margin: 0 0 28px;
+}
+.business-case > h2 {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+.business-case dl { margin: 0; }
+.business-case .field { margin-bottom: 14px; }
+.business-case .field:last-child { margin-bottom: 0; }
+.business-case dt {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.business-case dd { font-size: 0.98rem; }
+.business-case ul {
+  margin: 0;
+  padding-left: 1.15em;
+}
+.business-case li + li { margin-top: 4px; }
+.bc-cites {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.bc-cites a {
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.72rem;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 3px 9px;
+  border-radius: 999px;
+  text-decoration: none;
+}
 .card {
   display: block;
   text-decoration: none;
@@ -144,6 +190,47 @@ export function pageShell(title: string, body: string): string {
 </html>`
 }
 
+function businessCaseSection(): string {
+  return `
+<section class="business-case" aria-labelledby="business-case-title">
+  <h2 id="business-case-title">Business case</h2>
+  <dl>
+    <div class="field">
+      <dt>Why it exists</dt>
+      <dd>Publishers want readers and crawlers to pay differently for the same page: humans a small fetch price, AI crawlers a higher one — a price tag, not a hard wall. Ghost-class publishing plus HTTP 402 means own-your-audience hosting without a Substack-style take rate on memberships, and a path to invoice training crawls instead of only blocking them.</dd>
+    </div>
+    <div class="field">
+      <dt>Who pays</dt>
+      <dd>Independent publishers and media brands (enterprise newsrooms testing pay-per-crawl; grassroots writers leaving high-take platforms). Crawlers/AI labs that choose to pay for access. Ghost(Pro) customers already pay for hosting; 402 is an extra monetization surface on top.</dd>
+    </div>
+    <div class="field">
+      <dt>Market signal</dt>
+      <dd>
+        <p><strong>Ghost</strong> (live public dashboard on ghost.org/about, fetched Sep 2026): <strong>~$11.1M ARR</strong>, ~30.6K active customers. Creator earnings processed through Ghost (~$130M in secondary reports) are <strong>not</strong> Ghost revenue. <strong>x402 (Coinbase):</strong> ~<strong>500K transactions</strong> in the week of Oct 14–20, 2025; peak day <strong>239,505</strong> txs; one day <strong>~$332K</strong> volume — early protocol activity, not publisher ARR. Cloudflare Pay Per Crawl launched Jul 2025 (private beta); public PPC GMV <strong>unknown</strong>.</p>
+        <p class="bc-cites">
+          <a href="https://ghost.org/about/" target="_blank" rel="noopener noreferrer">Ghost about</a>
+          <a href="https://crypto.news/coinbase-x402-protocol-logs-500000-transactions/" target="_blank" rel="noopener noreferrer">Coinbase x402</a>
+          <a href="https://blog.cloudflare.com/introducing-pay-per-crawl/" target="_blank" rel="noopener noreferrer">Cloudflare Pay Per Crawl</a>
+        </p>
+      </dd>
+    </div>
+    <div class="field">
+      <dt>Proof people pay</dt>
+      <dd>
+        <ul>
+          <li>Other-chain analog: Coinbase x402 — agents/humans paying stablecoins on 402 challenges; measurable tx spikes in Oct 2025 (Base facilitator).</li>
+          <li>Non-chain analog: Ghost(Pro) hosting ARR and Cloudflare Pay Per Crawl (402 + MoR for crawler access) prove both sides of “readers/crawlers pay for content access.”</li>
+        </ul>
+      </dd>
+    </div>
+    <div class="field">
+      <dt>Demo goal</dt>
+      <dd>Prove a v0 press: publish a few articles → human fetch at one 402 price → crawler fetch at a higher price → payment unlocks content. Mechanism demo, not membership hockey-stick.</dd>
+    </div>
+  </dl>
+</section>`
+}
+
 export function indexPage(): string {
   const cards = articles
     .map(
@@ -162,6 +249,7 @@ export function indexPage(): string {
   <span>Crawlers ${crawlerSats()} sats</span>
 </div>
 <p class="lede">A Ghost-class page that charges people and bots for the same articles — HTTP 402 on BSV, priced in sats. The index is free. The essays are not.</p>
+${businessCaseSection()}
 ${cards}`
 
   return pageShell('402 Press', body)

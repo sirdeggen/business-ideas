@@ -37,6 +37,33 @@ describe('402 Press routes', () => {
     const html = await res.text()
     assert.match(html, /402 Press/)
     assert.match(html, /why-402-not-subscriptions/)
+
+    assert.match(html, /<section class="business-case" aria-labelledby="business-case-title">/)
+    assert.match(html, /<h2 id="business-case-title">Business case<\/h2>/)
+    assert.equal(html.split('Business case').length - 1, 1)
+
+    const why = html.indexOf('Why it exists')
+    const who = html.indexOf('Who pays')
+    const market = html.indexOf('Market signal')
+    const proof = html.indexOf('Proof people pay')
+    const goal = html.indexOf('Demo goal')
+    const lede = html.indexOf('class="lede"')
+    const firstCard = html.indexOf('why-402-not-subscriptions')
+    assert.ok(lede > -1 && why > lede)
+    assert.ok(why < who && who < market && market < proof && proof < goal)
+    assert.ok(goal > -1 && firstCard > goal)
+
+    assert.match(html, /a price tag, not a hard wall/)
+    assert.match(html, /Ghost\(Pro\) customers already pay for hosting/)
+    assert.match(html, /public PPC GMV <strong>unknown<\/strong>/)
+    assert.match(html, /Other-chain analog: Coinbase x402/)
+    assert.match(html, /Non-chain analog: Ghost\(Pro\) hosting ARR/)
+    assert.match(html, /Mechanism demo, not membership hockey-stick/)
+    assert.match(html, />Ghost about</)
+    assert.match(html, />Coinbase x402</)
+    assert.match(html, />Cloudflare Pay Per Crawl</)
+    assert.doesNotMatch(html, /Margaret frame/)
+    assert.doesNotMatch(html, /## Sources/)
   })
 
   it('returns human 402 headers plus an HTML paywall for a browser', async () => {
@@ -59,6 +86,8 @@ describe('402 Press routes', () => {
     assert.match(html, /BSV Desktop/)
     assert.doesNotMatch(html, /x-bsv-sats/)
     assert.doesNotMatch(html, /x-bsv-server/)
+    assert.doesNotMatch(html, /Business case/)
+    assert.doesNotMatch(html, /class="business-case"/)
   })
 
   it('returns a distinct crawler 402 price with a JSON body', async () => {
