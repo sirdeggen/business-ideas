@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { BusinessCase } from './BusinessCase'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import {
@@ -429,6 +430,8 @@ function Shell() {
           <h1>{sheetTitle(working?.label)}</h1>
           <p className="lede">Many small spends. One invoice to approve.</p>
         </header>
+
+        {!isInvoice && <BusinessCase />}
 
         {online === false && (
           <p className="status err">
