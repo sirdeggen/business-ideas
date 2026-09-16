@@ -3,6 +3,15 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  BUSINESS_CASE_CITATIONS,
+  BUSINESS_CASE_DEMO,
+  BUSINESS_CASE_FIELDS,
+  BUSINESS_CASE_MARKET,
+  BUSINESS_CASE_PROOF_CHAIN,
+  BUSINESS_CASE_PROOF_FIAT,
+  BUSINESS_CASE_TITLE,
+  BUSINESS_CASE_WHO,
+  BUSINESS_CASE_WHY,
   DEFAULT_TITLE,
   EYEBROW,
   FOOTER,
@@ -26,6 +35,7 @@ const catalog = readFileSync(join(here, '../../../../pages/index.html'), 'utf8')
 const cardStart = catalog.indexOf('href="./names/"')
 const namesCard = catalog.slice(cardStart, catalog.indexOf('</article>', cardStart))
 const face = app.slice(0, app.indexOf('<details'))
+const business = readFileSync(join(here, '../BusinessCase.tsx'), 'utf8')
 
 describe('first-paint copy', () => {
   it('names the job, not a protocol sentence', () => {
@@ -68,6 +78,7 @@ describe('first-paint copy', () => {
     expect(namesCard).not.toContain('Live')
     expect(namesCard).not.toContain('Open UI')
     expect(namesCard).not.toContain('sats')
+    expect(namesCard).not.toContain('Business case')
   })
 
   it('keeps identity hex and sats off the face', () => {
@@ -121,5 +132,85 @@ describe('first-paint copy', () => {
       expect(line).not.toMatch(/\bsats?\b/i)
       expect(line).not.toContain('ENS')
     }
+  })
+})
+
+describe('Business case page copy is locked', () => {
+  it('uses the exact title and five fields in PATTERN order', () => {
+    expect(BUSINESS_CASE_TITLE).toBe('Business case')
+    expect([...BUSINESS_CASE_FIELDS]).toEqual([
+      'Why it exists',
+      'Who pays',
+      'Market signal',
+      'Proof people pay',
+      'Demo goal'
+    ])
+    expect(business).toContain('<h2 id="business-case-heading">{BUSINESS_CASE_TITLE}</h2>')
+    expect(business.indexOf('Why it exists')).toBeLessThan(business.indexOf('Who pays'))
+    expect(business.indexOf('Who pays')).toBeLessThan(business.indexOf('Market signal'))
+    expect(business.indexOf('Market signal')).toBeLessThan(business.indexOf('Proof people pay'))
+    expect(business.indexOf('Proof people pay')).toBeLessThan(business.indexOf('Demo goal'))
+  })
+
+  it('keeps the locked Revandrew PASS Page copy and does not dump Margaret or Sources', () => {
+    expect(BUSINESS_CASE_WHY).toBe(
+      'People and orgs need a human-readable name that resolves to something real for a while — look it up, use it, renew before it ends. A lease, not a forever land grab or a flip auction.'
+    )
+    expect(BUSINESS_CASE_WHO).toBe(
+      'Builders, clubs, and enterprise namespaces that already buy renewable names (grassroots: project and community ops; enterprise: IT / brand / internal naming). Registrants pay the lease; the desk takes a fee on register/renew.'
+    )
+    expect(BUSINESS_CASE_MARKET).toBe(
+      'ENS (DefiLlama, fetched Sep 2026): ~$325K fees in the last 30d; ~$4.0M trailing-year / annualized — registration + renewal only. Verisign (Q2 2026 earnings): $435M quarterly revenue; 179.1M combined .com/.net names in the base as of 30 Jun 2026 — people already pay for renewable names off-chain at scale.'
+    )
+    expect(BUSINESS_CASE_PROOF_CHAIN).toBe(
+      'Other-chain analog: ENS — renewable .eth leases with a live fee stream on DefiLlama.'
+    )
+    expect(BUSINESS_CASE_PROOF_FIAT).toBe(
+      'Non-chain analog: Domain registrars / Verisign .com/.net subscriptions — orgs and people renew names every year.'
+    )
+    expect(BUSINESS_CASE_DEMO).toBe(
+      'Pay a fixed-term lease → a stranger resolves the name to the right target on one URL → renew-before-expiry is visible (or expired fails) on that same visit. Fee and renew/fail proof explicit.'
+    )
+    const joined = [
+      BUSINESS_CASE_WHY,
+      BUSINESS_CASE_WHO,
+      BUSINESS_CASE_MARKET,
+      BUSINESS_CASE_PROOF_CHAIN,
+      BUSINESS_CASE_PROOF_FIAT,
+      BUSINESS_CASE_DEMO
+    ].join('\n')
+    expect(joined).not.toMatch(/Margaret/)
+    expect(joined).not.toMatch(/## Sources/)
+    expect(joined).not.toMatch(/Status:/)
+    expect(business).not.toContain('Margaret')
+    expect(business).not.toContain('## Sources')
+    expect(business).not.toContain('Revandrew')
+  })
+
+  it('offers at most three citation chips for the inline market citations', () => {
+    expect(BUSINESS_CASE_CITATIONS.length).toBeLessThanOrEqual(3)
+    expect(BUSINESS_CASE_CITATIONS.map((cite) => cite.label)).toEqual([
+      'DefiLlama Sep 2026',
+      'Verisign Q2 2026'
+    ])
+  })
+
+  it('sits once below the head and above the desk, visible without a wallet', () => {
+    expect(app).toContain('<BusinessCase />')
+    expect(app.split('<BusinessCase />')).toHaveLength(2)
+    const head = app.indexOf('<p className="lede">{LEDE}</p>')
+    const caseMark = app.indexOf('<BusinessCase />')
+    const desk = app.indexOf('<section className="block">')
+    const install = app.indexOf('{showInstall &&')
+    expect(head).toBeGreaterThan(-1)
+    expect(caseMark).toBeGreaterThan(head)
+    expect(desk).toBeGreaterThan(caseMark)
+    expect(install).toBeGreaterThan(desk)
+    expect(app).not.toContain('Connect wallet')
+
+    expect(namesCard).toContain('class="badge">Server<')
+    expect(namesCard).toContain('>View<')
+    expect(namesCard).not.toContain('Live')
+    expect(namesCard).not.toContain('Business case')
   })
 })
