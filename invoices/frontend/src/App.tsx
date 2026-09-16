@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { BusinessCase } from './BusinessCase'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import {
@@ -202,6 +203,8 @@ function Home({ onCreate }: { onCreate: () => void }) {
         </h1>
         <p className="lede">Send a payable. When they pay, it marks itself paid.</p>
       </header>
+
+      <BusinessCase />
 
       <div className="ghost" aria-hidden="true">
         <div className="ghost-head">
