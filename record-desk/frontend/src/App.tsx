@@ -10,6 +10,7 @@ import {
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import { downloadDump, payAndExport, postRecord } from './lib/actions'
+import { BusinessCase } from './BusinessCase'
 import {
   ADVANCED_ACCOUNT,
   ADVANCED_GATE,
@@ -208,6 +209,8 @@ function Shell() {
           <h1>{TITLE}</h1>
           <p className="lede">{LEDE}</p>
         </header>
+
+        <BusinessCase />
 
         <p className={online === false ? 'status err' : 'helper'}>
           {online === false
