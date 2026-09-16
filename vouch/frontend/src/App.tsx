@@ -8,6 +8,7 @@ import {
   formatWhen,
   normalizeQuery
 } from '../../protocol/vouch'
+import { BusinessCase } from './BusinessCase'
 import { OverlayProvider, useOverlay } from './context/OverlayContext'
 import { WalletProvider, useWallet } from './context/WalletContext'
 import {
@@ -431,6 +432,8 @@ function Shell() {
             <h1>{title}</h1>
             <p className="lede">{LEDE}</p>
           </header>
+
+          <BusinessCase />
 
           {online === false && (
             <p className="status err">

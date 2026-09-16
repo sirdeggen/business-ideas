@@ -5,6 +5,15 @@ import { describe, expect, it } from 'vitest'
 import {
   AMOUNT_IN_ADVANCED,
   ATTEST_BUTTON,
+  BUSINESS_CASE_CITATIONS,
+  BUSINESS_CASE_DEMO,
+  BUSINESS_CASE_FIELDS,
+  BUSINESS_CASE_MARKET,
+  BUSINESS_CASE_PROOF_CHAIN,
+  BUSINESS_CASE_PROOF_FIAT,
+  BUSINESS_CASE_TITLE,
+  BUSINESS_CASE_WHO,
+  BUSINESS_CASE_WHY,
   EMPTY,
   EYEBROW,
   FOOTER,
@@ -199,6 +208,7 @@ describe('first-paint copy', () => {
     expect(vouchCard).not.toContain('timed key')
     expect(vouchCard).not.toContain('provenance')
     expect(vouchCard).not.toContain('trading market')
+    expect(vouchCard).not.toContain('Business case')
     for (const line of PRIMARY_COPY) {
       expect(line).not.toMatch(/\bLive\b/)
       expect(line).not.toMatch(/\bsats?\b/i)
@@ -207,5 +217,89 @@ describe('first-paint copy', () => {
         expect(line).not.toContain('trading market')
       }
     }
+  })
+})
+
+describe('Business case page copy is locked', () => {
+  it('uses the exact title and five fields in PATTERN order', () => {
+    expect(BUSINESS_CASE_TITLE).toBe('Business case')
+    expect([...BUSINESS_CASE_FIELDS]).toEqual([
+      'Why it exists',
+      'Who pays',
+      'Market signal',
+      'Proof people pay',
+      'Demo goal'
+    ])
+  })
+
+  it('keeps the locked Revandrew PASS bodies and does not dump Margaret, Status, or Sources', () => {
+    expect(BUSINESS_CASE_WHY).toBe(
+      'Informal vendor trust breaks when someone vouches with words only. A slashable vouch puts skin in the game: stake, attest, and slash on bad faith — credibility with a bond, not a tradable reputation token.'
+    )
+    expect(BUSINESS_CASE_WHO).toBe(
+      'Buyers and peers who already vouch for vendors (enterprise: procurement / vendor risk; grassroots: co-ops and community orgs). Vouchers lock stake; bad faith can cost them.'
+    )
+    expect(BUSINESS_CASE_MARKET).toBe(
+      'Ethos Network (DefiLlama, fetched Sep 2026): ~$931K TVL in the Vouch contract on Base — ETH locked as trust relationships. Protocol fee / vouch revenue is unknown on DefiLlama’s fees board. This desk is slashable vouch/attestation only — not a reputation-trading market.'
+    )
+    expect(BUSINESS_CASE_PROOF_CHAIN).toBe(
+      'Other-chain analog: Ethos-style slashable vouch — participants lock value behind another party and can propose slash on bad faith.'
+    )
+    expect(BUSINESS_CASE_PROOF_FIAT).toBe(
+      'Non-chain analog: Surety bonds, trade credit insurance, vendor scorecards, escrow holdbacks — people already pay for “someone stands behind this supplier.”'
+    )
+    expect(BUSINESS_CASE_DEMO).toBe(
+      'Stake a vouch, attest, and show what slash looks like on a public desk URL.'
+    )
+    const joined = [
+      BUSINESS_CASE_WHY,
+      BUSINESS_CASE_WHO,
+      BUSINESS_CASE_MARKET,
+      BUSINESS_CASE_PROOF_CHAIN,
+      BUSINESS_CASE_PROOF_FIAT,
+      BUSINESS_CASE_DEMO
+    ].join('\n')
+    expect(joined).not.toMatch(/Margaret/)
+    expect(joined).not.toMatch(/## Sources/)
+    expect(joined).not.toMatch(/Status:/)
+    expect(joined).not.toMatch(/Revandrew/)
+    expect(joined).not.toMatch(/Ethos Markets/)
+    expect(joined).toContain('not a tradable reputation token')
+    expect(joined).toContain('not a reputation-trading market')
+  })
+
+  it('offers at most three citation chips and skips Ethos Markets', () => {
+    expect(BUSINESS_CASE_CITATIONS.length).toBeLessThanOrEqual(3)
+    expect(BUSINESS_CASE_CITATIONS.map((cite) => cite.label)).toEqual([
+      'DefiLlama Sep 2026',
+      'Ethos docs'
+    ])
+    for (const cite of BUSINESS_CASE_CITATIONS) {
+      expect(cite.label).not.toMatch(/Ethos Markets/)
+      expect(cite.href).not.toMatch(/markets/i)
+    }
+  })
+
+  it('sits once below the head and above the desk, catalog stays Server', () => {
+    expect(app).toContain('<BusinessCase />')
+    expect(app.split('<BusinessCase />')).toHaveLength(2)
+    const head = app.indexOf('<p className="lede">{LEDE}</p>')
+    const caseMark = app.indexOf('<BusinessCase />')
+    const desk = app.indexOf('className="slip"')
+    const install = app.indexOf('{showInstall &&')
+    expect(head).toBeGreaterThan(-1)
+    expect(caseMark).toBeGreaterThan(head)
+    expect(desk).toBeGreaterThan(caseMark)
+    expect(install).toBeGreaterThan(desk)
+
+    expect(css).toContain('.business-case')
+    expect(css).toContain('border-left: 3px solid var(--rose)')
+    expect(css).toContain('color: var(--wine)')
+
+    expect(vouchCard).toContain('class="badge">Server<')
+    expect(vouchCard).toContain('>View<')
+    expect(vouchCard).not.toContain('Live')
+    expect(vouchCard).not.toContain('Business case')
+    expect(liveSection).not.toContain('href="./vouch/"')
   })
 })
