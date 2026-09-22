@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FeedSub, MetricType } from '../../protocol/feed'
 import { METRIC_TYPES } from '../../protocol/feed'
 import { BusinessCase } from './BusinessCase'
@@ -109,8 +109,15 @@ function Shell() {
   const [lastFeedId, setLastFeedId] = useState<string | null>(null)
   const [receipt, setReceipt] = useState<ShownReceipt | null>(null)
 
+  const installRef = useRef<HTMLDivElement>(null)
   const overlayDown = online === false
   const knownSubs = [...subs, ...localSubs]
+  const showInstall = walletMissing || actionNeedsInstall
+
+  useEffect(() => {
+    if (!showInstall) return
+    installRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [showInstall])
 
   const refresh = async (): Promise<void> => {
     setListBusy(true)
@@ -296,7 +303,6 @@ function Shell() {
   }
 
   const combinedError = actionError || walletError
-  const showInstall = walletMissing || actionNeedsInstall
 
   return (
     <div className="booth">
@@ -477,7 +483,7 @@ function Shell() {
               <button
                 type="button"
                 className="btn primary"
-                disabled={busy !== null || connecting || overlayDown || !label.trim() || !reading.trim()}
+                disabled={busy !== null || connecting || overlayDown}
                 onClick={() => void runPublish()}
               >
                 {busy === 'publish' ? PUBLISHING_BUTTON : POST_BUTTON}
@@ -517,7 +523,7 @@ function Shell() {
                 <button
                   type="button"
                   className="btn primary"
-                  disabled={busy !== null || connecting || overlayDown || !nextReading.trim()}
+                  disabled={busy !== null || connecting || overlayDown}
                   onClick={() => void runUpdate()}
                 >
                   {busy === 'update' ? POSTING_BUTTON : UPDATE_BUTTON}
@@ -531,7 +537,7 @@ function Shell() {
         </article>
 
         {showInstall && (
-          <div className="install">
+          <div className="install" ref={installRef}>
             <div className="row">
               <button
                 type="button"
