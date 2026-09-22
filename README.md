@@ -157,3 +157,10 @@ List a digital asset. Fund escrow. Confirm the handoff. Release.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/handoff/
 - How to run: [handoff/README.md](./handoff/README.md)
+
+## Credit Desk
+
+Open a facility against an invoice or receivable. Draw. Repay. Flag default.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/credit/
+- How to run: [credit/README.md](./credit/README.md)
