@@ -164,3 +164,10 @@ Open a facility against an invoice or receivable. Draw. Repay. Flag default.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/credit/
 - How to run: [credit/README.md](./credit/README.md)
+
+## Registry Desk
+
+Issue units on a register. Transfer with a receipt. Export the reading.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/registry/
+- How to run: [registry/README.md](./registry/README.md)
