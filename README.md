@@ -171,3 +171,10 @@ Issue units on a register. Transfer with a receipt. Export the reading.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/registry/
 - How to run: [registry/README.md](./registry/README.md)
+
+## Feed Desk
+
+Sell a feed. Buy a fresh signed reading.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/feed/
+- How to run: [feed/README.md](./feed/README.md)

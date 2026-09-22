@@ -621,6 +621,15 @@ a.card .hit,
   --title-tracking: -0.02em;
 }
 
+.demo-feed {
+  --chip: #84cc16;
+  --title: #3f6212;
+  --title-font: var(--sans);
+  --title-size: 20px;
+  --title-weight: 650;
+  --title-tracking: -0.03em;
+}
+
 .demo-tickets .scene { object-position: 50% 35%; }
 .demo-memberships .scene { object-position: 50% 40%; }
 .demo-treasury .scene { object-position: 50% 42%; }
@@ -635,6 +644,7 @@ a.card .hit,
 .demo-handoff .scene { object-position: 42% 28%; }
 .demo-credit .scene { object-position: 50% 35%; }
 .demo-registry .scene { object-position: 50% 42%; }
+.demo-feed .scene { object-position: 50% 42%; }
 
 footer {
   margin-top: 36px;
