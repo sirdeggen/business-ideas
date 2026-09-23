@@ -188,9 +188,10 @@ describe('Business case page copy is locked', () => {
     assert.ok(desk > caseMark)
 
     const catalog = readFileSync(resolve(here, '../../../../pages/index.html'), 'utf8')
+    const treasuryStart = catalog.indexOf('demo-treasury')
     const treasuryCard = catalog.slice(
-      catalog.indexOf('demo-treasury'),
-      catalog.indexOf('demo-raffle')
+      treasuryStart,
+      catalog.indexOf('</article>', treasuryStart)
     )
     assert.match(treasuryCard, /<span class="badge">Server<\/span>/)
     assert.doesNotMatch(treasuryCard, /Business case/)

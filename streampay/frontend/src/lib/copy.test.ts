@@ -171,9 +171,10 @@ describe('Business case page copy is locked', () => {
     expect(app).not.toMatch(/function StreamPage[\s\S]*<BusinessCase \/>/)
 
     const catalog = readFileSync(resolve(here, '../../../../pages/index.html'), 'utf8')
+    const streampayStart = catalog.indexOf('demo-streampay')
     const streampayCard = catalog.slice(
-      catalog.indexOf('demo-streampay'),
-      catalog.indexOf('demo-grants')
+      streampayStart,
+      catalog.indexOf('</article>', streampayStart)
     )
     expect(streampayCard).toContain('<span class="badge">Live</span>')
     expect(streampayCard).toContain('StreamPay')

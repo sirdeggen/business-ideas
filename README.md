@@ -4,166 +4,14 @@ First versions, shipped fast.
 
 Switcher on GitHub Pages: https://sirdeggen.github.io/business-ideas/
 
-Invoices are the first product. The receivable desk is a collections list — not a bank. Tickets sit after invoices.
+The catalog lists newest ideas first. Prepend the next Server demo at the top of the ledger in `pages/index.html`, and the next Live demo at the top of the spotlight. Mirror that order at the top of this list. Invoices stay last: they were the first product. The receivable desk is a collections list — not a bank.
 
-## Invoices
+## Feed Desk
 
-Send a payable. Get a receipt.
+Sell a feed. Buy a fresh signed reading.
 
-- Pages UI: https://sirdeggen.github.io/business-ideas/invoices/
-- How to run: [invoices/README.md](./invoices/README.md)
-
-## Receivable desk (feature of invoices)
-
-Who do we chase today?
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/receivables/
-- How to run: [receivable-desk/README.md](./receivable-desk/README.md)
-
-## Signed record desk
-
-Post a signed reading. Pay a little to export the dump.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/records/
-- How to run: [record-desk/README.md](./record-desk/README.md)
-
-## Event tickets
-
-Tickets you can send, show on a phone, and spend at the door so they can’t be used twice.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/tickets/
-- How to run: [event-tickets/README.md](./event-tickets/README.md)
-
-## 402 Press
-
-Readers pay a little. Crawlers pay more.
-
-- How to run: [402-publisher/README.md](./402-publisher/README.md)
-
-## 402 MCP
-
-Charge per call. No API keys.
-
-- How to run: [402-mcp/README.md](./402-mcp/README.md)
-
-## Treasury
-
-Shared treasury, two of three must agree. Board at `?treasury=<id>` is lookup only (no wallet). Create and join persist on Pages; a stranger board works without Docker. Not a custodian.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/treasury/
-- How to run: [treasury/README.md](./treasury/README.md)
-
-## StreamPay
-
-Pay as they work.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/streampay/
-- How to run: [streampay/README.md](./streampay/README.md)
-
-## Grant receipt
-
-A gift for a purpose. A receipt bound to that purpose.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/grants/
-- How to run: [grant-receipt/README.md](./grant-receipt/README.md)
-
-## Raffle
-
-This trip’s draw. Free stub. One winner, in the room.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/raffle/
-- How to run: [raffle/README.md](./raffle/README.md)
-
-## Spend Policy
-
-A policy. A spend that policy allows.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/spend-policy/
-- How to run: [spend-policy/README.md](./spend-policy/README.md)
-
-## Session AP
-
-Close a session. One invoice for many small spends.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/session/
-- How to run: [session-ap/README.md](./session-ap/README.md)
-
-## Dataset stall
-
-Post a listing. Pay a little to take the file.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/datasets/
-- How to run: [datasets/README.md](./datasets/README.md)
-
-## Membership
-
-A timed key. Renew when it expires.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/memberships/
-- How to run: [memberships/README.md](./memberships/README.md)
-
-## Name lease
-
-A name for a while. Look it up. Renew before it ends.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/names/
-- How to run: [names/README.md](./names/README.md)
-
-## Title desk
-
-Issue a titled document. Transfer the title. Export if you hold it.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/titles/
-- How to run: [titles/README.md](./titles/README.md)
-
-## Trace receipt
-
-Pay a little to register a receipt. Look it up.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/trace/
-- How to run: [trace/README.md](./trace/README.md)
-
-## Job escrow
-
-Fund a job. Lock until the hash lands.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/job-escrow/
-- How to run: [job-escrow/README.md](./job-escrow/README.md)
-
-## Vault Claim
-
-Claim a vaulted item. Transfer the claim. Burn it to redeem.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/vault-claim/
-- How to run: [vault-claim/README.md](./vault-claim/README.md)
-
-## KYA
-
-Verify who’s behind an agent before it acts.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/kya/
-- How to run: [kya/README.md](./kya/README.md)
-
-## Vouch Desk
-
-Stake a slashable vouch. Attest. Slash on bad faith.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/vouch/
-- How to run: [vouch/README.md](./vouch/README.md)
-
-## Handoff Desk
-
-List a digital asset. Fund escrow. Confirm the handoff. Release.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/handoff/
-- How to run: [handoff/README.md](./handoff/README.md)
-
-## Credit Desk
-
-Open a facility against an invoice or receivable. Draw. Repay. Flag default.
-
-- Pages UI: https://sirdeggen.github.io/business-ideas/credit/
-- How to run: [credit/README.md](./credit/README.md)
+- Pages UI: https://sirdeggen.github.io/business-ideas/feed/
+- How to run: [feed/README.md](./feed/README.md)
 
 ## Registry Desk
 
@@ -172,9 +20,161 @@ Issue units on a register. Transfer with a receipt. Export the reading.
 - Pages UI: https://sirdeggen.github.io/business-ideas/registry/
 - How to run: [registry/README.md](./registry/README.md)
 
-## Feed Desk
+## Credit Desk
 
-Sell a feed. Buy a fresh signed reading.
+Open a facility against an invoice or receivable. Draw. Repay. Flag default.
 
-- Pages UI: https://sirdeggen.github.io/business-ideas/feed/
-- How to run: [feed/README.md](./feed/README.md)
+- Pages UI: https://sirdeggen.github.io/business-ideas/credit/
+- How to run: [credit/README.md](./credit/README.md)
+
+## Handoff Desk
+
+List a digital asset. Fund escrow. Confirm the handoff. Release.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/handoff/
+- How to run: [handoff/README.md](./handoff/README.md)
+
+## Vouch Desk
+
+Stake a slashable vouch. Attest. Slash on bad faith.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/vouch/
+- How to run: [vouch/README.md](./vouch/README.md)
+
+## KYA
+
+Verify who’s behind an agent before it acts.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/kya/
+- How to run: [kya/README.md](./kya/README.md)
+
+## Vault Claim
+
+Claim a vaulted item. Transfer the claim. Burn it to redeem.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/vault-claim/
+- How to run: [vault-claim/README.md](./vault-claim/README.md)
+
+## Job escrow
+
+Fund a job. Lock until the hash lands.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/job-escrow/
+- How to run: [job-escrow/README.md](./job-escrow/README.md)
+
+## Trace receipt
+
+Pay a little to register a receipt. Look it up.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/trace/
+- How to run: [trace/README.md](./trace/README.md)
+
+## Title desk
+
+Issue a titled document. Transfer the title. Export if you hold it.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/titles/
+- How to run: [titles/README.md](./titles/README.md)
+
+## Name lease
+
+A name for a while. Look it up. Renew before it ends.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/names/
+- How to run: [names/README.md](./names/README.md)
+
+## Membership
+
+A timed key. Renew when it expires.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/memberships/
+- How to run: [memberships/README.md](./memberships/README.md)
+
+## Dataset stall
+
+Post a listing. Pay a little to take the file.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/datasets/
+- How to run: [datasets/README.md](./datasets/README.md)
+
+## Session AP
+
+Close a session. One invoice for many small spends.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/session/
+- How to run: [session-ap/README.md](./session-ap/README.md)
+
+## Spend Policy
+
+A policy. A spend that policy allows.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/spend-policy/
+- How to run: [spend-policy/README.md](./spend-policy/README.md)
+
+## Raffle
+
+This trip’s draw. Free stub. One winner, in the room.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/raffle/
+- How to run: [raffle/README.md](./raffle/README.md)
+
+## Treasury
+
+Shared treasury, two of three must agree. Board at `?treasury=<id>` is lookup only (no wallet). Create and join persist on Pages; a stranger board works without Docker. Not a custodian.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/treasury/
+- How to run: [treasury/README.md](./treasury/README.md)
+
+## 402 MCP
+
+Charge per call. No API keys.
+
+- How to run: [402-mcp/README.md](./402-mcp/README.md)
+
+## 402 Press
+
+Readers pay a little. Crawlers pay more.
+
+- How to run: [402-publisher/README.md](./402-publisher/README.md)
+
+## Event tickets
+
+Tickets you can send, show on a phone, and spend at the door so they can’t be used twice.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/tickets/
+- How to run: [event-tickets/README.md](./event-tickets/README.md)
+
+## Signed record desk
+
+Post a signed reading. Pay a little to export the dump.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/records/
+- How to run: [record-desk/README.md](./record-desk/README.md)
+
+## Receivable desk (feature of invoices)
+
+Who do we chase today?
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/receivables/
+- How to run: [receivable-desk/README.md](./receivable-desk/README.md)
+
+## Grant receipt
+
+A gift for a purpose. A receipt bound to that purpose.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/grants/
+- How to run: [grant-receipt/README.md](./grant-receipt/README.md)
+
+## StreamPay
+
+Pay as they work.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/streampay/
+- How to run: [streampay/README.md](./streampay/README.md)
+
+## Invoices
+
+Send a payable. Get a receipt.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/invoices/
+- How to run: [invoices/README.md](./invoices/README.md)
