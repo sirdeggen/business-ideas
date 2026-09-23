@@ -160,9 +160,10 @@ describe('Business case page copy is locked', () => {
     expect(desk).toBeGreaterThan(caseMark)
 
     const catalog = readFileSync(resolve(here, '../../../../pages/index.html'), 'utf8')
+    const sessionStart = catalog.indexOf('demo-session')
     const sessionCard = catalog.slice(
-      catalog.indexOf('demo-session'),
-      catalog.indexOf('demo-datasets')
+      sessionStart,
+      catalog.indexOf('</article>', sessionStart)
     )
     expect(sessionCard).toContain('<span class="badge">Server</span>')
     expect(sessionCard).not.toContain('Live')

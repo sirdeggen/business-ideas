@@ -76,9 +76,8 @@ describe('402 MCP Business case', () => {
   it('leaves the catalog Server card unchanged', () => {
     const catalog = readFileSync(resolve(here, '../../pages/index.html'), 'utf8')
     const start = catalog.indexOf('card inert demo-mcp')
-    const next = catalog.indexOf('demo-treasury')
-    assert.ok(start > -1 && next > start)
-    const card = catalog.slice(start, next)
+    assert.ok(start > -1)
+    const card = catalog.slice(start, catalog.indexOf('</article>', start))
     assert.match(card, /<span class="badge">Server<\/span>/)
     assert.match(card, /402 MCP/)
     assert.doesNotMatch(card, />Live</)

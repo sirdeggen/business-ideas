@@ -112,9 +112,10 @@ describe('Business case page copy is locked', () => {
     expect(desk).toBeGreaterThan(caseMark)
 
     const catalog = readFileSync(resolve(here, '../../../../pages/index.html'), 'utf8')
+    const recordsStart = catalog.indexOf('demo-records')
     const recordsCard = catalog.slice(
-      catalog.indexOf('demo-records'),
-      catalog.indexOf('demo-tickets')
+      recordsStart,
+      catalog.indexOf('</article>', recordsStart)
     )
     expect(recordsCard).toContain('<span class="badge">Server</span>')
     expect(recordsCard).toContain('Signed record desk')
