@@ -639,6 +639,15 @@ a.card .hit,
   --title-tracking: -0.03em;
 }
 
+.demo-cover {
+  --chip: #c2410c;
+  --title: #7c2d12;
+  --title-font: var(--serif);
+  --title-size: 22px;
+  --title-weight: 600;
+  --title-tracking: -0.01em;
+}
+
 .demo-tickets .scene { object-position: 50% 35%; }
 .demo-memberships .scene { object-position: 50% 40%; }
 .demo-treasury .scene { object-position: 50% 42%; }
@@ -655,6 +664,7 @@ a.card .hit,
 .demo-registry .scene { object-position: 50% 42%; }
 .demo-feed .scene { object-position: 50% 42%; }
 .demo-inference .scene { object-position: 50% 42%; }
+.demo-cover .scene { object-position: 50% 38%; }
 
 footer {
   margin-top: 36px;
