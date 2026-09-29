@@ -147,7 +147,18 @@ describe('first-paint copy', () => {
     expect(readme).toContain('?p=<policyId>&tx=<txid>')
     expect(readme).toContain('GitHub Pages 404s')
     expect(app).not.toMatch(/\/p\/:id/)
-    expect(catalog.indexOf('href="./cover/"')).toBeLessThan(catalog.indexOf('href="./feed/"'))
+    expect(catalog.indexOf('href="./cover/"')).toBeGreaterThan(-1)
+    expect(catalog.indexOf('href="./inference/"')).toBeGreaterThan(-1)
+    expect(catalog.indexOf('href="./cover/"')).toBeLessThan(catalog.indexOf('href="./inference/"'))
+    expect(catalog.indexOf('href="./inference/"')).toBeLessThan(catalog.indexOf('href="./feed/"'))
+    const sceneAlt =
+      'A blonde woman at a bright modern desk reviews a policy card on her phone, with a tablet showing a 2-of-3 approval and a bullet train and EV chargers behind her.'
+    expect(coverCard).toContain(sceneAlt)
+    expect(app).toContain(sceneAlt)
+    expect(coverCard).not.toContain('wooden counter')
+    expect(app).not.toContain('wooden counter')
+    expect(readme).not.toMatch(/policy attestation/i)
+    expect(app).not.toMatch(/policy attestation/i)
   })
 
   it('adds cover to Pages without dropping earlier desks', () => {
@@ -160,21 +171,24 @@ describe('first-paint copy', () => {
     expect(css).not.toContain('#7c3aed')
     expect(css).not.toContain('#06b6d4')
     expect(pagesYml.match(/# cover-desk/g)).toHaveLength(3)
+    expect(pagesYml.match(/# inference-desk/g)).toHaveLength(3)
     expect(pagesYml).toContain('# credit-desk')
     expect(pagesYml).toContain('# registry-desk')
     expect(pagesYml).toContain('cover/frontend/package-lock.json')
+    expect(pagesYml).toContain('inference/frontend/package-lock.json')
     expect(pagesYml).toContain('feed/frontend/package-lock.json')
     expect(pagesYml).toContain('registry/frontend/package-lock.json')
     expect(pagesYml).toContain('credit/frontend/package-lock.json')
     expect(pagesYml).toContain('site/cover')
     expect(pagesYml).toContain('site/feed')
     expect(pagesYml).toContain('VITE_BASE: /business-ideas/cover/')
+    expect(pagesYml).toContain('VITE_BASE: /business-ideas/inference/')
     expect(pagesYml).toContain('site/handoff site/credit site/registry site/scenes')
     for (const slug of [
       'tickets', 'receivables', 'invoices', 'treasury', 'streampay', 'grants',
       'records', 'raffle', 'spend-policy', 'session', 'datasets', 'memberships',
       'names', 'titles', 'trace', 'job-escrow', 'vault-claim', 'kya', 'vouch',
-      'handoff', 'credit', 'registry', 'feed', 'cover', 'scenes'
+      'handoff', 'credit', 'registry', 'feed', 'inference', 'cover', 'scenes'
     ]) {
       expect(pagesYml).toContain(`site/${slug}`)
     }
@@ -183,7 +197,7 @@ describe('first-paint copy', () => {
       './grants/', './records/', './raffle/', './spend-policy/', './session/',
       './datasets/', './memberships/', './names/', './titles/', './trace/',
       './job-escrow/', './vault-claim/', './kya/', './vouch/', './handoff/',
-      './credit/', './registry/', './feed/', './cover/'
+      './credit/', './registry/', './feed/', './inference/', './cover/'
     ]) {
       expect(catalog).toContain(`href="${href}"`)
     }
@@ -222,6 +236,8 @@ describe('Business case page copy is locked', () => {
     expect(BUSINESS_CASE_WHO.startsWith('Enterprises and grassroots')).toBe(true)
     expect(BUSINESS_CASE_MARKET).toContain('$115M')
     expect(BUSINESS_CASE_MARKET).toContain('2070')
+    expect(BUSINESS_CASE_MARKET).toContain('Nexus Mutual and adjacent protocols only')
+    expect(BUSINESS_CASE_MARKET).toContain('no direct public comp for club or co-op cover')
     expect(BUSINESS_CASE_PROOF_CHAIN.startsWith('Other-chain analog:')).toBe(true)
     expect(BUSINESS_CASE_PROOF_FIAT.startsWith('Non-chain analog:')).toBe(true)
     expect(BUSINESS_CASE_PROOF_CHAIN).toContain('Nexus Mutual')

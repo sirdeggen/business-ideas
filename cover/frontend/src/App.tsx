@@ -396,7 +396,7 @@ function Shell() {
         <img
           className="scene"
           src={`${import.meta.env.BASE_URL}scene.webp`}
-          alt="A person at a wooden counter receiving a stamped policy sheet."
+          alt="A blonde woman at a bright modern desk reviews a policy card on her phone, with a tablet showing a 2-of-3 approval and a bullet train and EV chargers behind her."
           width="1280"
           height="720"
         />

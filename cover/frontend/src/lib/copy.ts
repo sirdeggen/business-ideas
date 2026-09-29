@@ -51,7 +51,7 @@ export const BUSINESS_CASE_WHO =
   'Enterprises and grassroots orgs (clubs, co-ops, event hosts) that already budget insurance or mutual-aid premiums; claim admins who need an auditable release.'
 
 export const BUSINESS_CASE_MARKET =
-  'Nexus Mutual retained ~$47k protocol revenue and ~$94k fees over 30 days with ~$115M TVL (DefiLlama, 2026-09-29). Onchain insurance / reinsurance discussion on X ~2070 posts/7d.'
+  'Nexus Mutual retained ~$47k protocol revenue and ~$94k fees over 30 days with ~$115M TVL (DefiLlama, 2026-09-29). Onchain insurance / reinsurance discussion on X ~2070 posts/7d. These comps are Nexus Mutual and adjacent protocols only. There is no direct public comp for club or co-op cover.'
 
 export const BUSINESS_CASE_PROOF_CHAIN =
   'Other-chain analog: Nexus Mutual cover premiums (half of premiums stay in the capital pool, per DefiLlama). Nearby, OnRe ~$70k and Ensuro ~$10.8k in 30-day revenue.'
