@@ -5,8 +5,9 @@
  * A unilateral payee swap is rejected. A change needs M-of-N party
  * approvals and may carry a flat amendment fee. A deed hash and a
  * seller attestation sit on the receipt. The release receipt is written
- * only after M-of-N release approvals, and those approvals do not carry
- * over a payee change. A payee change stays flagged because the first
+ * only after M-of-N release approvals. Those approvals do not carry
+ * over a payee change or a newly attached deed. Payee-change approvals
+ * belong to the current proposal. A payee change stays flagged because the first
  * payee and the current payee are both on the record. v0 records and
  * attests; it does not move funds. The fee is basis points
  * of the amount (default 100). MAGIC `closing`. Public Pages uses
@@ -22,7 +23,6 @@ export const PROTOCOL_ID: [0, string] = [0, 'closing']
 export const BASKET = 'closing'
 export const MAGIC = 'closing'
 export const SCHEMA_VERSION = '1'
-export const BRC29_PROTOCOL_ID: [2, string] = [2, '3241645161d8']
 export const MESSAGE_BOX = 'closing'
 export const MESSAGE_BOX_HOST = 'https://gmb.bsvblockchain.tech'
 export const TOPIC = 'tm_anytx'
@@ -484,6 +484,7 @@ export function attachDeed(
     ...state,
     deed,
     attestation: null,
+    releaseApprovals: [],
     hashStatus: 'match',
     rejection: null,
     notice: HASH_MATCH

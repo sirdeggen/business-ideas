@@ -184,18 +184,40 @@ describe('payee changes clear stale approvals', () => {
     expect(releaseClosing(desk, NOW).released?.payeeName).toBe('Evil')
   })
 
-  it('resets payee approvals when the proposal changes', () => {
+  it('binds payee approvals to the current proposal', () => {
     let desk = attemptPayeeSwap(opened(), 'Evil A', NOW)
     desk = approvePayeeChange(desk, 'buyer', NOW)
     expect(desk.open?.payeeName).toBe('Seller')
     expect(desk.payeeApprovals).toEqual(['buyer'])
 
+    desk = attemptPayeeSwap(desk, 'Evil A', NOW)
+    expect(desk.proposal?.name).toBe('Evil A')
+    expect(desk.payeeApprovals).toEqual(['buyer'])
+
     desk = attemptPayeeSwap(desk, 'Evil B', NOW)
-    expect(desk.proposal?.name).toBe('Evil B')
+    expect(desk.proposal).toEqual({ name: 'Evil B', identity: identityFor('Evil B') })
     expect(desk.payeeApprovals).toEqual([])
     desk = approvePayeeChange(desk, 'seller', NOW)
     expect(desk.open?.payeeName).toBe('Seller')
     expect(desk.payeeApprovals).toEqual(['seller'])
+  })
+
+  it('clears release approvals when the deed is attached again', () => {
+    let desk = attested()
+    desk = approveRelease(desk, 'buyer')
+    desk = approveRelease(desk, 'seller')
+    expect(releaseReady(desk)).toBeNull()
+
+    desk = attachDeed(desk, sha256Hex('A later assignment'), 'Later assignment', NOW)
+    expect(desk.releaseApprovals).toEqual([])
+    expect(desk.attestation).toBeNull()
+    expect(releaseReady(desk)).not.toBeNull()
+    expect(releaseClosing(desk, NOW).released).toBeNull()
+
+    desk = attestDeed(desk, NOW)
+    expect(desk.releaseApprovals).toEqual([])
+    expect(releaseReady(desk)).not.toBeNull()
+    expect(releaseClosing(desk, NOW).released).toBeNull()
   })
 })
 

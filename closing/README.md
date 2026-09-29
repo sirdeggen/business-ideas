@@ -4,7 +4,7 @@ A shared record of a purchase closing in sats. A changed payee is flagged on the
 
 A buyer opens one purchase closing. The shared record names a bound payee, a deed or document hash, and a seller attestation. The release receipt is written only after the parties approve. The fee is basis points of the closing amount (default 100). A payee change needs those same parties, plus an optional flat amendment fee, and it clears release approvals already given. The receipt flags that change. One person sending new wire instructions is rejected.
 
-v0 records and attests a shared closing receipt. It does not move funds. The walkthrough stores the closing in the browser. Approvals and the seller attestation are unsigned clicks on a role, not wallet signatures. Party keys on that walkthrough are placeholders: `02` plus the SHA-256 of the name. A real compressed public key can be supplied under Advanced.
+v0 records and attests a shared closing receipt. It does not move funds. The walkthrough stores the closing in the browser. Quorum and approvals are a local simulation: unsigned clicks on a role, not wallet signatures. The overlay records only the open, the deed, the attestation, and the release. Party pubkeys are derived from the name, `02` plus the SHA-256 of the name, not real keys.
 
 This is **not** the job desk (those wait until a deliverable hash lands) and **not** Handoff Desk (those list a digital asset for a secondary handoff). One high-value purchase closing.
 
@@ -23,8 +23,8 @@ Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access 
 ## Stack
 
 - Wallet interface: BRC-100. The app never keeps keys. It calls `createAction`, `getPublicKey`, and `signAction` via the visitor’s Desktop, and only after the closing is released.
-- Identity: names sit on the face. Keys stay under Advanced. In the walkthrough those keys are placeholders, `02` plus the SHA-256 of the name. Approvals and the seller attestation are unsigned clicks on a role, not wallet signatures. A real 66-hex compressed pubkey can be typed under Advanced.
-- State: the walkthrough is local until you record. Wallet basket `closing`. Public Pages uses overlay topic `tm_anytx` / lookup `ls_anytx` (client-filtered on MAGIC `closing`).
+- Identity: names sit on the face. Keys stay under Advanced. Those pubkeys are derived from the name, `02` plus the SHA-256 of the name, not real keys. Approvals and the seller attestation are unsigned clicks on a role, not wallet signatures.
+- State: quorum and approvals are a local simulation. The overlay records only the open, the deed, the attestation, and the release. Wallet basket `closing`. Public Pages uses overlay topic `tm_anytx` / lookup `ls_anytx` (client-filtered on MAGIC `closing`).
 - Encoding: PushDrop fields — open (label, amount, fee in basis points, bound payee, parties, threshold), deed hash, seller attestation, release (fee sats, amendment fee, net to payee).
 - Fee: default 100 basis points of the closing amount, `floor(amount × bps / 10000)`. Optional flat amendment fee, applied only when a payee change is approved.
 - Frontend: Vite + React. Wallet via `WalletClient('auto', originator)` from `@bsv/sdk`. Overlay via `@bsv/sdk` `TopicBroadcaster` and lookup.
@@ -82,7 +82,7 @@ Bound payee, rejected unilateral swap, M-of-N payee change, deed hash plus selle
 | Protocol string | `closing` |
 | Message Box | `https://gmb.bsvblockchain.tech` (box `closing`) |
 | Fee | 100 bps default |
-| Approvals | 2 of 2, or 2 of 3 when a closing agent is included |
+| Approvals | 2 of 2, or 2 of 3 when a closing agent is included. Local simulation; not an overlay record |
 | Record output | 1 sat receipt |
 
 ## Layout
