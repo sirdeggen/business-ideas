@@ -8,7 +8,7 @@ The catalog lists newest ideas first. Prepend the next Server demo at the top of
 
 ## Closing Desk
 
-Record a purchase closing in sats. One person cannot swap the payee.
+A shared record of a purchase closing in sats. A changed payee is flagged on the receipt.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/closing/
 - How to run: [closing/README.md](./closing/README.md)

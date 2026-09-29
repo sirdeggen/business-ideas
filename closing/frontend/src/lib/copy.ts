@@ -1,6 +1,6 @@
 export const TITLE = 'Closing Desk'
 export const EYEBROW = 'Closing'
-export const LEDE = 'Record a purchase closing in sats. One person cannot swap the payee.'
+export const LEDE = 'A shared record of a purchase closing in sats. A changed payee is flagged on the receipt.'
 export const PRODUCT = 'Closing Desk'
 export const OPEN_BUTTON = 'Open the closing'
 export const ATTACH_BUTTON = 'Attach the deed'
@@ -13,10 +13,11 @@ export const RECORD_BUTTON = 'Record this closing'
 export const RECORDING_BUTTON = 'Recording…'
 export const OPEN_JOB = 'Name the purchase, the amount in sats, and who is named as payee. That name is bound on the receipt.'
 export const DEED_JOB = 'Add the deed or assignment. The seller attests the hash.'
-export const SWAP_JOB = 'A new wire instruction shows up. One person cannot change who gets paid.'
-export const RELEASE_JOB = 'The parties say yes. Then you can write the release receipt.'
-export const RECEIPT_NOTE = 'This demo records an attested receipt. It does not hold funds.'
-export const PAYEE_HELPER = 'The receipt names this seller as payee. A later change needs the parties, plus the amendment fee if you set one.'
+export const SWAP_JOB = 'A new wire instruction shows up. One person cannot change the payee. If the parties approve, the receipt flags the change.'
+export const RELEASE_JOB = 'The parties say yes. Then you can write the release receipt, with any payee change flagged on it.'
+export const RECEIPT_NOTE = 'This demo records and attests a shared closing receipt. It does not move funds.'
+export const PAYEE_HELPER = 'The receipt names this seller as payee. A later change needs the parties. The receipt flags that change. An amendment fee applies if you set one.'
+export const PARTY_CHANGE_HELPER = 'Or the parties can approve a change. The receipt flags it.'
 export const LOCAL_ROLES_NOTE = 'Approvals and the seller attestation are unsigned clicks on a role, not wallet signatures. Party keys here are placeholders: 02 plus the SHA-256 of the name.'
 export const AMOUNT_LABEL = 'Closing amount (sats)'
 export const RECORD_JOB = 'The closing is done here. A wallet only writes the public record.'
@@ -27,7 +28,7 @@ export const SELLER_NAME = 'Seller'
 export const AGENT_NAME = 'Closing agent'
 export const DEFAULT_LABEL = 'Mineral interest'
 export const STAMP_BOUND = 'Payee bound'
-export const STAMP_CHANGED = 'Payee changed'
+export const STAMP_CHANGED = 'Payee change flagged'
 export const STAMP_RELEASED = 'Released'
 export const LINE_AMOUNT = 'Closing amount'
 export const LINE_BPS = 'Fee (basis points, 100 = 1%)'
@@ -40,7 +41,7 @@ export const APPROVALS_LABEL = 'Approvals'
 export const BUSINESS_CASE_TITLE = 'Business case'
 
 export const BUSINESS_CASE_WHY =
-  'High-value purchases (property, mineral interests, domains, equipment) still get diverted by last-minute payee changes and fake wire instructions. Buyers and sellers need funds locked to a bound payee until a quorum releases them.'
+  'High-value purchases (property, mineral interests, domains, equipment) still get diverted by last-minute payee changes and fake wire instructions. Buyers and sellers need one shared record of who the payee is, which deed or document is being sold, and who approved the closing, so a changed payee stands out before anyone wires money.'
 
 export const BUSINESS_CASE_WHO =
   'Buyers, sellers, and closing agents on mid-to-high-ticket transfers; grassroots property buyers and enterprise mineral/real-estate desks that already pay escrow or title fees.'
@@ -56,7 +57,7 @@ export const BUSINESS_CASE_PROOF_CHAIN = BUSINESS_CASE_PROOF.slice(0, BUSINESS_C
 export const BUSINESS_CASE_PROOF_FIAT = BUSINESS_CASE_PROOF.slice(BUSINESS_CASE_PROOF.indexOf('Non-chain'))
 
 export const BUSINESS_CASE_DEMO =
-  'Lock a closing amount to a bound payee, attach a deed/doc hash + seller attestation, and release only after multi-party approval — with bps fee shown.'
+  'Record a closing with a bound payee, a deed/doc hash, and a seller attestation, collect multi-party approvals, and show a receipt that flags any payee change afterward, with the fee shown in bps. v0 records and attests; it does not hold or move funds.'
 
 export const BUSINESS_CASE_FIELDS = [
   'Why it exists',
@@ -94,6 +95,10 @@ export function formatWhen(value: string): string {
     hour: 'numeric',
     minute: '2-digit'
   })
+}
+
+export function payeeFlagLine(from: string, to: string): string {
+  return `Payee change flagged: ${from} is now ${to}.`
 }
 
 export function approvalLine(count: number, threshold: number): string {

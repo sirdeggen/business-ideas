@@ -19,12 +19,16 @@ import {
   LOCAL_ROLES_NOTE,
   OPEN_BUTTON,
   OPEN_JOB,
+  PARTY_CHANGE_HELPER,
+  PAYEE_HELPER,
   PRIMARY_COPY,
   PRODUCT,
   RECEIPT_NOTE,
   RECORD_BUTTON,
   RELEASE_JOB,
-  TITLE
+  SWAP_JOB,
+  TITLE,
+  payeeFlagLine
 } from './copy'
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -53,7 +57,7 @@ describe('first-paint copy', () => {
     expect(html).toContain('<title>Closing Desk</title>')
     expect(TITLE).toBe('Closing Desk')
     expect(PRODUCT).toBe('Closing Desk')
-    expect(LEDE).toBe('Record a purchase closing in sats. One person cannot swap the payee.')
+    expect(LEDE).toBe('A shared record of a purchase closing in sats. A changed payee is flagged on the receipt.')
     expect(OPEN_BUTTON).toBe('Open the closing')
     expect(RECORD_BUTTON).toBe('Record this closing')
     expect(app).toContain('{LEDE}')
@@ -116,7 +120,7 @@ describe('first-paint copy', () => {
 
   it('keeps the catalog card Server + View at the top of the ledger', () => {
     expect(closingCard).toContain('Closing Desk')
-    expect(closingCard).toContain('Record a purchase closing in sats. One person cannot swap the payee.')
+    expect(closingCard).toContain('A shared record of a purchase closing in sats. A changed payee is flagged on the receipt.')
     expect(closingCard).toContain('closing/README.md')
     expect(closingCard).toContain('scenes/closing.webp')
     expect(closingCard).toContain('How to run')
@@ -178,15 +182,20 @@ describe('first-paint copy', () => {
     expect(app).not.toContain('{!open && <BusinessCase />}')
     expect(app.indexOf('{RECEIPT_NOTE}')).toBeGreaterThan(caseMark)
     expect(app.indexOf('{RECEIPT_NOTE}')).toBeLessThan(form)
-    expect(businessCase).not.toContain('does not hold funds')
+    expect(businessCase).not.toContain(RECEIPT_NOTE)
     expect(closingCard).not.toContain('Business case')
   })
 
   it('says v0 records a receipt, and that approvals are local role clicks', () => {
-    expect(RECEIPT_NOTE).toBe('This demo records an attested receipt. It does not hold funds.')
-    expect(OPEN_JOB).not.toMatch(/lock/i)
-    expect(RELEASE_JOB).not.toMatch(/money/)
-    expect(RELEASE_JOB).toMatch(/release receipt/)
+    expect(RECEIPT_NOTE).toBe('This demo records and attests a shared closing receipt. It does not move funds.')
+    expect(OPEN_JOB).not.toMatch(/\b(lock|hold|escrow)\w*/i)
+    expect(RELEASE_JOB).toMatch(/flagged on it/)
+    expect(SWAP_JOB).toMatch(/receipt flags the change/)
+    expect(payeeFlagLine('Seller', 'Evil')).toBe('Payee change flagged: Seller is now Evil.')
+    expect(app).toContain('id="payee-change-flag"')
+    for (const line of [LEDE, OPEN_JOB, SWAP_JOB, RELEASE_JOB, RECEIPT_NOTE, PAYEE_HELPER, PARTY_CHANGE_HELPER, payeeFlagLine('Seller', 'Evil')]) {
+      expect(line).not.toMatch(/\b(lock|locks|locked|hold|holds|holding|escrow|escrowed)\b/i)
+    }
     expect(LINE_BPS).toBe('Fee (basis points, 100 = 1%)')
     expect(app).toContain('{LINE_BPS}')
     expect(app).not.toContain('Fee bps')
@@ -197,7 +206,9 @@ describe('first-paint copy', () => {
     expect(LOCAL_ROLES_NOTE).toMatch(/SHA-256 of the name/)
     expect(advanced).toContain('{LOCAL_ROLES_NOTE}')
     expect(face).not.toContain('{LOCAL_ROLES_NOTE}')
-    expect(readme).toContain('does not hold funds')
+    expect(readme).toContain('does not move funds')
+    expect(readme).toContain('flags that change')
+    expect(readme.replaceAll('Unlock', '')).not.toMatch(/\b(lock|locks|locked|hold|holds|holding|escrow|escrowed)\b/i)
     expect(readme).toContain('unsigned clicks on a role')
     expect(readme).toContain('SHA-256 of the name')
     expect(readme).not.toContain('Funds release only after')
@@ -231,7 +242,7 @@ describe('Business case page copy is locked', () => {
 
   it('keeps the locked bodies verbatim', () => {
     expect(BUSINESS_CASE_WHY).toBe(
-      'High-value purchases (property, mineral interests, domains, equipment) still get diverted by last-minute payee changes and fake wire instructions. Buyers and sellers need funds locked to a bound payee until a quorum releases them.'
+      'High-value purchases (property, mineral interests, domains, equipment) still get diverted by last-minute payee changes and fake wire instructions. Buyers and sellers need one shared record of who the payee is, which deed or document is being sold, and who approved the closing, so a changed payee stands out before anyone wires money.'
     )
     expect(BUSINESS_CASE_WHO).toBe(
       'Buyers, sellers, and closing agents on mid-to-high-ticket transfers; grassroots property buyers and enterprise mineral/real-estate desks that already pay escrow or title fees.'
@@ -244,7 +255,7 @@ describe('Business case page copy is locked', () => {
     )
     expect(`${BUSINESS_CASE_PROOF_CHAIN} ${BUSINESS_CASE_PROOF_FIAT}`).toBe(BUSINESS_CASE_PROOF)
     expect(BUSINESS_CASE_DEMO).toBe(
-      'Lock a closing amount to a bound payee, attach a deed/doc hash + seller attestation, and release only after multi-party approval — with bps fee shown.'
+      'Record a closing with a bound payee, a deed/doc hash, and a seller attestation, collect multi-party approvals, and show a receipt that flags any payee change afterward, with the fee shown in bps. v0 records and attests; it does not hold or move funds.'
     )
   })
 })

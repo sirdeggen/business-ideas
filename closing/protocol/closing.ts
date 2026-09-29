@@ -6,11 +6,13 @@
  * approvals and may carry a flat amendment fee. A deed hash and a
  * seller attestation sit on the receipt. The release receipt is written
  * only after M-of-N release approvals, and those approvals do not carry
- * over a payee change. v0 does not hold funds. The fee is basis points
+ * over a payee change. A payee change stays flagged because the first
+ * payee and the current payee are both on the record. v0 records and
+ * attests; it does not move funds. The fee is basis points
  * of the amount (default 100). MAGIC `closing`. Public Pages uses
  * tm_anytx / ls_anytx. Client filters on MAGIC.
  *
- * Not Job Escrow (labor milestones). Not Handoff Desk (a secondary
+ * Not the job desk (labor milestones). Not Handoff Desk (a secondary
  * ownership marketplace).
  */
 
@@ -37,7 +39,7 @@ export const MAX_FEE_BPS = 9999
 export const RECORD_SATS = 1
 
 export const PAYEE_BOUND = 'Payee bound.'
-export const PAYEE_CHANGED = 'The parties approved the new payee.'
+export const PAYEE_CHANGED = 'The parties approved the new payee. The receipt flags that change.'
 export const SWAP_REJECTED = 'Rejected. The payee stays bound until the parties approve a change.'
 export const ALREADY_PAYEE = 'That is already the payee.'
 export const HASH_MATCH = 'Hash matches.'

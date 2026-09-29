@@ -295,7 +295,9 @@ code {
 }
 
 .stamp.released { background: rgba(15, 118, 110, 0.14); color: var(--ok); }
-.show-hero { margin: 4px 0 14px; }
+.stamp.flagged { background: rgba(159, 18, 57, 0.12); color: var(--failed); }
+.show-hero { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 14px; }
+.payee-flag { margin: 10px 0 0; font-weight: 700; color: var(--failed); }
 
 .advanced { margin-top: 22px; color: #ddd6fe; font-size: 12px; }
 .advanced summary { cursor: pointer; letter-spacing: 0.08em; text-transform: uppercase; font-size: 11px; font-weight: 700; }

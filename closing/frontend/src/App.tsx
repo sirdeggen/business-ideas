@@ -61,6 +61,7 @@ import {
   OPEN_BUTTON,
   OPEN_JOB,
   PARTIES_HEADING,
+  PARTY_CHANGE_HELPER,
   PAYEE_HELPER,
   RECEIPT_NOTE,
   RECORD_BUTTON,
@@ -78,7 +79,8 @@ import {
   TITLE,
   approvalLine,
   formatAmount,
-  formatWhen
+  formatWhen,
+  payeeFlagLine
 } from './lib/copy'
 import { lookupClosing } from './lib/overlay'
 import { clearDesk, loadDesk, saveDesk } from './lib/persist'
@@ -364,7 +366,7 @@ function Shell() {
         <img
           className="scene"
           src={`${import.meta.env.BASE_URL}scene.webp`}
-          alt="A closing clerk at a table, holding a deed with an indigo seal."
+          alt="A closing clerk at a table, with a deed and an indigo seal."
           width="1280"
           height="720"
         />
@@ -460,7 +462,8 @@ function Shell() {
           {open && lines && (
             <section className="block">
               <div className="show-hero">
-                <span className={`stamp ${desk.released ? 'released' : 'bound'}`}>{stampFor(desk)}</span>
+                <span className={`stamp ${desk.released ? 'released' : payeeChanged(open) ? 'flagged' : 'bound'}`}>{stampFor(desk)}</span>
+                {desk.released && payeeChanged(open) && <span className="stamp flagged">{STAMP_CHANGED}</span>}
               </div>
               <h2>{open.label}</h2>
               <dl className="meta">
@@ -468,6 +471,12 @@ function Shell() {
                   <dt>Payee</dt>
                   <dd id="bound-payee">{open.payeeName}</dd>
                 </div>
+                {payeeChanged(open) && (
+                  <div>
+                    <dt>Flag</dt>
+                    <dd className="payee-flag" id="payee-change-flag">{payeeFlagLine(open.originalPayeeName, open.payeeName)}</dd>
+                  </div>
+                )}
                 <div>
                   <dt>{PARTIES_HEADING}</dt>
                   <dd>{parties.map((party) => party.name).join(', ')}</dd>
@@ -560,7 +569,7 @@ function Shell() {
               {desk.rejection === SWAP_REJECTED && <p className="status err" role="alert">{SWAP_REJECTED}</p>}
               {desk.rejection === ALREADY_PAYEE && <p className="status err" role="alert">{ALREADY_PAYEE}</p>}
               {desk.rejection === NEED_NAME && <p className="status err" role="alert">{NEED_NAME}</p>}
-              <p className="helper">Or the parties can approve a change.</p>
+              <p className="helper">{PARTY_CHANGE_HELPER}</p>
               <p className="fine">{approvalLine(desk.payeeApprovals.length, open.threshold)}</p>
               <div className="actions">
                 {parties.map((party) => (

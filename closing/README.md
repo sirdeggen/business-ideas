@@ -1,16 +1,16 @@
 # Closing Desk (v0)
 
-Record a purchase closing in sats. One person cannot swap the payee.
+A shared record of a purchase closing in sats. A changed payee is flagged on the receipt.
 
-A buyer opens one purchase closing. The receipt names a bound payee, a deed or assignment hash, and a seller attestation. The release receipt is written only after the parties approve. The fee is basis points of the closing amount (default 100). A payee change needs those same parties, plus an optional flat amendment fee, and it clears release approvals already given. One person sending new wire instructions is rejected.
+A buyer opens one purchase closing. The shared record names a bound payee, a deed or document hash, and a seller attestation. The release receipt is written only after the parties approve. The fee is basis points of the closing amount (default 100). A payee change needs those same parties, plus an optional flat amendment fee, and it clears release approvals already given. The receipt flags that change. One person sending new wire instructions is rejected.
 
-v0 records an attested receipt. It does not hold funds. The walkthrough stores the closing in the browser. Approvals and the seller attestation are unsigned clicks on a role, not wallet signatures. Party keys on that walkthrough are placeholders: `02` plus the SHA-256 of the name. A real compressed public key can be supplied under Advanced.
+v0 records and attests a shared closing receipt. It does not move funds. The walkthrough stores the closing in the browser. Approvals and the seller attestation are unsigned clicks on a role, not wallet signatures. Party keys on that walkthrough are placeholders: `02` plus the SHA-256 of the name. A real compressed public key can be supplied under Advanced.
 
-This is **not** Job Escrow (those wait until a deliverable hash lands) and **not** Handoff Desk (those list a digital asset for a secondary handoff). One high-value purchase closing.
+This is **not** the job desk (those wait until a deliverable hash lands) and **not** Handoff Desk (those list a digital asset for a secondary handoff). One high-value purchase closing.
 
 Product gaps this desk shows, from Texas oil and mineral wire-fraud research: last-minute payee changes and fake wire instructions (royalty diversion ~$1.5M in a documented Midland case; vendor BEC ~$186k).
 
-Pages defaults to the public overlay: `https://overlay-us-1.bsvb.tech`, topic `tm_anytx`, lookup `ls_anytx`. The walkthrough runs in the page with no wallet. **Record this closing** is last: after `createAction`, the app broadcasts with `@bsv/sdk` `TopicBroadcaster(['tm_anytx'])` pointed at that host. The desk queries `ls_anytx` via a raw `/lookup` POST (then `LookupResolver` if that fails), and keeps only this app’s PushDrop fields (MAGIC `closing`). No custom topic. The record output is a 1-sat receipt carrying the bound payee, deed hash, seller attestation, and the fee lines. v0 does not hold funds, and that output does not move the closing amount.
+Pages defaults to the public overlay: `https://overlay-us-1.bsvb.tech`, topic `tm_anytx`, lookup `ls_anytx`. The walkthrough runs in the page with no wallet. **Record this closing** is last: after `createAction`, the app broadcasts with `@bsv/sdk` `TopicBroadcaster(['tm_anytx'])` pointed at that host. The desk queries `ls_anytx` via a raw `/lookup` POST (then `LookupResolver` if that fails), and keeps only this app’s PushDrop fields (MAGIC `closing`). No custom topic. The record output is a 1-sat receipt carrying the bound payee, deed hash, seller attestation, the fee lines, and both the first payee and the current payee when those differ. v0 records and attests; that output does not move the closing amount.
 
 Message Box at `https://gmb.bsvblockchain.tech` (box `closing`) is an optional nudge when the receipt is recorded. Overlay is the public book.
 
@@ -22,7 +22,7 @@ Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access 
 
 ## Stack
 
-- Wallet interface: BRC-100. The app never holds keys. It calls `createAction`, `getPublicKey`, and `signAction` via the visitor’s Desktop, and only after the closing is released.
+- Wallet interface: BRC-100. The app never keeps keys. It calls `createAction`, `getPublicKey`, and `signAction` via the visitor’s Desktop, and only after the closing is released.
 - Identity: names sit on the face. Keys stay under Advanced. In the walkthrough those keys are placeholders, `02` plus the SHA-256 of the name. Approvals and the seller attestation are unsigned clicks on a role, not wallet signatures. A real 66-hex compressed pubkey can be typed under Advanced.
 - State: the walkthrough is local until you record. Wallet basket `closing`. Public Pages uses overlay topic `tm_anytx` / lookup `ls_anytx` (client-filtered on MAGIC `closing`).
 - Encoding: PushDrop fields — open (label, amount, fee in basis points, bound payee, parties, threshold), deed hash, seller attestation, release (fee sats, amendment fee, net to payee).
@@ -41,8 +41,8 @@ Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access 
 2. Name the purchase, enter a closing amount in sats, leave the fee at 100 basis points (1%). Seller and, if you want, a closing agent. Click **Open the closing**. The receipt names that payee. No wallet.
 3. Paste deed text or pick a file. **Attach the deed**. **Check the hash**. **Seller attests**. The page shows whether the hash matches and whether the attestation matches.
 4. Type a new payee and click **Swap the payee**. The attempt is rejected. The bound payee does not change.
-5. Two parties **Approve** the change. The payee updates. If you set an amendment fee, it shows on the lines.
-6. Two parties approve the release. **Release**. The lines show closing amount, fee in basis points, fee sats, and net to payee. That release is an attested receipt. It does not move funds.
+5. Two parties **Approve** the change. The payee updates, and the receipt flags the change. If you set an amendment fee, it shows on the lines. Release approvals from before the change are cleared.
+6. Two parties approve the release again. **Release**. The lines show closing amount, fee in basis points, fee sats, and net to payee. If the payee changed, the receipt still flags it. That release is an attested receipt. It does not move funds.
 7. **Record this closing** asks for the wallet and writes the receipt to `tm_anytx`. Install Desktop appears only if the wallet is missing.
 
 ## Public overlay
