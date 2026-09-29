@@ -9,10 +9,16 @@ import {
   ATTEST_SATS,
   BASKET,
   CLAIM_ADMIN_FEE_SATS,
+  EVIDENCE_FILE_MAX,
   PROTOCOL_ID,
+  SIGNING_KEY_ID,
   approverKeys,
   assertSubject,
   buildReading,
+  bytesToHex,
+  canonicalApprovalBytes,
+  canonicalClaimBytes,
+  canonicalReleaseBytes,
   encodeApprovalFields,
   encodeClaimFields,
   encodePolicyFields,
@@ -21,16 +27,15 @@ import {
   hashEvidenceFile,
   isApprover,
   isCoverKind,
-  isDesk,
   isEvidenceHash,
   isHolder,
   isIdentityKey,
   makeClaimId,
-  newPolicyId,
   nowIso,
   parseInsured,
   parseQuorum,
   parseTermDays,
+  policyBindingId,
   quoteCover,
   readingSlug,
   sameIdentity,
@@ -141,7 +146,7 @@ function parsePayout(value: string, insuredSats: number): number | null {
   return parsed
 }
 
-export function assertCanBuy(input: BuyInput, holder: string): PreparedBuy {
+export function assertCanBuy(input: BuyInput, payer: string, holder = payer): PreparedBuy {
   if (!isCoverKind(input.coverKind)) throw new Error('Pick a cover kind.')
   const subject = assertSubject(input.subject)
   const insuredSats = parseInsured(input.insured)
@@ -149,13 +154,17 @@ export function assertCanBuy(input: BuyInput, holder: string): PreparedBuy {
   const termDays = parseTermDays(input.termDays)
   if (termDays === null) throw new Error('Term must be between 1 and 365 days.')
   const quorum = parseQuorum(input.quorum)
-  if (quorum === null) throw new Error('Approvals needed must be 1, 2, or 3.')
+  if (quorum === null) throw new Error('Approvals needed must be 2 or 3.')
   const approvers = [input.approver1, input.approver2, input.approver3].map((key) => key.trim())
   if (approvers.some((key) => !isIdentityKey(key))) throw new Error(NEED_APPROVERS)
   if (new Set(approvers.map((key) => key.toLowerCase())).size !== 3) throw new Error(NEED_APPROVERS)
-  const desk = input.desk.trim() || holder
+  if (approvers.some((key) => sameIdentity(key, holder))) {
+    throw new Error('The holder can’t be an approver.')
+  }
+  const desk = input.desk.trim() || payer
   if (!isIdentityKey(desk)) throw new Error('Desk key must be an identity key, or leave it blank.')
   if (!isIdentityKey(holder)) throw new Error('Holder identity is missing.')
+  if (!isIdentityKey(payer)) throw new Error('Holder identity is missing.')
   const quote = quoteCover(input.coverKind, insuredSats, termDays)
   return {
     coverKind: input.coverKind,
@@ -205,10 +214,11 @@ export function assertCanRelease(
   folded: FoldedClaim,
   identityKey: string
 ): { payoutSats: number, claimAdminFeeSats: number } {
+  if (folded.claim.policyId !== policy.policyId) throw new Error('This claim is not on this policy.')
   if (folded.release) throw new Error(ALREADY_RELEASED)
   if (!folded.quorumMet) throw new Error(NEED_QUORUM)
   const approved = folded.approvals.some((row) => sameIdentity(row.signer, identityKey))
-  if (!approved && !isDesk(policy, identityKey)) throw new Error(NOT_RELEASER)
+  if (!approved) throw new Error(NOT_RELEASER)
   return {
     payoutSats: folded.claim.payoutSats,
     claimAdminFeeSats: CLAIM_ADMIN_FEE_SATS
@@ -216,7 +226,7 @@ export function assertCanRelease(
 }
 
 export async function hashPickedFile(file: File): Promise<string> {
-  if (file.size > 2_000_000) throw new Error('That file is too large to hash here.')
+  if (file.size > EVIDENCE_FILE_MAX) throw new Error('That file is too large to hash here.')
   const bytes = new Uint8Array(await file.arrayBuffer())
   return hashEvidenceFile(bytes)
 }
@@ -241,6 +251,25 @@ async function finishAction(
   return { txid, tx }
 }
 
+export async function coverSigningKey(wallet: WalletClient): Promise<string> {
+  const { publicKey } = await wallet.getPublicKey({
+    protocolID: PROTOCOL_ID,
+    keyID: SIGNING_KEY_ID,
+    counterparty: 'self'
+  })
+  return publicKey
+}
+
+async function signCover(wallet: WalletClient, data: number[]): Promise<string> {
+  const { signature } = await wallet.createSignature({
+    data,
+    protocolID: PROTOCOL_ID,
+    keyID: SIGNING_KEY_ID,
+    counterparty: 'self'
+  })
+  return bytesToHex(signature)
+}
+
 async function overlayOrError(overlayUrl: string, tx: number[]): Promise<string | undefined> {
   try {
     await submitCoverTx(overlayUrl, tx)
@@ -257,9 +286,26 @@ export async function buyCover(
   identityKey: string,
   input: BuyInput
 ): Promise<BuyResult> {
-  const ready = assertCanBuy(input, identityKey)
+  const holder = await coverSigningKey(wallet)
+  const ready = assertCanBuy(input, identityKey, holder)
   const boughtAt = nowIso()
-  const policyId = newPolicyId()
+  const endsAt = endsAtFrom(boughtAt, ready.termDays)
+  const policyId = policyBindingId({
+    coverKind: ready.coverKind,
+    subject: ready.subject,
+    holder,
+    desk: ready.desk,
+    insuredSats: ready.insuredSats,
+    termDays: ready.termDays,
+    premiumSats: ready.premiumSats,
+    premiumCutSats: ready.premiumCutSats,
+    quorum: ready.quorum,
+    approver1: ready.approver1,
+    approver2: ready.approver2,
+    approver3: ready.approver3,
+    boughtAt,
+    endsAt
+  })
   const keyID = randomKeyId()
   const lockingScript = await withTimeout(
     pushdrop(wallet).lock(
@@ -267,7 +313,7 @@ export async function buyCover(
         policyId,
         coverKind: ready.coverKind,
         subject: ready.subject,
-        holder: identityKey,
+        holder,
         desk: ready.desk,
         insuredSats: ready.insuredSats,
         termDays: ready.termDays,
@@ -278,7 +324,7 @@ export async function buyCover(
         approver2: ready.approver2,
         approver3: ready.approver3,
         boughtAt,
-        endsAt: endsAtFrom(boughtAt, ready.termDays)
+        endsAt
       }),
       PROTOCOL_ID,
       keyID,
@@ -345,18 +391,28 @@ export async function fileClaim(
   claims: FoldedClaim[],
   input: FileInput
 ): Promise<ClaimResult> {
-  const ready = assertCanFile(policy, claims, identityKey, input)
-  const claimId = makeClaimId(policy.policyId, identityKey, ready.evidenceHash, ready.filedAt, randomNonce())
+  const holder = await coverSigningKey(wallet)
+  const ready = assertCanFile(policy, claims, holder, input)
+  const claimId = makeClaimId(policy.policyId, holder, ready.evidenceHash, ready.filedAt, randomNonce())
+  const signature = await signCover(wallet, canonicalClaimBytes({
+    policyId: policy.policyId,
+    claimId,
+    holder,
+    evidenceHash: ready.evidenceHash,
+    payoutSats: ready.payoutSats,
+    filedAt: ready.filedAt
+  }))
   const keyID = randomKeyId()
   const lockingScript = await withTimeout(
     pushdrop(wallet).lock(
       encodeClaimFields({
         policyId: policy.policyId,
         claimId,
-        holder: identityKey,
+        holder,
         evidenceHash: ready.evidenceHash,
         payoutSats: ready.payoutSats,
-        filedAt: ready.filedAt
+        filedAt: ready.filedAt,
+        signature
       }),
       PROTOCOL_ID,
       keyID,
@@ -406,16 +462,24 @@ export async function approveClaim(
   policy: PolicyRecord,
   folded: FoldedClaim
 ): Promise<ClaimResult> {
-  assertCanApprove(policy, folded, identityKey)
+  const signer = await coverSigningKey(wallet)
+  assertCanApprove(policy, folded, signer)
   const approvedAt = nowIso()
+  const signature = await signCover(wallet, canonicalApprovalBytes({
+    policyId: policy.policyId,
+    claimId: folded.claim.claimId,
+    signer,
+    approvedAt
+  }))
   const keyID = randomKeyId()
   const lockingScript = await withTimeout(
     pushdrop(wallet).lock(
       encodeApprovalFields({
         policyId: policy.policyId,
         claimId: folded.claim.claimId,
-        signer: identityKey,
-        approvedAt
+        signer,
+        approvedAt,
+        signature
       }),
       PROTOCOL_ID,
       keyID,
@@ -465,8 +529,17 @@ export async function releaseClaim(
   policy: PolicyRecord,
   folded: FoldedClaim
 ): Promise<ReleaseResult> {
-  const ready = assertCanRelease(policy, folded, identityKey)
+  const releaser = await coverSigningKey(wallet)
+  const ready = assertCanRelease(policy, folded, releaser)
   const releasedAt = nowIso()
+  const signature = await signCover(wallet, canonicalReleaseBytes({
+    policyId: policy.policyId,
+    claimId: folded.claim.claimId,
+    payoutSats: ready.payoutSats,
+    claimAdminFeeSats: ready.claimAdminFeeSats,
+    releaser,
+    releasedAt
+  }))
   const keyID = randomKeyId()
   const lockingScript = await withTimeout(
     pushdrop(wallet).lock(
@@ -475,8 +548,9 @@ export async function releaseClaim(
         claimId: folded.claim.claimId,
         payoutSats: ready.payoutSats,
         claimAdminFeeSats: ready.claimAdminFeeSats,
-        releaser: identityKey,
-        releasedAt
+        releaser,
+        releasedAt,
+        signature
       }),
       PROTOCOL_ID,
       keyID,

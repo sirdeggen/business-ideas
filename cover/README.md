@@ -28,9 +28,9 @@ Real satoshi payments, via `createAction`, labeled in the wallet approval:
 Overlay records only (a policy sheet, not custody of the insured amount):
 
 - The policy: kind, subject, insured amount, term, premium, premium cut, three approver keys, and how many must agree.
-- The claim: a sha256 evidence hash of text or a file the filer picked. The file is not uploaded.
-- Each approval from a named approver.
-- The release, once quorum is met. It records the payout amount and the claim-admin fee.
+- The claim: a sha256 evidence hash of text or a file the filer picked. The note is trimmed before it is hashed. The file is not uploaded. The holder signs the claim with their cover key.
+- Each approval, signed by that approver’s cover key. Unsigned or badly signed approvals are ignored, and each approver key counts once.
+- The release, once quorum is met, signed by an approver who already agreed. It records the payout amount and the claim-admin fee. The fee output is labeled. Reading the record does not prove the fee was paid.
 
 v0 does **not** lock a capital pool and does **not** pay the insured amount. Job Escrow can pay a provider because the client locked that exact sum. This desk does not lock the insured sum, so the payout figure on a Released claim is attested, not settled. The money that actually moves is the premium and the claim-admin fee.
 
@@ -42,7 +42,7 @@ v0 does **not** lock a capital pool and does **not** pay the insured amount. Job
 4. A stranger opens that link and clicks **Export reading**. No wallet.
 5. The holder **File claim** with a note or a file. Only the hash is stored.
 6. Two approvers **Approve**. Message Box (`cover`) can nudge them; the overlay is the book.
-7. **Release**. The page says Released, shows the payout amount, and shows the claim-admin fee that was paid.
+7. **Release**. The page says Released and shows the payout amount. The claim-admin fee is labeled and recorded. The page does not prove that fee was paid.
 
 ## Stack
 
@@ -51,7 +51,8 @@ v0 does **not** lock a capital pool and does **not** pay the insured amount. Job
 - State: wallet basket `cover`. Public Pages uses overlay topic `tm_anytx` / lookup `ls_anytx` (client-filtered on MAGIC `cover`).
 - Encoding: PushDrop fields — policy, claim, approval, release.
 - Payment: premium (premium cut + remainder) on buy, claim-admin fee on release. Satoshis only. No other chain.
-- Evidence: sha256 of pasted text or of a local file. Nothing is uploaded.
+- Evidence: sha256 of pasted text (trimmed first) or of a local file. Nothing is uploaded.
+- Signatures: claims, approvals, and releases are BRC-100 `createSignature` over canonical bytes (`protocolID [0, "cover"]`, `keyID` `cover`, `counterparty` `self`). Read-side checks use the same SHA-256-then-ECDSA verify as the treasury desk. The cover key is not the wallet’s payment identity. Approver fields must be those cover keys. The desk key still defaults to the buyer’s payment key and only receives fees. It cannot release.
 - Frontend: Vite + React. Overlay via `@bsv/sdk` `TopicBroadcaster` and a raw `/lookup` POST.
 - Overlay: `https://overlay-us-1.bsvb.tech`. Message Box: `https://gmb.bsvblockchain.tech` (box `cover`) delivers policy, claim, approval, and release notices. Overlay is the public book.
 
@@ -109,7 +110,9 @@ Protocol encode/decode and admission (quote, quorum, evidence hash), overlay top
 | Minimum premium | 100 sats |
 | Premium cut | 10% of the premium, labeled, at least 1 sat |
 | Claim-admin fee | 500 sats, labeled, paid on release |
-| Approvers | 3 named keys, default quorum 2 |
+| Approvers | 3 named cover keys. Quorum is 2 or 3. The holder cannot be an approver. |
+| Signatures | cover key (`keyID` `cover`). Claims, approvals, and releases. |
+| Policy id | first 32 hex chars of sha256 of the policy body. A different body cannot reuse it. |
 | Policy link | `?p=<policyId>` |
 
 Quote for event cover, 100,000 sats insured, 30 days: premium 3,000 sats, premium cut 300 sats.

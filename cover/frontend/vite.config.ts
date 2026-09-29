@@ -19,6 +19,14 @@ function copySpa404(): Plugin {
 
 export default defineConfig({
   plugins: [react(), copySpa404()],
+  resolve: {
+    alias: [
+      {
+        find: /^@bsv\/sdk$/,
+        replacement: resolve(root, 'node_modules/@bsv/sdk/dist/esm/mod.js')
+      }
+    ]
+  },
   base: process.env.VITE_BASE || '/',
   server: {
     port: 5186

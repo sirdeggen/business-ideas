@@ -1,10 +1,16 @@
+import { PrivateKey, ProtoWallet } from '@bsv/sdk'
 import { describe, expect, it } from 'vitest'
 import {
   CLAIM_ADMIN_FEE_SATS,
   MAGIC,
+  PROTOCOL_ID,
+  SIGNING_KEY_ID,
+  bytesToHex,
+  canonicalClaimBytes,
   endsAtFrom,
   hashEvidenceText,
   makeClaimId,
+  policyBindingId,
   quoteCover
 } from '../../../protocol/cover'
 import { PUBLIC_LOOKUP, PUBLIC_OVERLAY_URL, PUBLIC_TOPIC } from './config'
@@ -62,28 +68,75 @@ describe('overlay topic rails', () => {
 })
 
 describe('client MAGIC filter', () => {
-  it('folds one policy and ignores another desk', () => {
+  it('folds one policy and ignores another desk', async () => {
+    const wallet = new ProtoWallet(PrivateKey.fromRandom())
+    const { publicKey: holderKey } = await wallet.getPublicKey({
+      protocolID: PROTOCOL_ID,
+      keyID: SIGNING_KEY_ID,
+      counterparty: 'self'
+    })
     const evidenceHash = hashEvidenceText('cancelled')
-    const claimId = makeClaimId(POLICY_ID, HOLDER, evidenceHash, '2026-09-29T15:00:00Z', 'aa')
+    const filedAt = '2026-09-29T15:00:00Z'
+    const quote = quoteCover('event', 100_000, 30)
+    const body = {
+      coverKind: 'event' as const,
+      subject: 'Spring fair',
+      holder: holderKey,
+      desk: DESK,
+      insuredSats: 100_000,
+      termDays: 30,
+      premiumSats: quote.premiumSats,
+      premiumCutSats: quote.premiumCutSats,
+      quorum: 2,
+      approver1: A1,
+      approver2: A2,
+      approver3: A3,
+      boughtAt: WHEN,
+      endsAt: endsAtFrom(WHEN, 30)
+    }
+    const policyId = policyBindingId(body)
+    const claimId = makeClaimId(policyId, holderKey, evidenceHash, filedAt, 'aa')
+    const { signature } = await wallet.createSignature({
+      data: canonicalClaimBytes({
+        policyId,
+        claimId,
+        holder: holderKey,
+        evidenceHash,
+        payoutSats: 100_000,
+        filedAt
+      }),
+      protocolID: PROTOCOL_ID,
+      keyID: SIGNING_KEY_ID,
+      counterparty: 'self'
+    })
+    const signedPolicy = {
+      ...policyItem(),
+      payload: {
+        ...policyItem().payload,
+        ...body,
+        policyId
+      }
+    }
     const foreign = {
       ...policyItem(),
       payload: { ...policyItem().payload, magic: 'registry' },
       txid: '22'.repeat(32)
     } as OverlayItem
     const view = viewFromItems([
-      policyItem(),
+      signedPolicy,
       foreign,
       {
         payload: {
           magic: MAGIC,
           version: '1',
           kind: 'claim',
-          policyId: POLICY_ID,
+          policyId,
           claimId,
-          holder: HOLDER,
+          holder: holderKey,
           evidenceHash,
           payoutSats: 100_000,
-          filedAt: '2026-09-29T15:00:00Z'
+          filedAt,
+          signature: bytesToHex(signature)
         },
         txid: '33'.repeat(32),
         outputIndex: 1
@@ -93,7 +146,7 @@ describe('client MAGIC filter', () => {
           magic: MAGIC,
           version: '1',
           kind: 'release',
-          policyId: POLICY_ID,
+          policyId,
           claimId,
           payoutSats: 100_000,
           claimAdminFeeSats: CLAIM_ADMIN_FEE_SATS,
@@ -103,7 +156,7 @@ describe('client MAGIC filter', () => {
         txid: '44'.repeat(32),
         outputIndex: 0
       }
-    ], POLICY_ID)
+    ], policyId)
     expect(view.policy?.subject).toBe('Spring fair')
     expect(view.policy?.premiumCutSats).toBe(300)
     expect(view.claims).toHaveLength(1)

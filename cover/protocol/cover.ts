@@ -1,11 +1,13 @@
+import { BigNumber, ECDSA, Hash, PublicKey, Signature } from '@bsv/sdk'
 import { sha256Bytes, sha256Hex } from './sha256'
 
 /**
  * Cover desk protocol (PushDrop / BRC-48 fields).
  *
  * Buy cover against one operational risk. The policy is an overlay record.
- * A claim carries an evidence hash. Named approvers each post an approval.
- * When quorum is met, a release record names the payout. MAGIC `cover`.
+ * A claim carries an evidence hash. Named approvers each sign an approval.
+ * When quorum is met, a release record names the payout and is signed too.
+ * MAGIC `cover`.
  * Public Pages uses tm_anytx / ls_anytx. Client filters on MAGIC.
  *
  * v0 pays the premium (split into a labeled premium cut and the rest) and
@@ -18,6 +20,8 @@ import { sha256Bytes, sha256Hex } from './sha256'
  */
 
 export const PROTOCOL_ID: [0, string] = [0, 'cover']
+/** BRC-42 key id for createSignature / getPublicKey. counterparty is `self`. */
+export const SIGNING_KEY_ID = 'cover'
 export const BASKET = 'cover'
 export const MAGIC = 'cover'
 export const SCHEMA_VERSION = '1'
@@ -102,6 +106,7 @@ export interface ClaimRecord {
   evidenceHash: string
   payoutSats: number
   filedAt: string
+  signature: string
 }
 
 export interface ApprovalRecord {
@@ -112,6 +117,7 @@ export interface ApprovalRecord {
   claimId: string
   signer: string
   approvedAt: string
+  signature: string
 }
 
 export interface ReleaseRecord {
@@ -124,6 +130,7 @@ export interface ReleaseRecord {
   claimAdminFeeSats: number
   releaser: string
   releasedAt: string
+  signature: string
 }
 
 export type CoverPayload = PolicyRecord | ClaimRecord | ApprovalRecord | ReleaseRecord
@@ -211,10 +218,71 @@ export function isIsoDateTime(value: string): boolean {
   return !Number.isNaN(new Date(trimmed).getTime())
 }
 
-export function newPolicyId(): string {
-  const bytes = new Uint8Array(16)
-  crypto.getRandomValues(bytes)
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+export function policyBindingId(record: {
+  coverKind: string
+  subject: string
+  holder: string
+  desk: string
+  insuredSats: number
+  termDays: number
+  premiumSats: number
+  premiumCutSats: number
+  quorum: number
+  approver1: string
+  approver2: string
+  approver3: string
+  boughtAt: string
+  endsAt: string
+}): string {
+  const body = JSON.stringify({
+    v: 1,
+    coverKind: record.coverKind,
+    subject: record.subject.trim(),
+    holder: record.holder.trim().toLowerCase(),
+    desk: record.desk.trim().toLowerCase(),
+    insuredSats: record.insuredSats,
+    termDays: record.termDays,
+    premiumSats: record.premiumSats,
+    premiumCutSats: record.premiumCutSats,
+    quorum: record.quorum,
+    approver1: record.approver1.trim().toLowerCase(),
+    approver2: record.approver2.trim().toLowerCase(),
+    approver3: record.approver3.trim().toLowerCase(),
+    boughtAt: record.boughtAt,
+    endsAt: record.endsAt
+  })
+  return sha256Hex(body).slice(0, 32)
+}
+
+export function bytesToHex(bytes: number[]): string {
+  return bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+export function hexToBytes(value: string): number[] | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim().toLowerCase()
+  if (!/^[0-9a-f]+$/.test(trimmed) || trimmed.length < 16 || trimmed.length % 2 !== 0) return null
+  const out: number[] = []
+  for (let index = 0; index < trimmed.length; index += 2) {
+    out.push(Number.parseInt(trimmed.slice(index, index + 2), 16))
+  }
+  return out
+}
+
+/** BRC-100 createSignature({ data }) hashes once with SHA-256 before ECDSA. */
+export function verifyWalletDataSignature(
+  derivedPubkey: string,
+  data: number[],
+  derSignature: number[]
+): boolean {
+  try {
+    const hash = Hash.sha256(data)
+    const key = PublicKey.fromString(derivedPubkey)
+    const signature = Signature.fromDER(derSignature)
+    return ECDSA.verify(new BigNumber(hash), signature, key)
+  } catch {
+    return false
+  }
 }
 
 export function nowIso(from = new Date()): string {
@@ -271,8 +339,69 @@ export function parseTermDays(value: string | number): number | null {
 
 export function parseQuorum(value: string | number): number | null {
   const parsed = typeof value === 'number' ? value : Number(value.trim())
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > APPROVER_COUNT) return null
+  if (!Number.isInteger(parsed) || parsed < 2 || parsed > APPROVER_COUNT) return null
   return parsed
+}
+
+export function canonicalClaimBytes(
+  record: Pick<ClaimRecord, 'policyId' | 'claimId' | 'holder' | 'evidenceHash' | 'payoutSats' | 'filedAt'>
+): number[] {
+  return stringToUtf8Bytes(JSON.stringify({
+    v: 1,
+    kind: 'claim',
+    policyId: record.policyId.trim().toLowerCase(),
+    claimId: record.claimId.trim().toLowerCase(),
+    holder: record.holder.trim().toLowerCase(),
+    evidenceHash: record.evidenceHash.trim().toLowerCase(),
+    payoutSats: record.payoutSats,
+    filedAt: record.filedAt
+  }))
+}
+
+export function canonicalApprovalBytes(
+  record: Pick<ApprovalRecord, 'policyId' | 'claimId' | 'signer' | 'approvedAt'>
+): number[] {
+  return stringToUtf8Bytes(JSON.stringify({
+    v: 1,
+    kind: 'approval',
+    policyId: record.policyId.trim().toLowerCase(),
+    claimId: record.claimId.trim().toLowerCase(),
+    signer: record.signer.trim().toLowerCase(),
+    approvedAt: record.approvedAt
+  }))
+}
+
+export function canonicalReleaseBytes(
+  record: Pick<ReleaseRecord, 'policyId' | 'claimId' | 'payoutSats' | 'claimAdminFeeSats' | 'releaser' | 'releasedAt'>
+): number[] {
+  return stringToUtf8Bytes(JSON.stringify({
+    v: 1,
+    kind: 'release',
+    policyId: record.policyId.trim().toLowerCase(),
+    claimId: record.claimId.trim().toLowerCase(),
+    payoutSats: record.payoutSats,
+    claimAdminFeeSats: record.claimAdminFeeSats,
+    releaser: record.releaser.trim().toLowerCase(),
+    releasedAt: record.releasedAt
+  }))
+}
+
+export function claimSignatureOk(record: ClaimRecord): boolean {
+  const der = hexToBytes(record.signature)
+  if (!der) return false
+  return verifyWalletDataSignature(record.holder.trim(), canonicalClaimBytes(record), der)
+}
+
+export function approvalSignatureOk(record: ApprovalRecord): boolean {
+  const der = hexToBytes(record.signature)
+  if (!der) return false
+  return verifyWalletDataSignature(record.signer.trim(), canonicalApprovalBytes(record), der)
+}
+
+export function releaseSignatureOk(record: ReleaseRecord): boolean {
+  const der = hexToBytes(record.signature)
+  if (!der) return false
+  return verifyWalletDataSignature(record.releaser.trim(), canonicalReleaseBytes(record), der)
 }
 
 export function quoteCover(kind: CoverKind, insuredSats: number, termDays: number): CoverQuote {
@@ -297,10 +426,6 @@ export function isHolder(policy: Pick<PolicyRecord, 'holder'>, identityKey: stri
   return sameIdentity(policy.holder, identityKey)
 }
 
-export function isDesk(policy: Pick<PolicyRecord, 'desk'>, identityKey: string): boolean {
-  return sameIdentity(policy.desk, identityKey)
-}
-
 export function isApprover(
   policy: Pick<PolicyRecord, 'approver1' | 'approver2' | 'approver3'>,
   identityKey: string
@@ -308,6 +433,7 @@ export function isApprover(
   return approverKeys(policy).some((key) => sameIdentity(key, identityKey))
 }
 
+/** Trim the note, then sha256 it. Leading and trailing whitespace is not part of the mark. */
 export function hashEvidenceText(text: string): string {
   const trimmed = text.trim()
   if (!trimmed) throw new Error('Paste what happened, or pick a file. Nothing is uploaded.')
@@ -355,12 +481,16 @@ export function validatePolicy(record: PolicyRecord): string | null {
   const quote = quoteCover(record.coverKind, record.insuredSats, record.termDays)
   if (record.premiumSats !== quote.premiumSats) return 'Premium does not match the quote.'
   if (record.premiumCutSats !== quote.premiumCutSats) return 'Premium cut does not match the quote.'
-  if (parseQuorum(record.quorum) !== record.quorum) return 'Approvals needed must be 1, 2, or 3.'
+  if (parseQuorum(record.quorum) !== record.quorum) return 'Approvals needed must be 2 or 3.'
   for (const key of approverKeys(record)) {
     if (!isIdentityKey(key)) return 'Approver identity is missing.'
   }
   const lowered = approverKeys(record).map((key) => key.toLowerCase())
   if (new Set(lowered).size !== APPROVER_COUNT) return 'Name three different approvers.'
+  if (lowered.includes(record.holder.trim().toLowerCase())) return 'The holder can’t be an approver.'
+  if (record.policyId.trim().toLowerCase() !== policyBindingId(record)) {
+    return 'Policy id does not match this policy.'
+  }
   if (!isIsoDateTime(record.boughtAt)) return 'Bought time is missing.'
   if (!isIsoDateTime(record.endsAt)) return 'Term end is missing.'
   if (record.endsAt !== endsAtFrom(record.boughtAt, record.termDays)) {
@@ -380,6 +510,7 @@ export function validateClaim(record: ClaimRecord): string | null {
     return 'Payout must be a whole number of sats.'
   }
   if (!isIsoDateTime(record.filedAt)) return 'Filed time is missing.'
+  if (!claimSignatureOk(record)) return 'This claim is not signed by the holder.'
   return null
 }
 
@@ -390,6 +521,7 @@ export function validateApproval(record: ApprovalRecord): string | null {
   if (!isRecordId(record.claimId)) return 'Claim id is missing.'
   if (!isIdentityKey(record.signer)) return 'Approver identity is missing.'
   if (!isIsoDateTime(record.approvedAt)) return 'Approved time is missing.'
+  if (!approvalSignatureOk(record)) return 'This approval is not signed by that approver.'
   return null
 }
 
@@ -404,6 +536,7 @@ export function validateRelease(record: ReleaseRecord): string | null {
   if (record.claimAdminFeeSats !== CLAIM_ADMIN_FEE_SATS) return 'Claim-admin fee does not match.'
   if (!isIdentityKey(record.releaser)) return 'Releaser identity is missing.'
   if (!isIsoDateTime(record.releasedAt)) return 'Released time is missing.'
+  if (!releaseSignatureOk(record)) return 'This release is not signed by that releaser.'
   return null
 }
 
@@ -454,7 +587,8 @@ export function encodeClaimFields(
     record.holder,
     record.evidenceHash.toLowerCase(),
     String(record.payoutSats),
-    record.filedAt
+    record.filedAt,
+    record.signature.trim().toLowerCase()
   ])
 }
 
@@ -471,7 +605,8 @@ export function encodeApprovalFields(
     record.policyId,
     record.claimId,
     record.signer,
-    record.approvedAt
+    record.approvedAt,
+    record.signature.trim().toLowerCase()
   ])
 }
 
@@ -490,7 +625,8 @@ export function encodeReleaseFields(
     String(record.payoutSats),
     String(record.claimAdminFeeSats),
     record.releaser,
-    record.releasedAt
+    record.releasedAt,
+    record.signature.trim().toLowerCase()
   ])
 }
 
@@ -570,7 +706,7 @@ export function parseCoverFields(fields: Array<number[] | Uint8Array>): CoverPay
       })
     }
     if (kind === 'claim') {
-      if (rest.length < 8) return null
+      if (rest.length < 9) return null
       const payoutSats = integerAt(rest[6])
       if (payoutSats === null) return null
       return claimFromParts({
@@ -579,20 +715,22 @@ export function parseCoverFields(fields: Array<number[] | Uint8Array>): CoverPay
         holder: rest[4],
         evidenceHash: rest[5].toLowerCase(),
         payoutSats,
-        filedAt: rest[7]
+        filedAt: rest[7],
+        signature: rest[8].toLowerCase()
       })
     }
     if (kind === 'approval') {
-      if (rest.length < 6) return null
+      if (rest.length < 7) return null
       return approvalFromParts({
         policyId: rest[2].toLowerCase(),
         claimId: rest[3].toLowerCase(),
         signer: rest[4],
-        approvedAt: rest[5]
+        approvedAt: rest[5],
+        signature: rest[6].toLowerCase()
       })
     }
     if (kind === 'release') {
-      if (rest.length < 8) return null
+      if (rest.length < 9) return null
       const payoutSats = integerAt(rest[4])
       const claimAdminFeeSats = integerAt(rest[5])
       if (payoutSats === null || claimAdminFeeSats === null) return null
@@ -602,7 +740,8 @@ export function parseCoverFields(fields: Array<number[] | Uint8Array>): CoverPay
         payoutSats,
         claimAdminFeeSats,
         releaser: rest[6],
-        releasedAt: rest[7]
+        releasedAt: rest[7],
+        signature: rest[8].toLowerCase()
       })
     }
     return null
@@ -615,7 +754,7 @@ export function listPolicies<T extends Pick<PolicyRecord, 'policyId' | 'boughtAt
   const byId = new Map<string, T>()
   for (const row of rows) {
     const prev = byId.get(row.policyId)
-    if (!prev || row.boughtAt > prev.boughtAt) byId.set(row.policyId, row)
+    if (!prev || row.boughtAt < prev.boughtAt) byId.set(row.policyId, row)
   }
   return [...byId.values()].sort((left, right) => right.boughtAt.localeCompare(left.boughtAt))
 }
@@ -629,6 +768,7 @@ export function acceptedApprovals(
   const unique: ApprovalRecord[] = []
   const rows = approvals
     .filter((row) => row.policyId === policy.policyId && row.claimId === claim.claimId)
+    .filter((row) => approvalSignatureOk(row))
     .filter((row) => isApprover(policy, row.signer))
     .sort((left, right) => left.approvedAt.localeCompare(right.approvedAt))
   for (const row of rows) {
@@ -646,14 +786,14 @@ export function admitRelease(
   approvals: ApprovalRecord[],
   release: ReleaseRecord
 ): ReleaseRecord | null {
-  if (validateRelease(release)) return null
+  if (validatePolicy(policy) || validateClaim(claim) || validateRelease(release)) return null
   if (release.policyId !== policy.policyId || release.claimId !== claim.claimId) return null
   if (release.payoutSats !== claim.payoutSats) return null
+  if (claim.filedAt < policy.boughtAt || claim.filedAt > policy.endsAt) return null
   const prior = acceptedApprovals(policy, claim, approvals)
     .filter((row) => row.approvedAt <= release.releasedAt)
   if (prior.length < policy.quorum) return null
-  const releaserOk = isDesk(policy, release.releaser)
-    || prior.some((row) => sameIdentity(row.signer, release.releaser))
+  const releaserOk = prior.some((row) => sameIdentity(row.signer, release.releaser))
   if (!releaserOk) return null
   return release
 }
@@ -664,10 +804,13 @@ export function foldClaims(
   approvals: ApprovalRecord[],
   releases: ReleaseRecord[]
 ): FoldedClaim[] {
+  if (validatePolicy(policy)) return []
   const rows = claims
+    .filter((claim) => claimSignatureOk(claim))
     .filter((claim) => claim.policyId === policy.policyId)
     .filter((claim) => sameIdentity(claim.holder, policy.holder))
     .filter((claim) => claim.payoutSats <= policy.insuredSats)
+    .filter((claim) => claim.filedAt >= policy.boughtAt && claim.filedAt <= policy.endsAt)
     .sort((left, right) => left.filedAt.localeCompare(right.filedAt))
 
   return rows.map((claim) => {

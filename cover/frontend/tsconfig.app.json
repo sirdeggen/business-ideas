@@ -20,7 +20,7 @@
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
     "paths": {
-      "@bsv/sdk": ["./node_modules/@bsv/sdk"]
+      "@bsv/sdk": ["./node_modules/@bsv/sdk/dist/types/mod.d.ts"]
     }
   },
   "include": [

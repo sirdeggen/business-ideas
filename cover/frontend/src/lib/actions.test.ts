@@ -72,6 +72,8 @@ describe('buy / claim / release gates', () => {
   it('rejects three approvers that are not distinct', () => {
     expect(() => assertCanBuy({ ...input, approver3: A1 }, HOLDER)).toThrow(NEED_APPROVERS)
     expect(() => assertCanBuy({ ...input, approver1: '' }, HOLDER)).toThrow(NEED_APPROVERS)
+    expect(() => assertCanBuy({ ...input, approver1: HOLDER }, HOLDER)).toThrow(/holder/i)
+    expect(() => assertCanBuy({ ...input, quorum: '1' }, HOLDER)).toThrow(/2 or 3/)
   })
 
   it('lets only the holder file, and release only after quorum', () => {
@@ -97,7 +99,8 @@ describe('buy / claim / release gates', () => {
         holder: HOLDER,
         evidenceHash: filed.evidenceHash,
         payoutSats: filed.payoutSats,
-        filedAt: filed.filedAt
+        filedAt: filed.filedAt,
+        signature: 'aa'
       },
       approvals: [],
       release: null,
@@ -118,7 +121,8 @@ describe('buy / claim / release gates', () => {
           policyId: policy.policyId,
           claimId: folded.claim.claimId,
           signer: A1,
-          approvedAt: '2026-09-29T16:00:00Z'
+          approvedAt: '2026-09-29T16:00:00Z',
+          signature: 'aa'
         },
         {
           magic: 'cover',
@@ -127,11 +131,13 @@ describe('buy / claim / release gates', () => {
           policyId: policy.policyId,
           claimId: folded.claim.claimId,
           signer: A2,
-          approvedAt: '2026-09-29T17:00:00Z'
+          approvedAt: '2026-09-29T17:00:00Z',
+          signature: 'bb'
         }
       ]
     }
-    expect(assertCanRelease(policy, agreed, DESK)).toEqual({
+    expect(() => assertCanRelease(policy, agreed, DESK)).toThrow()
+    expect(assertCanRelease(policy, agreed, A1)).toEqual({
       payoutSats: 50_000,
       claimAdminFeeSats: CLAIM_ADMIN_FEE_SATS
     })
@@ -142,6 +148,8 @@ describe('buy / claim / release gates', () => {
   it('labels the premium cut and the claim-admin fee in the wallet outputs', () => {
     expect(actionsSrc).toContain('Premium cut (desk fee)')
     expect(actionsSrc).toContain('Claim-admin fee')
+    expect(actionsSrc).toContain('EVIDENCE_FILE_MAX')
+    expect(actionsSrc).toContain('createSignature')
     expect(actionsSrc).not.toMatch(/USDC|x402|ETH|Solana|Lightning/i)
   })
 })

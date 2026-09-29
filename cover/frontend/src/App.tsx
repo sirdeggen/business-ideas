@@ -28,13 +28,16 @@ import {
 import {
   APPROVE_BUTTON,
   APPROVE_JOB,
+  APPROVER_HINT,
   APPROVING_BUTTON,
   BUY_BUTTON,
   BUYING_BUTTON,
   BUY_JOB,
   CLAIM_ADMIN_LABEL,
+  DESK_DEFAULT,
   DISTINCT_LINE,
   EMPTY_LIST,
+  EVIDENCE_TRIM,
   EXPORT_BUTTON,
   EYEBROW,
   FEE_FACE,
@@ -49,6 +52,7 @@ import {
   PREMIUM_LABEL,
   PRODUCT,
   QUOTE_WAIT,
+  RECORDED_ONLY,
   RELEASED_WORD,
   RELEASE_BUTTON,
   RELEASE_JOB,
@@ -460,7 +464,6 @@ function Shell() {
                 <div className="field">
                   <label htmlFor="quorum">Approvals needed</label>
                   <select id="quorum" value={quorum} onChange={(event) => setQuorum(event.target.value)}>
-                    <option value="1">1 of 3</option>
                     <option value="2">2 of 3</option>
                     <option value="3">3 of 3</option>
                   </select>
@@ -471,7 +474,7 @@ function Shell() {
                     id="approver-1"
                     value={approver1}
                     onChange={(event) => setApprover1(event.target.value)}
-                    placeholder="Identity key"
+                    placeholder="02 then 64 hex characters"
                   />
                 </div>
                 <div className="field">
@@ -480,7 +483,7 @@ function Shell() {
                     id="approver-2"
                     value={approver2}
                     onChange={(event) => setApprover2(event.target.value)}
-                    placeholder="Identity key"
+                    placeholder="02 then 64 hex characters"
                   />
                 </div>
                 <div className="field">
@@ -489,10 +492,11 @@ function Shell() {
                     id="approver-3"
                     value={approver3}
                     onChange={(event) => setApprover3(event.target.value)}
-                    placeholder="Identity key"
+                    placeholder="02 then 64 hex characters"
                   />
                 </div>
               </div>
+              <p className="helper">{APPROVER_HINT}</p>
               {quote ? (
                 <dl className="quote">
                   <div>
@@ -508,6 +512,8 @@ function Shell() {
                 <p className="helper">{QUOTE_WAIT}</p>
               )}
               <p className="helper">{FEE_FACE}</p>
+              <p className="helper">{DESK_DEFAULT}</p>
+              <p className="helper">{RECORDED_ONLY}</p>
               <p className="helper">{DISTINCT_LINE}</p>
               <div className="actions">
                 <button
@@ -622,7 +628,7 @@ function Shell() {
                       setFileNote('')
                     }}
                     rows={4}
-                    placeholder="Paste a note. Or pick a file. Nothing is uploaded."
+                    placeholder="Paste a note. Or pick a file. Nothing is uploaded. The note is trimmed before hashing."
                   />
                 </div>
                 <div className="field">
@@ -644,7 +650,9 @@ function Shell() {
                 </div>
               </div>
               {evidenceNote && <p className="helper">{evidenceNote}</p>}
+              <p className="helper">{EVIDENCE_TRIM}</p>
               <p className="helper">{claimAdminFace()}</p>
+              <p className="helper">{RECORDED_ONLY}</p>
               <div className="actions">
                 <button
                   type="button"
@@ -663,6 +671,7 @@ function Shell() {
               <p className="job">{APPROVE_JOB}</p>
               <p className="helper">{approvalLine(folded.approvalCount, policy.quorum)}</p>
               <p className="helper">{claimAdminFace()}</p>
+              <p className="helper">{RECORDED_ONLY}</p>
               <div className="actions">
                 <button
                   type="button"
