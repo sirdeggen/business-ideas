@@ -328,12 +328,18 @@ export async function buyPack(
   return { pack, txid: done.txid, overlayError }
 }
 
-function priorFor(usages: InferenceUsage[], packId: string): InferenceUsage[] {
-  return receiptsForPack(usages, packId)
+function priorFor(
+  usages: InferenceUsage[],
+  pack: Pick<InferencePack, 'packId' | 'buyer'>
+): InferenceUsage[] {
+  return receiptsForPack(usages, pack.packId, pack.buyer)
 }
 
-export function packBalance(pack: Pick<InferencePack, 'packId' | 'packTotal'>, usages: InferenceUsage[]): number {
-  return meterRemaining(pack.packTotal, priorFor(usages, pack.packId))
+export function packBalance(
+  pack: Pick<InferencePack, 'packId' | 'packTotal' | 'buyer'>,
+  usages: InferenceUsage[]
+): number {
+  return meterRemaining(pack.packTotal, priorFor(usages, pack))
 }
 
 async function publishUsage(
@@ -438,7 +444,7 @@ export async function usePack(
     buyer: identityKey,
     callSats: row.offer.callSats,
     pack: open.pack,
-    prior: priorFor(usages, open.pack.packId),
+    prior: priorFor(usages, open.pack),
     prompt: input.prompt.trim(),
     response: responseText,
     timestamp: nowIso()

@@ -9,17 +9,22 @@ import {
   TOPIC,
   attestationFor,
   buildUsage,
+  dedupeUsages,
   demoOffer,
   demoPack,
   encodeOfferFields,
   encodePackFields,
   encodeUsageFields,
+  makePackId,
   meterRemaining,
   mockInference,
   parseInferenceFields,
+  receiptsForPack,
   responseDigest,
+  validatePack,
   verifyReceiptChain,
   verifyUsage,
+  type InferencePack,
   type InferenceUsage
 } from './inference'
 
@@ -217,5 +222,142 @@ describe('inference desk protocol', () => {
     const foreign = encodeOfferFields(demoOffer())
     foreign[0] = Array.from(new TextEncoder().encode('feed'))
     expect(parseInferenceFields(foreign)).toBeNull()
+  })
+
+  it('counts a usageId once when local state and the overlay both have it', () => {
+    const offer = demoOffer()
+    const pack: InferencePack = {
+      ...demoPack(),
+      offerId: offer.offerId,
+      buyer: BUYER,
+      provider: PROVIDER,
+      packTotal: 5000,
+      paidSats: 4000
+    }
+    const first = chainUsage(offer.offerId, pack, [], 'one', WHEN)
+    const fromOverlay = { ...first.usage }
+    const merged = dedupeUsages([first.usage, fromOverlay])
+    const folded = receiptsForPack([first.usage, fromOverlay], pack.packId, pack.buyer)
+    expect(merged).toHaveLength(1)
+    expect(folded).toHaveLength(1)
+    expect(meterRemaining(pack.packTotal, [first.usage, fromOverlay])).toBe(4000)
+
+    const response = mockInference('desk-note', 'two')
+    const second = buildUsage({
+      offerId: offer.offerId,
+      provider: PROVIDER,
+      buyer: BUYER,
+      callSats: DEMO_CALL_SATS,
+      pack,
+      prior: [first.usage, fromOverlay],
+      prompt: 'two',
+      response,
+      timestamp: '2026-09-29T12:01:00Z'
+    })
+    expect(second.remaining).toBe(3000)
+    expect(verifyUsage({
+      response,
+      usage: second,
+      previous: first.usage,
+      pack
+    })).toBeNull()
+  })
+
+  it('ignores a receipt from another pack or another buyer', () => {
+    const offer = demoOffer()
+    const pack: InferencePack = {
+      ...demoPack(),
+      offerId: offer.offerId,
+      buyer: BUYER,
+      provider: PROVIDER,
+      packTotal: 5000,
+      paidSats: 4000
+    }
+    const mine = chainUsage(offer.offerId, pack, [], 'mine', '2026-09-29T12:00:00Z')
+    const otherPackId = makePackId(BUYER, offer.offerId, WHEN, 'other')
+    const otherResponse = mockInference('desk-note', 'other')
+    const other = buildUsage({
+      offerId: offer.offerId,
+      provider: PROVIDER,
+      buyer: BUYER,
+      callSats: DEMO_CALL_SATS,
+      pack: { packId: otherPackId, packTotal: 5000 },
+      prior: [],
+      prompt: 'other',
+      response: otherResponse,
+      timestamp: '2026-09-29T12:00:30Z'
+    })
+    expect(receiptsForPack([mine.usage, other], pack.packId, BUYER).map((row) => row.usageId)).toEqual([
+      mine.usage.usageId
+    ])
+    expect(verifyUsage({
+      response: otherResponse,
+      usage: other,
+      previous: null,
+      pack
+    })).toBe('pack does not match the receipt')
+
+    const stranger = `02${'ee'.repeat(32)}`
+    const strangerResponse = mockInference('desk-note', 'stranger')
+    const strangerUsage = buildUsage({
+      offerId: offer.offerId,
+      provider: PROVIDER,
+      buyer: stranger,
+      callSats: DEMO_CALL_SATS,
+      pack,
+      prior: [],
+      prompt: 'stranger',
+      response: strangerResponse,
+      timestamp: '2026-09-29T11:00:00Z'
+    })
+    expect(receiptsForPack([strangerUsage, mine.usage], pack.packId, BUYER).map((row) => row.usageId)).toEqual([
+      mine.usage.usageId
+    ])
+    expect(meterRemaining(pack.packTotal, receiptsForPack([strangerUsage, mine.usage], pack.packId, BUYER))).toBe(4000)
+    expect(verifyUsage({
+      response: strangerResponse,
+      usage: strangerUsage,
+      previous: null,
+      pack
+    })).toBe('receipt buyer does not match the pack')
+  })
+
+  it('refuses an over-spend and floors the meter at zero', () => {
+    const offer = demoOffer()
+    const pack: InferencePack = {
+      ...demoPack(),
+      offerId: offer.offerId,
+      buyer: BUYER,
+      provider: PROVIDER,
+      packTotal: 5000,
+      paidSats: 4000
+    }
+    const prior: InferenceUsage[] = []
+    for (let step = 0; step < 5; step++) {
+      const next = chainUsage(
+        offer.offerId,
+        pack,
+        prior,
+        `call-${step}`,
+        `2026-09-29T12:0${step}:00Z`
+      )
+      prior.push(next.usage)
+    }
+    expect(meterRemaining(pack.packTotal, prior)).toBe(0)
+    expect(meterRemaining(1000, [{ sats: 1500 }])).toBe(0)
+    expect(meterRemaining(pack.packTotal, [...prior, prior[4]])).toBe(0)
+    expect(() => buildUsage({
+      offerId: offer.offerId,
+      provider: PROVIDER,
+      buyer: BUYER,
+      callSats: DEMO_CALL_SATS,
+      pack,
+      prior,
+      prompt: 'one more',
+      response: mockInference('desk-note', 'one more'),
+      timestamp: '2026-09-29T12:06:00Z'
+    })).toThrow('pack balance is too low')
+    expect(validatePack({ ...pack, packTotal: 100, paidSats: 500 })).toBe('pack total is below what was paid')
+    expect(validatePack({ ...pack, packTotal: 4000, paidSats: 4000 })).toBeNull()
   })
 })
