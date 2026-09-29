@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   BUSINESS_CASE_DEMO,
   BUSINESS_CASE_MARKET,
@@ -9,9 +10,14 @@ import {
 } from './lib/copy'
 
 export function BusinessCase() {
+  const [expanded, setExpanded] = useState(true)
   return (
-    <section className="business-case" aria-labelledby="business-case-heading">
-      <h2 id="business-case-heading">{BUSINESS_CASE_TITLE}</h2>
+    <details
+      className="business-case"
+      open={expanded}
+      onToggle={(event) => setExpanded(event.currentTarget.open)}
+    >
+      <summary id="business-case-heading">{BUSINESS_CASE_TITLE}</summary>
       <dl>
         <div>
           <dt>Why it exists</dt>
@@ -41,6 +47,6 @@ export function BusinessCase() {
           <dd>{BUSINESS_CASE_DEMO}</dd>
         </div>
       </dl>
-    </section>
+    </details>
   )
 }
