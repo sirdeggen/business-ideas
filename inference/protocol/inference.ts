@@ -174,6 +174,20 @@ export function packTotalFor(offer: Pick<InferenceOffer, 'callSats' | 'packCalls
   return offer.callSats * offer.packCalls
 }
 
+/**
+ * Second-resolution stamp. A later receipt in the same second gets the next
+ * fraction so the two still sort in call order.
+ */
+export function usageTimestamp(previous: string | null, now = new Date()): string {
+  const second = now.toISOString().slice(0, 19)
+  const base = `${second}Z`
+  if (!previous || !previous.startsWith(second)) return base
+  const match = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.(\d{1,3}))?Z$/.exec(previous)
+  const frac = match?.[1] ? Number(match[1].padEnd(3, '0')) : 0
+  const next = Math.min(999, frac + 1)
+  return `${second}.${String(next).padStart(3, '0')}Z`
+}
+
 /** Collapse the same usageId so a local copy and an overlay copy are one receipt. */
 export function dedupeUsages<T extends { usageId: string }>(usages: T[]): T[] {
   const byId = new Map<string, T>()
@@ -452,10 +466,36 @@ export interface BuildUsageInput {
   buyer: string
   callSats: number
   pack: Pick<InferencePack, 'packId' | 'packTotal'> | null
-  prior: Array<Pick<InferenceUsage, 'usageId' | 'sats' | 'timestamp'>>
+  prior: Array<Pick<InferenceUsage, 'usageId' | 'sats' | 'timestamp' | 'prevHash'>>
   prompt: string
   response: string
   timestamp: string
+}
+
+function receiptTip(
+  prior: Array<Pick<InferenceUsage, 'usageId' | 'timestamp' | 'prevHash'>>,
+  anchor: string
+): Pick<InferenceUsage, 'usageId' | 'timestamp' | 'prevHash'> | undefined {
+  if (prior.length === 0) return undefined
+  const byPrev = new Map<string, (typeof prior)[number]>()
+  const ordered = [...prior].sort((a, b) => (
+    a.timestamp.localeCompare(b.timestamp) || a.usageId.localeCompare(b.usageId)
+  ))
+  for (const row of ordered) {
+    if (!byPrev.has(row.prevHash)) byPrev.set(row.prevHash, row)
+  }
+  let cursor = anchor
+  let tip: (typeof prior)[number] | undefined
+  const seen = new Set<string>()
+  while (!seen.has(cursor)) {
+    const next = byPrev.get(cursor)
+    if (!next) break
+    seen.add(cursor)
+    tip = next
+    cursor = next.usageId
+  }
+  if (tip) return tip
+  return ordered[ordered.length - 1]
 }
 
 export function buildUsage(input: BuildUsageInput): InferenceUsage {
@@ -471,9 +511,9 @@ export function buildUsage(input: BuildUsageInput): InferenceUsage {
   const spent = prior.reduce((sum, row) => sum + row.sats, 0)
   const remaining = input.pack ? input.pack.packTotal - spent - input.callSats : 0
   if (input.pack && remaining < 0) throw new Error('pack balance is too low')
-  const ordered = [...prior].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-  const tip = ordered[ordered.length - 1]
-  const prevHash = tip ? tip.usageId : (input.pack ? input.pack.packId : GENESIS)
+  const anchor = input.pack ? input.pack.packId : GENESIS
+  const tip = receiptTip(prior, anchor)
+  const prevHash = tip ? tip.usageId : anchor
   const packId = input.pack ? input.pack.packId : GENESIS
   const attestation = attestationFor({
     provider: input.provider,
@@ -602,10 +642,16 @@ export function receiptsForPack(
     return true
   }))
   unique.sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.usageId.localeCompare(b.usageId))
+  const byPrev = new Map<string, InferenceUsage>()
+  for (const usage of unique) {
+    if (!byPrev.has(usage.prevHash)) byPrev.set(usage.prevHash, usage)
+  }
   const linked: InferenceUsage[] = []
   let prev = packId
-  for (const usage of unique) {
-    if (usage.prevHash !== prev) continue
+  const seen = new Set<string>()
+  while (byPrev.has(prev) && !seen.has(prev)) {
+    seen.add(prev)
+    const usage = byPrev.get(prev)!
     linked.push(usage)
     prev = usage.usageId
   }

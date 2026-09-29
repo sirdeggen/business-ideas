@@ -22,6 +22,7 @@ import {
   meterRemaining,
   mockInference,
   packTotalFor,
+  usageTimestamp,
   receiptsForPack,
   validateLabel,
   validateModel,
@@ -88,8 +89,11 @@ function pushdrop(wallet: WalletClient): PushDrop {
   return new PushDrop(wallet, originator())
 }
 
+let lastStamp: string | null = null
+
 function nowIso(): string {
-  return new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')
+  lastStamp = usageTimestamp(lastStamp)
+  return lastStamp
 }
 
 export function parseWhole(raw: string): number | null {

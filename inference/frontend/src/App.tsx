@@ -701,7 +701,7 @@ function Shell() {
           )}
           <label htmlFor="overlay-url">Overlay URL</label>
           <input id="overlay-url" value={url} onChange={(event) => setUrl(event.target.value)} />
-          <p>Operators can point this at a local indexer. Topic stays the public any-tx rail.</p>
+          <p>Operators can point this at a local indexer. Topic stays the public overlay.</p>
         </details>
 
         <p className="fine-print">{FOOTER}</p>

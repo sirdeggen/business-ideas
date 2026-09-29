@@ -21,6 +21,7 @@ import {
   parseInferenceFields,
   receiptsForPack,
   responseDigest,
+  usageTimestamp,
   validatePack,
   verifyReceiptChain,
   verifyUsage,
@@ -359,5 +360,48 @@ describe('inference desk protocol', () => {
     })).toThrow('pack balance is too low')
     expect(validatePack({ ...pack, packTotal: 100, paidSats: 500 })).toBe('pack total is below what was paid')
     expect(validatePack({ ...pack, packTotal: 4000, paidSats: 4000 })).toBeNull()
+  })
+
+  it('orders two receipts from the same second by the chain, then by a later fraction', () => {
+    const now = new Date('2026-09-29T12:00:00.500Z')
+    const firstStamp = usageTimestamp(null, now)
+    const secondStamp = usageTimestamp(firstStamp, now)
+    const nextSecond = usageTimestamp(secondStamp, new Date('2026-09-29T12:00:01.100Z'))
+    expect(firstStamp).toBe('2026-09-29T12:00:00Z')
+    expect(secondStamp).toBe('2026-09-29T12:00:00.001Z')
+    expect(nextSecond).toBe('2026-09-29T12:00:01Z')
+    expect(Date.parse(secondStamp)).toBeGreaterThan(Date.parse(firstStamp))
+
+    const offer = demoOffer()
+    const pack: InferencePack = {
+      ...demoPack(),
+      offerId: offer.offerId,
+      buyer: BUYER,
+      provider: PROVIDER,
+      packTotal: 5000,
+      paidSats: 4000
+    }
+    const first = chainUsage(offer.offerId, pack, [], 'one', firstStamp)
+    const second = chainUsage(offer.offerId, pack, [first.usage], 'two', firstStamp)
+    expect(second.usage.prevHash).toBe(first.usage.usageId)
+    expect(second.usage.timestamp).toBe(firstStamp)
+    const third = buildUsage({
+      offerId: offer.offerId,
+      provider: PROVIDER,
+      buyer: BUYER,
+      callSats: DEMO_CALL_SATS,
+      pack,
+      prior: [second.usage, first.usage],
+      prompt: 'three',
+      response: mockInference('desk-note', 'three'),
+      timestamp: secondStamp
+    })
+    expect(third.prevHash).toBe(second.usage.usageId)
+    expect(third.timestamp).toBe(secondStamp)
+    expect(receiptsForPack(
+      [second.usage, first.usage],
+      pack.packId,
+      BUYER
+    ).map((row) => row.usageId)).toEqual([first.usage.usageId, second.usage.usageId])
   })
 })
