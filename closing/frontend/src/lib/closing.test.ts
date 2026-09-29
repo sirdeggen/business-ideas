@@ -17,10 +17,12 @@ import {
   attestationMatches,
   checkHash,
   deskFeeLines,
+  deskFromRecords,
   encodeAttestFields,
   encodeDeedFields,
   encodeOpenFields,
   encodeReleaseFields,
+  feeSatsOf,
   identityFor,
   openClosing,
   parseClosingFields,
@@ -143,6 +145,120 @@ describe('deed hash, attestation, and release', () => {
     expect(DEFAULT_FEE_BPS).toBe(100)
     expect(MAGIC).toBe('closing')
     expect(TOPIC).toBe('tm_anytx')
+  })
+})
+
+function attested(desk = opened()) {
+  return attestDeed(attachDeed(desk, sha256Hex(DEED), 'Pasted deed', NOW), NOW)
+}
+
+function openedWithoutAgent(amountSats = 1_000_000, feeBps = DEFAULT_FEE_BPS, amendmentFeeSats = 0) {
+  return openClosing({
+    label: 'Mineral interest',
+    amountSats,
+    feeBps,
+    amendmentFeeSats,
+    sellerName: 'Seller',
+    includeAgent: false,
+    buyerName: 'Buyer'
+  }, NOW, ID)
+}
+
+describe('payee changes clear stale approvals', () => {
+  it('drops release approvals when the bound payee changes, so release cannot go to the new payee', () => {
+    let desk = attested()
+    desk = approveRelease(desk, 'buyer')
+    desk = approveRelease(desk, 'seller')
+    expect(releaseReady(desk)).toBeNull()
+
+    desk = attemptPayeeSwap(desk, 'Evil', NOW)
+    desk = approvePayeeChange(desk, 'buyer', NOW)
+    desk = approvePayeeChange(desk, 'seller', NOW)
+    expect(desk.open?.payeeName).toBe('Evil')
+    expect(desk.releaseApprovals).toEqual([])
+    expect(releaseReady(desk)).not.toBeNull()
+    expect(releaseClosing(desk, NOW).released).toBeNull()
+
+    desk = approveRelease(desk, 'buyer')
+    desk = approveRelease(desk, 'seller')
+    expect(releaseClosing(desk, NOW).released?.payeeName).toBe('Evil')
+  })
+
+  it('resets payee approvals when the proposal changes', () => {
+    let desk = attemptPayeeSwap(opened(), 'Evil A', NOW)
+    desk = approvePayeeChange(desk, 'buyer', NOW)
+    expect(desk.open?.payeeName).toBe('Seller')
+    expect(desk.payeeApprovals).toEqual(['buyer'])
+
+    desk = attemptPayeeSwap(desk, 'Evil B', NOW)
+    expect(desk.proposal?.name).toBe('Evil B')
+    expect(desk.payeeApprovals).toEqual([])
+    desk = approvePayeeChange(desk, 'seller', NOW)
+    expect(desk.open?.payeeName).toBe('Seller')
+    expect(desk.payeeApprovals).toEqual(['seller'])
+  })
+})
+
+describe('approval edges, fee rounding, and a mismatched release payee', () => {
+  it('counts a signer once', () => {
+    const once = approveRelease(attested(), 'buyer')
+    const twice = approveRelease(once, 'buyer')
+    expect(twice.releaseApprovals).toEqual(['buyer'])
+    expect(releaseReady(twice)).not.toBeNull()
+    expect(releaseClosing(twice, NOW).released).toBeNull()
+  })
+
+  it('rejects someone who is not a party', () => {
+    const desk = attested(openedWithoutAgent())
+    const release = approveRelease(desk, 'agent')
+    expect(release.releaseApprovals).toEqual([])
+    expect(release.rejection).toMatch(/not a party/)
+    const payee = approvePayeeChange(attemptPayeeSwap(desk, 'Evil', NOW), 'agent', NOW)
+    expect(payee.payeeApprovals).toEqual([])
+    expect(payee.open?.payeeName).toBe('Seller')
+    expect(payee.rejection).toMatch(/not a party/)
+  })
+
+  it('floors the fee', () => {
+    expect(feeSatsOf(10_001, 100)).toBe(100)
+    expect(feeSatsOf(1, 100)).toBe(0)
+    const lines = deskFeeLines(opened(0, 10_001))
+    expect(lines).toMatchObject({ feeSats: 100, netSats: 9_901 })
+  })
+
+  it('refuses to open or release when the fee eats the net', () => {
+    expect(() => openedWithoutAgent(100, 5000, 50)).toThrow(/nothing for the payee/)
+    let desk = attested(openedWithoutAgent(100, 100, 0))
+    desk = approveRelease(desk, 'buyer')
+    desk = approveRelease(desk, 'seller')
+    expect(releaseReady(desk)).toBeNull()
+    desk = {
+      ...desk,
+      amendmentApplied: true,
+      open: desk.open ? { ...desk.open, amendmentFeeSats: 99 } : null
+    }
+    const blocked = releaseClosing(desk, NOW)
+    expect(blocked.released).toBeNull()
+    expect(blocked.rejection).toMatch(/nothing for the payee/)
+  })
+
+  it('drops a release whose payee is not the bound payee', () => {
+    let desk = attested(openedWithoutAgent())
+    desk = approveRelease(desk, 'buyer')
+    desk = approveRelease(desk, 'seller')
+    desk = releaseClosing(desk, NOW)
+    expect(desk.released?.payeeName).toBe('Seller')
+    const kept = deskFromRecords([desk.open!, desk.deed!, desk.attestation!, desk.released!])
+    expect(kept?.released?.payeeName).toBe('Seller')
+
+    const evil = {
+      ...desk.released!,
+      payeeName: 'Evil',
+      payeeIdentity: identityFor('Evil')
+    }
+    const dropped = deskFromRecords([desk.open!, desk.deed!, desk.attestation!, evil])
+    expect(dropped?.open?.payeeName).toBe('Seller')
+    expect(dropped?.released).toBeNull()
   })
 })
 

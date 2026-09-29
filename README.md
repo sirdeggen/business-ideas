@@ -8,7 +8,7 @@ The catalog lists newest ideas first. Prepend the next Server demo at the top of
 
 ## Closing Desk
 
-Close a $500k purchase without wire fraud.
+Record a purchase closing in sats. One person cannot swap the payee.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/closing/
 - How to run: [closing/README.md](./closing/README.md)

@@ -1,13 +1,14 @@
 /**
  * Closing Desk protocol (PushDrop / BRC-48 fields).
  *
- * One high-value purchase closing. The payee is bound when the buyer
- * opens it. A unilateral payee swap is rejected. A change needs M-of-N
- * party approvals and may carry a flat amendment fee. A deed hash and
- * a seller attestation sit on the closing. Funds release only after
- * M-of-N release approvals. The fee is basis points of the closing
- * amount (default 100). MAGIC `closing`. Public Pages uses tm_anytx /
- * ls_anytx. Client filters on MAGIC.
+ * One purchase receipt. The payee is named when the buyer opens it.
+ * A unilateral payee swap is rejected. A change needs M-of-N party
+ * approvals and may carry a flat amendment fee. A deed hash and a
+ * seller attestation sit on the receipt. The release receipt is written
+ * only after M-of-N release approvals, and those approvals do not carry
+ * over a payee change. v0 does not hold funds. The fee is basis points
+ * of the amount (default 100). MAGIC `closing`. Public Pages uses
+ * tm_anytx / ls_anytx. Client filters on MAGIC.
  *
  * Not Job Escrow (labor milestones). Not Handoff Desk (a secondary
  * ownership marketplace).
@@ -374,7 +375,7 @@ export function assertAmountSats(amountSats: number): void {
 
 export function assertFeeBps(feeBps: number): void {
   if (!Number.isInteger(feeBps) || feeBps < MIN_FEE_BPS || feeBps > MAX_FEE_BPS) {
-    throw new Error(`Fee bps must be a whole number from ${MIN_FEE_BPS} to ${MAX_FEE_BPS}.`)
+    throw new Error(`Fee must be a whole number of basis points from ${MIN_FEE_BPS} to ${MAX_FEE_BPS}. 100 is 1%.`)
   }
 }
 
@@ -529,7 +530,11 @@ export function attemptPayeeSwap(state: DeskState, proposedName: string, now = n
     return { ...state, rejection: ALREADY_PAYEE, notice: null }
   }
   const proposal = { name, identity }
-  const next: DeskState = { ...state, proposal, rejection: null }
+  const proposalChanged = !state.proposal
+    || state.proposal.name !== name
+    || !sameIdentity(state.proposal.identity, identity)
+  const payeeApprovals = proposalChanged ? [] : state.payeeApprovals
+  const next: DeskState = { ...state, proposal, payeeApprovals, rejection: null }
   if (next.payeeApprovals.length >= open.threshold) return applyPayee(next, now)
   return {
     ...next,
@@ -567,6 +572,7 @@ function applyPayee(state: DeskState, now: string): DeskState {
     open,
     proposal: null,
     payeeApprovals: [],
+    releaseApprovals: [],
     amendmentApplied: state.amendmentApplied || state.open.amendmentFeeSats > 0,
     rejection: null,
     notice: PAYEE_CHANGED
@@ -902,7 +908,12 @@ export function deskFromRecords(records: ClosingPayload[], closingId?: string): 
   if (!open) return null
   const deed = scoped.find((row): row is ClosingDeed => row.kind === 'deed' && row.closingId === open.closingId) ?? null
   const attestation = scoped.find((row): row is ClosingAttest => row.kind === 'attest' && row.closingId === open.closingId) ?? null
-  const released = scoped.find((row): row is ClosingRelease => row.kind === 'release' && row.closingId === open.closingId) ?? null
+  const releasedCandidate = scoped.find((row): row is ClosingRelease => row.kind === 'release' && row.closingId === open.closingId) ?? null
+  const released = releasedCandidate
+    && sameIdentity(releasedCandidate.payeeIdentity, open.payeeIdentity)
+    && releasedCandidate.payeeName.trim() === open.payeeName.trim()
+    ? releasedCandidate
+    : null
   return {
     ...emptyDesk(),
     open,

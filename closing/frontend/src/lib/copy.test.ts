@@ -15,10 +15,15 @@ import {
   EYEBROW,
   FOOTER,
   LEDE,
+  LINE_BPS,
+  LOCAL_ROLES_NOTE,
   OPEN_BUTTON,
+  OPEN_JOB,
   PRIMARY_COPY,
   PRODUCT,
+  RECEIPT_NOTE,
   RECORD_BUTTON,
+  RELEASE_JOB,
   TITLE
 } from './copy'
 
@@ -48,7 +53,7 @@ describe('first-paint copy', () => {
     expect(html).toContain('<title>Closing Desk</title>')
     expect(TITLE).toBe('Closing Desk')
     expect(PRODUCT).toBe('Closing Desk')
-    expect(LEDE).toBe('Close a $500k purchase without wire fraud.')
+    expect(LEDE).toBe('Record a purchase closing in sats. One person cannot swap the payee.')
     expect(OPEN_BUTTON).toBe('Open the closing')
     expect(RECORD_BUTTON).toBe('Record this closing')
     expect(app).toContain('{LEDE}')
@@ -111,12 +116,13 @@ describe('first-paint copy', () => {
 
   it('keeps the catalog card Server + View at the top of the ledger', () => {
     expect(closingCard).toContain('Closing Desk')
-    expect(closingCard).toContain('Close a $500k purchase without wire fraud.')
+    expect(closingCard).toContain('Record a purchase closing in sats. One person cannot swap the payee.')
     expect(closingCard).toContain('closing/README.md')
     expect(closingCard).toContain('scenes/closing.webp')
     expect(closingCard).toContain('How to run')
     const ledger = catalog.slice(catalog.indexOf('aria-label="Server"'), catalog.indexOf('aria-label="Live"'))
-    expect(ledger.indexOf('href="./closing/"')).toBeLessThan(ledger.indexOf('href="./feed/"'))
+    expect(ledger.indexOf('href="./closing/"')).toBeLessThan(ledger.indexOf('href="./inference/"'))
+    expect(ledger.indexOf('href="./inference/"')).toBeLessThan(ledger.indexOf('href="./feed/"'))
     expect(readme).toContain('# Closing Desk (v0)')
     expect(readme).toContain('tm_anytx')
     expect(readme).toContain('ls_anytx')
@@ -133,7 +139,7 @@ describe('first-paint copy', () => {
     expect(streamCard).toContain('Pay as they work.')
     expect(grantCard).toContain('A gift for a purpose.')
     for (const slug of [
-      'feed', 'registry', 'credit', 'handoff', 'vouch', 'kya', 'vault-claim',
+      'feed', 'inference', 'registry', 'credit', 'handoff', 'vouch', 'kya', 'vault-claim',
       'job-escrow', 'trace', 'titles', 'names', 'memberships', 'datasets',
       'session', 'spend-policy', 'raffle', 'treasury', 'tickets', 'records',
       'receivables', 'grants', 'streampay', 'invoices'
@@ -156,7 +162,7 @@ describe('first-paint copy', () => {
       'tickets', 'receivables', 'invoices', 'treasury', 'streampay', 'grants',
       'records', 'raffle', 'spend-policy', 'session', 'datasets', 'memberships',
       'names', 'titles', 'trace', 'job-escrow', 'vault-claim', 'kya', 'vouch',
-      'handoff', 'credit', 'registry', 'feed', 'scenes', 'closing'
+      'handoff', 'credit', 'registry', 'feed', 'inference', 'scenes', 'closing'
     ]) {
       expect(pagesYml).toContain(`site/${slug}`)
     }
@@ -169,7 +175,35 @@ describe('first-paint copy', () => {
     expect(caseMark).toBeGreaterThan(head)
     expect(form).toBeGreaterThan(caseMark)
     expect(app.split('<BusinessCase />')).toHaveLength(2)
+    expect(app).not.toContain('{!open && <BusinessCase />}')
+    expect(app.indexOf('{RECEIPT_NOTE}')).toBeGreaterThan(caseMark)
+    expect(app.indexOf('{RECEIPT_NOTE}')).toBeLessThan(form)
+    expect(businessCase).not.toContain('does not hold funds')
     expect(closingCard).not.toContain('Business case')
+  })
+
+  it('says v0 records a receipt, and that approvals are local role clicks', () => {
+    expect(RECEIPT_NOTE).toBe('This demo records an attested receipt. It does not hold funds.')
+    expect(OPEN_JOB).not.toMatch(/lock/i)
+    expect(RELEASE_JOB).not.toMatch(/money/)
+    expect(RELEASE_JOB).toMatch(/release receipt/)
+    expect(LINE_BPS).toBe('Fee (basis points, 100 = 1%)')
+    expect(app).toContain('{LINE_BPS}')
+    expect(app).not.toContain('Fee bps')
+    expect(app).not.toContain("busy === 'open'")
+    expect(app).not.toContain("busy === 'attest'")
+    expect(app).not.toContain("busy === 'release'")
+    expect(LOCAL_ROLES_NOTE).toMatch(/unsigned clicks on a role/)
+    expect(LOCAL_ROLES_NOTE).toMatch(/SHA-256 of the name/)
+    expect(advanced).toContain('{LOCAL_ROLES_NOTE}')
+    expect(face).not.toContain('{LOCAL_ROLES_NOTE}')
+    expect(readme).toContain('does not hold funds')
+    expect(readme).toContain('unsigned clicks on a role')
+    expect(readme).toContain('SHA-256 of the name')
+    expect(readme).not.toContain('Funds release only after')
+    expect(readme).not.toContain('$500k')
+    expect(rootReadme).toContain(LEDE)
+    expect(rootReadme).not.toContain('$500k')
   })
 })
 

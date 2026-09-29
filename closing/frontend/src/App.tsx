@@ -41,8 +41,8 @@ import {
 } from './lib/config'
 import {
   AGENT_NAME,
+  AMOUNT_LABEL,
   ATTEST_BUTTON,
-  ATTESTING_BUTTON,
   ATTACH_BUTTON,
   ATTACHING_BUTTON,
   BUYER_NAME,
@@ -57,16 +57,17 @@ import {
   LINE_BPS,
   LINE_FEE,
   LINE_NET,
+  LOCAL_ROLES_NOTE,
   OPEN_BUTTON,
   OPEN_JOB,
-  OPENING_BUTTON,
   PARTIES_HEADING,
+  PAYEE_HELPER,
+  RECEIPT_NOTE,
   RECORD_BUTTON,
   RECORD_JOB,
   RECORDING_BUTTON,
   RELEASE_BUTTON,
   RELEASE_JOB,
-  RELEASING_BUTTON,
   SELLER_NAME,
   STAMP_BOUND,
   STAMP_CHANGED,
@@ -83,7 +84,7 @@ import { lookupClosing } from './lib/overlay'
 import { clearDesk, loadDesk, saveDesk } from './lib/persist'
 import { closingPublicUrl, goHome, goToClosing, readClosingFromLocation } from './lib/route'
 
-type Busy = 'open' | 'attach' | 'attest' | 'check' | 'swap' | 'release' | 'record' | null
+type Busy = 'attach' | 'check' | 'record' | null
 
 function hashBytes(bytes: Uint8Array): Promise<string> {
   const copy = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
@@ -376,7 +377,8 @@ function Shell() {
             <p className="lede">{LEDE}</p>
           </header>
 
-          {!open && <BusinessCase />}
+          <BusinessCase />
+          <p className="receipt-note">{RECEIPT_NOTE}</p>
 
           {!open && (
             <section className="block">
@@ -388,7 +390,7 @@ function Shell() {
                 </div>
                 <div className="grid">
                   <div className="field">
-                    <label htmlFor="amount">Closing amount</label>
+                    <label htmlFor="amount">{AMOUNT_LABEL}</label>
                     <input
                       id="amount"
                       inputMode="numeric"
@@ -397,7 +399,7 @@ function Shell() {
                     />
                   </div>
                   <div className="field">
-                    <label htmlFor="fee-bps">Fee bps</label>
+                    <label htmlFor="fee-bps">{LINE_BPS}</label>
                     <input
                       id="fee-bps"
                       inputMode="numeric"
@@ -445,11 +447,11 @@ function Shell() {
                   </ul>
                 </div>
               </div>
-              <p className="helper">The payee locks to the seller. A later change needs the parties, plus the amendment fee if you set one.</p>
+              <p className="helper">{PAYEE_HELPER}</p>
               {preview && <FeeTable lines={preview} showAmendment={false} />}
               <div className="actions">
                 <button type="button" className="btn primary" disabled={busy !== null} onClick={runOpen}>
-                  {busy === 'open' ? OPENING_BUTTON : OPEN_BUTTON}
+                  {OPEN_BUTTON}
                 </button>
               </div>
             </section>
@@ -519,7 +521,7 @@ function Shell() {
                   {CHECK_BUTTON}
                 </button>
                 <button type="button" className="btn" disabled={busy !== null} onClick={runAttest}>
-                  {busy === 'attest' ? ATTESTING_BUTTON : ATTEST_BUTTON}
+                  {ATTEST_BUTTON}
                 </button>
               </div>
               {desk.deed && (
@@ -599,7 +601,7 @@ function Shell() {
               {!desk.released && (
                 <div className="actions">
                   <button type="button" className="btn primary" disabled={Boolean(blocked) || busy !== null} onClick={runRelease}>
-                    {busy === 'release' ? RELEASING_BUTTON : RELEASE_BUTTON}
+                    {RELEASE_BUTTON}
                   </button>
                 </div>
               )}
@@ -647,7 +649,8 @@ function Shell() {
         <details className="advanced">
           <summary>Advanced</summary>
           <p>Amounts are in sats.</p>
-          <p>Fee bps is {feeBps || '100'} on the closing amount. 100 is the starting fee.</p>
+          <p>The fee is {feeBps || '100'} basis points of the closing amount. 100 is 1%.</p>
+          <p>{LOCAL_ROLES_NOTE}</p>
           {online === false && <p>{overlayCheckFailed(probeError, url)}</p>}
           {identityKey && <p>Wallet key <code>{shortKey(identityKey, 8)}</code></p>}
           {open && <p>Closing id <code>{open.closingId}</code></p>}

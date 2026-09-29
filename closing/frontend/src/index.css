@@ -164,6 +164,13 @@ h2 {
 .business-case dd ul { margin: 0; padding-left: 1.15em; }
 .business-case dd li + li { margin-top: 6px; }
 
+.receipt-note {
+  margin: -8px 2px 22px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
 .job {
   margin: 0 0 14px;
   max-width: 46ch;
