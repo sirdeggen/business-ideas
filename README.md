@@ -6,6 +6,13 @@ Switcher on GitHub Pages: https://sirdeggen.github.io/business-ideas/
 
 The catalog lists newest ideas first. Prepend the next Server demo at the top of the ledger in `pages/index.html`, and the next Live demo at the top of the spotlight. Mirror that order at the top of this list. Invoices stay last: they were the first product. The receivable desk is a collections list — not a bank.
 
+## Cover Desk
+
+Buy cover. Get a policy record. File a claim that releases only when the right people agree.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/cover/
+- How to run: [cover/README.md](./cover/README.md)
+
 ## Feed Desk
 
 Sell a feed. Buy a fresh signed reading.
