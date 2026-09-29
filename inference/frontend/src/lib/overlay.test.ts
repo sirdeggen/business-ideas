@@ -1,6 +1,11 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { PUBLIC_LOOKUP, PUBLIC_OVERLAY_URL, PUBLIC_TOPIC } from './config'
 import { overlayLookupService, overlayTopic, usesPublicAnytx } from './overlay'
+
+const overlaySrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'overlay.ts'), 'utf8')
 
 describe('overlay topic rails', () => {
   it('uses tm_anytx / ls_anytx on the public overlay', () => {
@@ -16,5 +21,13 @@ describe('overlay topic rails', () => {
     expect(overlayTopic('http://[::1]:5185')).toBe('tm_anytx')
     expect(overlayTopic('http://localhost:5185')).not.toBe('tm_inference')
     expect(overlayLookupService('http://localhost:5185')).not.toBe('ls_inference')
+  })
+
+  it('dedupes overlay usages by usage id before they reach the meter', () => {
+    const listing = overlaySrc.slice(
+      overlaySrc.indexOf('export async function lookupDesk'),
+      overlaySrc.indexOf('async function queryAnytx')
+    )
+    expect(listing).toContain('dedupeUsages(')
   })
 })

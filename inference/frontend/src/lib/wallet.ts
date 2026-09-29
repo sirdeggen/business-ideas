@@ -5,10 +5,6 @@ export const CONNECT_MS = 8000
 
 export const CONNECT_TIMEOUT_MESSAGE = CHROME_ALLOW_HINT
 
-/**
- * Bind the page hostname. `@bsv/simple` `createWallet()` uses originator
- * `"simple"`, which is a different BRC-100 app than `sirdeggen.github.io`.
- */
 export function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeout = new Promise<never>((_, reject) => {

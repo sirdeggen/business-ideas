@@ -174,10 +174,34 @@ export function packTotalFor(offer: Pick<InferenceOffer, 'callSats' | 'packCalls
   return offer.callSats * offer.packCalls
 }
 
-/** Meter = pack total − sum(receipts). */
-export function meterRemaining(packTotal: number, receipts: Array<{ sats: number }>): number {
-  const spent = receipts.reduce((sum, row) => sum + row.sats, 0)
-  return packTotal - spent
+/** Collapse the same usageId so a local copy and an overlay copy are one receipt. */
+export function dedupeUsages<T extends { usageId: string }>(usages: T[]): T[] {
+  const byId = new Map<string, T>()
+  for (const usage of usages) {
+    if (!byId.has(usage.usageId)) byId.set(usage.usageId, usage)
+  }
+  return [...byId.values()]
+}
+
+/**
+ * Meter = pack total − sum(receipts). The same usageId counts once.
+ * The balance never goes below zero.
+ */
+export function meterRemaining(
+  packTotal: number,
+  receipts: Array<{ sats: number, usageId?: string }>
+): number {
+  const seen = new Set<string>()
+  let spent = 0
+  for (const row of receipts) {
+    if (row.usageId) {
+      if (seen.has(row.usageId)) continue
+      seen.add(row.usageId)
+    }
+    spent += row.sats
+  }
+  const remaining = packTotal - spent
+  return remaining > 0 ? remaining : 0
 }
 
 /**
@@ -389,6 +413,7 @@ export function validatePack(item: InferencePack): string | null {
   if (paidError) return paidError
   const totalError = validatePrice(item.packTotal)
   if (totalError) return totalError
+  if (item.packTotal < item.paidSats) return 'pack total is below what was paid'
   if (!isIsoTime(item.timestamp)) return 'timestamp must be ISO-8601'
   return null
 }
@@ -442,10 +467,11 @@ export function buildUsage(input: BuildUsageInput): InferenceUsage {
   if (priceError) throw new Error(priceError)
   const requestHash = requestDigest(input.prompt)
   const responseHash = responseDigest(input.response)
-  const spent = input.prior.reduce((sum, row) => sum + row.sats, 0)
+  const prior = dedupeUsages(input.prior)
+  const spent = prior.reduce((sum, row) => sum + row.sats, 0)
   const remaining = input.pack ? input.pack.packTotal - spent - input.callSats : 0
   if (input.pack && remaining < 0) throw new Error('pack balance is too low')
-  const ordered = [...input.prior].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+  const ordered = [...prior].sort((a, b) => a.timestamp.localeCompare(b.timestamp))
   const tip = ordered[ordered.length - 1]
   const prevHash = tip ? tip.usageId : (input.pack ? input.pack.packId : GENESIS)
   const packId = input.pack ? input.pack.packId : GENESIS
@@ -513,6 +539,9 @@ export function verifyUsage(input: {
     return null
   }
   if (!input.pack || input.pack.packId !== input.usage.packId) return 'pack does not match the receipt'
+  if (input.usage.buyer.toLowerCase() !== input.pack.buyer.toLowerCase()) {
+    return 'receipt buyer does not match the pack'
+  }
   if (input.previous) {
     if (input.previous.packId !== input.usage.packId) return 'receipt chain left the pack'
     if (input.usage.prevHash !== input.previous.usageId) return 'receipt chain does not link'
@@ -543,7 +572,7 @@ export function verifyReceiptChain(
 ): string | null {
   const packError = validatePack(pack)
   if (packError) return packError
-  const ordered = receiptsForPack(usages, pack.packId)
+  const ordered = receiptsForPack(usages, pack.packId, pack.buyer)
   let previous: InferenceUsage | null = null
   for (const usage of ordered) {
     const response = responses[usage.responseHash] ?? responses[usage.usageId]
@@ -557,10 +586,30 @@ export function verifyReceiptChain(
   return null
 }
 
-export function receiptsForPack(usages: InferenceUsage[], packId: string): InferenceUsage[] {
-  return usages
-    .filter((usage) => usage.packId === packId)
-    .sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.usageId.localeCompare(b.usageId))
+/**
+ * Receipts on this pack, one row per usageId, only the chain that links
+ * from the pack id. A buyer, when given, drops everyone else's receipts.
+ */
+export function receiptsForPack(
+  usages: InferenceUsage[],
+  packId: string,
+  buyer?: string
+): InferenceUsage[] {
+  const buyerKey = buyer?.trim().toLowerCase()
+  const unique = dedupeUsages(usages.filter((usage) => {
+    if (usage.packId !== packId) return false
+    if (buyerKey && usage.buyer.toLowerCase() !== buyerKey) return false
+    return true
+  }))
+  unique.sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.usageId.localeCompare(b.usageId))
+  const linked: InferenceUsage[] = []
+  let prev = packId
+  for (const usage of unique) {
+    if (usage.prevHash !== prev) continue
+    linked.push(usage)
+    prev = usage.usageId
+  }
+  return linked
 }
 
 export function dedupeOffers<T extends Pick<InferenceOffer, 'offerId' | 'timestamp'>>(offers: T[]): T[] {
