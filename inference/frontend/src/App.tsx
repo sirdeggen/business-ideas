@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { InferencePack, InferenceUsage } from '../../protocol/inference'
 import {
+  dedupeUsages,
   demoOffer,
   demoPack,
   isDemoOffer,
@@ -122,7 +123,7 @@ function Shell() {
   const previewUsages = preview.map((row) => row.usage)
   const meter = meterRemaining(sample.packTotal, previewUsages)
   const knownPacks = [...packs, ...localPacks]
-  const knownUsages = [...usages, ...localUsages]
+  const knownUsages = dedupeUsages([...usages, ...localUsages])
 
   useEffect(() => {
     if (!showInstall) return
@@ -362,7 +363,7 @@ function Shell() {
         && pack.buyer.toLowerCase() === session.identityKey.toLowerCase()
         && packBalance(pack, knownUsages) >= row.offer.callSats
       ))
-      const prior = open ? receiptsForPack(knownUsages, open.packId) : []
+      const prior = open ? receiptsForPack(knownUsages, open.packId, open.buyer) : []
       const result = await usePack(
         session.wallet,
         url,
@@ -700,7 +701,7 @@ function Shell() {
           )}
           <label htmlFor="overlay-url">Overlay URL</label>
           <input id="overlay-url" value={url} onChange={(event) => setUrl(event.target.value)} />
-          <p>Operators can point this at a local indexer. Topic stays the public any-tx rail.</p>
+          <p>Operators can point this at a local indexer. Topic stays the public overlay.</p>
         </details>
 
         <p className="fine-print">{FOOTER}</p>

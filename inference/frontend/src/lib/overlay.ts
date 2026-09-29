@@ -15,6 +15,7 @@ import {
   TOPIC,
   dedupeOffers,
   dedupePacks,
+  dedupeUsages,
   encodeOfferFields,
   encodePackFields,
   encodeUsageFields,
@@ -283,11 +284,11 @@ export async function lookupDesk(base: string): Promise<DeskSnapshot> {
       const row = packs.find((item) => item.packId === pack.packId && item.timestamp === pack.timestamp) ?? pack
       return row
     }),
-    usages: items.flatMap((item) => (
+    usages: dedupeUsages(items.flatMap((item) => (
       item.payload.kind === 'usage'
         ? [{ ...item.payload, txid: item.txid, outputIndex: item.outputIndex }]
         : []
-    ))
+    )))
   }
 }
 
