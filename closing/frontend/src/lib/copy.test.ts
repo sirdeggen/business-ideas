@@ -125,7 +125,8 @@ describe('first-paint copy', () => {
     expect(closingCard).toContain('scenes/closing.webp')
     expect(closingCard).toContain('How to run')
     const ledger = catalog.slice(catalog.indexOf('aria-label="Server"'), catalog.indexOf('aria-label="Live"'))
-    expect(ledger.indexOf('href="./closing/"')).toBeLessThan(ledger.indexOf('href="./inference/"'))
+    expect(ledger.indexOf('href="./closing/"')).toBeLessThan(ledger.indexOf('href="./cover/"'))
+    expect(ledger.indexOf('href="./cover/"')).toBeLessThan(ledger.indexOf('href="./inference/"'))
     expect(ledger.indexOf('href="./inference/"')).toBeLessThan(ledger.indexOf('href="./feed/"'))
     expect(readme).toContain('# Closing Desk (v0)')
     expect(readme).toContain('tm_anytx')
@@ -143,7 +144,7 @@ describe('first-paint copy', () => {
     expect(streamCard).toContain('Pay as they work.')
     expect(grantCard).toContain('A gift for a purpose.')
     for (const slug of [
-      'feed', 'inference', 'registry', 'credit', 'handoff', 'vouch', 'kya', 'vault-claim',
+      'feed', 'inference', 'cover', 'registry', 'credit', 'handoff', 'vouch', 'kya', 'vault-claim',
       'job-escrow', 'trace', 'titles', 'names', 'memberships', 'datasets',
       'session', 'spend-policy', 'raffle', 'treasury', 'tickets', 'records',
       'receivables', 'grants', 'streampay', 'invoices'
@@ -166,7 +167,7 @@ describe('first-paint copy', () => {
       'tickets', 'receivables', 'invoices', 'treasury', 'streampay', 'grants',
       'records', 'raffle', 'spend-policy', 'session', 'datasets', 'memberships',
       'names', 'titles', 'trace', 'job-escrow', 'vault-claim', 'kya', 'vouch',
-      'handoff', 'credit', 'registry', 'feed', 'inference', 'scenes', 'closing'
+      'handoff', 'credit', 'registry', 'feed', 'inference', 'cover', 'scenes', 'closing'
     ]) {
       expect(pagesYml).toContain(`site/${slug}`)
     }
