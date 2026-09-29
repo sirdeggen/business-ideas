@@ -648,6 +648,15 @@ a.card .hit,
   --title-tracking: -0.01em;
 }
 
+.demo-closing {
+  --chip: #4338ca;
+  --title: #312e81;
+  --title-font: var(--serif);
+  --title-size: 22px;
+  --title-weight: 600;
+  --title-style: italic;
+}
+
 .demo-tickets .scene { object-position: 50% 35%; }
 .demo-memberships .scene { object-position: 50% 40%; }
 .demo-treasury .scene { object-position: 50% 42%; }
@@ -665,6 +674,7 @@ a.card .hit,
 .demo-feed .scene { object-position: 50% 42%; }
 .demo-inference .scene { object-position: 50% 42%; }
 .demo-cover .scene { object-position: 50% 38%; }
+.demo-closing .scene { object-position: 50% 42%; }
 
 footer {
   margin-top: 36px;

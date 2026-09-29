@@ -6,12 +6,26 @@ Switcher on GitHub Pages: https://sirdeggen.github.io/business-ideas/
 
 The catalog lists newest ideas first. Prepend the next Server demo at the top of the ledger in `pages/index.html`, and the next Live demo at the top of the spotlight. Mirror that order at the top of this list. Invoices stay last: they were the first product. The receivable desk is a collections list — not a bank.
 
+## Closing Desk
+
+A shared record of a purchase closing in sats. A changed payee is flagged on the receipt.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/closing/
+- How to run: [closing/README.md](./closing/README.md)
+
 ## Cover Desk
 
 Buy cover. Get a policy record. File a claim that releases only when the right people agree.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/cover/
 - How to run: [cover/README.md](./cover/README.md)
+
+## Inference Desk
+
+Pay per call. Get a hash-attested usage receipt.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/inference/
+- How to run: [inference/README.md](./inference/README.md)
 
 ## Feed Desk
 
