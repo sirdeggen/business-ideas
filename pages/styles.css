@@ -675,6 +675,15 @@ a.card .hit,
   --title-tracking: -0.03em;
 }
 
+.demo-scrip {
+  --chip: #059669;
+  --title: #064e3b;
+  --title-font: var(--serif);
+  --title-size: 22px;
+  --title-weight: 600;
+  --title-style: italic;
+}
+
 .demo-tickets .scene { object-position: 50% 35%; }
 .demo-memberships .scene { object-position: 50% 40%; }
 .demo-treasury .scene { object-position: 50% 42%; }
@@ -695,6 +704,7 @@ a.card .hit,
 .demo-closing .scene { object-position: 50% 42%; }
 .demo-private-pay .scene { object-position: 50% 42%; }
 .demo-boost .scene { object-position: 32% 28%; }
+.demo-scrip .scene { object-position: 50% 42%; }
 
 footer {
   margin-top: 36px;

@@ -6,6 +6,13 @@ Switcher on GitHub Pages: https://sirdeggen.github.io/business-ideas/
 
 The catalog lists newest ideas first. Prepend the next Server demo at the top of the ledger in `pages/index.html`, and the next Live demo at the top of the spotlight. Mirror that order at the top of this list. Invoices stay last: they were the first product. The receivable desk is a collections list — not a bank.
 
+## Scrip Desk
+
+Issue a branded balance. Post the reserve that backs it. Redeem on demand.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/scrip/
+- How to run: [scrip/README.md](./scrip/README.md)
+
 ## Boost Desk
 
 Pay for a verified listing. Buy a timed boost. Ranking is on-chain.
