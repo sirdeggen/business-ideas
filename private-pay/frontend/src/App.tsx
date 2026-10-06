@@ -57,6 +57,7 @@ import {
   REVOKE_BUTTON,
   REVOKE_JOB,
   SEALED_WORD,
+  SETTLEMENT_LINE,
   STRANGER_LINE,
   formatWhen,
   grantFeeFace,
@@ -472,6 +473,7 @@ function Shell() {
               <p className="helper">{FEE_FACE}</p>
               <p className="helper">{BAND_LINE}</p>
               <p className="helper">{grantFeeFace()}</p>
+              <p className="helper">{SETTLEMENT_LINE}</p>
               <div className="actions">
                 <button
                   type="button"
@@ -557,6 +559,7 @@ function Shell() {
               </dl>
               <p className="helper">{STRANGER_LINE}</p>
               <p className="helper">{BAND_LINE}</p>
+              <p className="helper">{SETTLEMENT_LINE}</p>
               <p className="helper">{HONESTY_LINE}</p>
               <div className="actions">
                 <button type="button" className="btn primary" onClick={runExport}>
