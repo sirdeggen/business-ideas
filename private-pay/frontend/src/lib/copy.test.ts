@@ -23,6 +23,7 @@ import {
   GRANT_FEE_LABEL,
   HONESTY_LINE,
   JOB,
+  SETTLEMENT_LINE,
   OPENING_BUTTON,
   OPEN_BUTTON,
   PAYING_BUTTON,
@@ -105,10 +106,30 @@ describe('first-paint copy', () => {
     expect(face).toContain('grantFeeFace()')
     expect(FEE_FACE).toContain('basis points')
     expect(BAND_LINE).toContain('400 sats')
-    expect(HONESTY_LINE).toContain('sealed')
+    expect(HONESTY_LINE).toContain('does not settle')
+    expect(HONESTY_LINE).not.toContain('does not pay the sealed amount as a visible output')
     expect(STRANGER_LINE).toContain('No wallet')
     const exportFn = app.slice(app.indexOf('const runExport'))
     expect(exportFn.slice(0, exportFn.indexOf('const copyLink'))).not.toContain('ensureWallet')
+  })
+
+  it('says the sealed amount is not settled next to Pay before a payment is opened', () => {
+    const compose = app.slice(
+      app.indexOf('{!paymentId && ('),
+      app.indexOf('{paymentId && !payment')
+    )
+    const shown = compose.split('{SETTLEMENT_LINE}').length - 1
+    expect(shown).toBeGreaterThanOrEqual(1)
+    expect(compose).toContain('{BAND_LINE}')
+    expect(compose.indexOf('{SETTLEMENT_LINE}')).toBeLessThan(compose.indexOf('PAY_BUTTON'))
+    expect(SETTLEMENT_LINE).toBe('v0 collects the fee. It does not settle the sealed amount.')
+    expect(readme).toContain('It does not settle the sealed amount.')
+    const openPanel = app.slice(
+      app.indexOf('{payment && folded && ('),
+      app.indexOf('{payment && folded && !folded.attestation')
+    )
+    expect(openPanel).toContain('{SETTLEMENT_LINE}')
+    expect(openPanel).toContain('{BAND_LINE}')
   })
 
   it('uses busy labels on Pay, Attest, Grant view, Revoke view, and Open view', () => {
@@ -157,6 +178,9 @@ describe('first-paint copy', () => {
 
   it('adds private pay to Pages without dropping earlier desks', () => {
     expect(catalogCss).toContain('.demo-private-pay')
+    expect(catalogCss).toMatch(/\.demo-private-pay \{[^}]*--chip: #2B5BFF;/)
+    expect(catalogCss).toMatch(/\.demo-inference \{[^}]*--chip: #d97706;/)
+    expect(catalogCss).not.toMatch(/\.demo-private-pay \{[^}]*--chip: #b45309;/)
     expect(css).toContain('--seal:')
     expect(css).toContain('Fraunces')
     expect(pagesYml.match(/# private-pay-desk/g)).toHaveLength(3)

@@ -9,6 +9,7 @@ import {
   TOPIC,
   VIEW_SCOPE,
   attestSignatureOk,
+  grantSignatureOk,
   buildReading,
   bytesToHex,
   canonicalAttestBytes,
@@ -291,6 +292,77 @@ describe('private pay protocol', () => {
     }
     expect(paymentSignatureOk(record)).toBe(true)
     expect(paymentSignatureOk({ ...record, payer: other.signing })).toBe(false)
+  })
+
+  it('ignores an attestation from a party other than the payee', async () => {
+    const payer = await party()
+    const payee = await party()
+    const other = await party()
+    const paymentId = 'cd'.repeat(16)
+    const attestedAt = WHEN
+    const wrong: AttestRecord = {
+      magic: MAGIC,
+      version: '1',
+      kind: 'attest',
+      paymentId,
+      signer: other.signing,
+      attestedAt,
+      signature: await sign(other.wallet, canonicalAttestBytes({
+        paymentId,
+        signer: other.signing,
+        attestedAt
+      }))
+    }
+    const payment: PaymentRecord = {
+      magic: MAGIC,
+      version: '1',
+      kind: 'payment',
+      paymentId,
+      label: 'October payroll',
+      payer: payer.signing,
+      payerIdentity: payer.identity,
+      payeeIdentity: payee.identity,
+      payee: payee.signing,
+      desk: payer.identity,
+      counterpartyKeyId: KEY_ID,
+      amountCipher: 'ab'.repeat(32),
+      feeSats: 1_000,
+      paidAt: WHEN,
+      signature: 'aa'
+    }
+    expect(attestSignatureOk(wrong)).toBe(true)
+    expect(foldPayment(payment, [wrong], [], [], '2026-10-07T00:00:00Z').attestation).toBeNull()
+  })
+
+  it('rejects a grant whose payer field was renamed', async () => {
+    const payer = await party()
+    const auditor = await party()
+    const other = await party()
+    const grantedAt = WHEN
+    const grantBody = {
+      paymentId: 'ab'.repeat(16),
+      payer: payer.signing,
+      auditor: auditor.identity,
+      scope: VIEW_SCOPE,
+      expiresAt: expiresAtFrom(grantedAt, 90),
+      auditorCipher: 'cd'.repeat(32),
+      feeSats: AUDIT_VIEW_FEE_SATS,
+      grantedAt
+    }
+    const grantId = grantBindingId(grantBody)
+    const record: GrantRecord = {
+      magic: MAGIC,
+      version: '1',
+      kind: 'grant',
+      grantId,
+      ...grantBody,
+      signature: await sign(payer.wallet, canonicalGrantBytes({ ...grantBody, grantId }))
+    }
+    expect(grantSignatureOk(record)).toBe(true)
+    expect(grantSignatureOk({ ...record, payer: other.signing })).toBe(false)
+    const renamed = encodeGrantFields(record)
+    renamed[5] = Array.from(new TextEncoder().encode(other.signing))
+    expect(parsePrivatePayFields(renamed)).toBeNull()
   })
 })
 
