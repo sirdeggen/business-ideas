@@ -5,15 +5,20 @@
  * the report. A triage verdict pays the matching tier. MAGIC `bounty`.
  * Public Pages uses tm_anytx / ls_anytx. Client filters on MAGIC.
  *
- * Script-enforced: the pool output is a PushDrop lock only the project
- * key can spend. Desk-state: which tier matches, hash priority, and the
- * append-only disclosure timeline. The report body is never a field.
+ * Script-enforced: the pool output is a PushDrop lock. Its key id is
+ * `pool-<bountyId>`, so the project wallet re-derives the same key and
+ * is the only one that can spend it. A release spends that outpoint and
+ * pays the researcher, the desk fee key, and a new pool output.
+ * Desk-state: which tier matches, hash priority, and the disclosure
+ * timeline. Public verdict and timeline rows count only when that
+ * project key signed them. The report body is never a field.
  * The export is a record of those timestamps, not legal advice.
  *
  * Not Job Escrow (one hired job). Not Grants (a purpose-bound gift).
  * Not Cover (an insurance claim). Not Vouch (a staked attestation).
  */
 
+import { BigNumber, ECDSA, Hash, PublicKey, Signature, Utils } from '@bsv/sdk'
 import { sha256Hex } from './sha256'
 
 export const PROTOCOL_ID: [0, string] = [0, 'bounty']
@@ -44,6 +49,15 @@ export const MAX_PAYOUT_FEE_BPS = 999
 export const DEFAULT_SUBMISSION_FEE_SATS = 1_000
 export const DEFAULT_EXPORT_FEE_SATS = 2_500
 export const RECORD_SATS = 1
+
+/** P2PKH destination for the desk fee. The matching private key is not in this repo. */
+export const DESK_FEE_KEY = '02e3005a8945c785b61f14d32b357cdeba63e87f81662bfbcb6bb7f85c5e4f0703'
+
+/** Reproducible wallet key id for the pool lock. Readers re-derive this, not a random id. */
+export function poolKeyId(bountyId: string): string {
+  if (!isBountyId(bountyId)) throw new Error('Bounty id is missing.')
+  return `pool-${bountyId}`
+}
 
 export const EARLY_WARNING_MS = 24 * 60 * 60 * 1000
 export const FULL_NOTICE_MS = 72 * 60 * 60 * 1000
@@ -101,6 +115,7 @@ export interface BountyVerdict {
   poolLeft: number
   reportHash: string
   releasedAt: string
+  signature: string
 }
 
 export interface TimelineEvent {
@@ -110,6 +125,7 @@ export interface TimelineEvent {
   bountyId: string
   stage: Stage
   at: string
+  signature: string
 }
 
 export type BountyPayload = BountyFund | BountySubmit | BountyVerdict | TimelineEvent
@@ -146,7 +162,15 @@ export interface ReleaseLines {
 export interface RecordPlan {
   poolLockSats: number
   researcherSats: number
+  feeSats: number
   receipts: Array<'fund' | 'submit' | 'verdict' | 'timeline'>
+}
+
+export interface ReleaseSpend {
+  researcherSats: number
+  feeSats: number
+  poolLeft: number
+  deskKey: string
 }
 
 export interface Duties {
@@ -267,9 +291,9 @@ export function payoutFeeSats(tierSats: number, payoutFeeBps: number): number {
 }
 
 /**
- * The whole tier leaves the open pool. The desk fee is withheld from
- * that tier, so the researcher receives tier minus fee. The withheld
- * fee stays inside the project lock with the unreleased tiers.
+ * The whole tier leaves the open pool. The researcher receives the tier
+ * minus the desk fee. The fee is a separate output to the desk key.
+ * poolLeft is locked again in a new pool output.
  */
 export function releaseLines(poolSats: number, tierSats: number, payoutFeeBps: number): ReleaseLines {
   assertSats(poolSats, 'the pool', 1)
@@ -278,13 +302,16 @@ export function releaseLines(poolSats: number, tierSats: number, payoutFeeBps: n
   const researcherSats = tierSats - feeSats
   if (researcherSats < 1) throw new Error('The desk fee leaves nothing for the researcher.')
   const poolLeft = poolSats - tierSats
+  if (researcherSats + feeSats + poolLeft !== poolSats) {
+    throw new Error('Release lines do not add up to the pool.')
+  }
   return {
     tierSats,
     payoutFeeBps,
     feeSats,
     researcherSats,
     poolLeft,
-    projectLockSats: poolLeft + feeSats
+    projectLockSats: poolLeft
   }
 }
 
@@ -403,7 +430,8 @@ export function releaseTier(desk: DeskState, tier: Tier, at = nowIso()): DeskSta
     researcherSats: lines.researcherSats,
     poolLeft: lines.poolLeft,
     reportHash: desk.submission.reportHash,
-    releasedAt: at
+    releasedAt: at,
+    signature: ''
   }
   return {
     ...desk,
@@ -441,7 +469,8 @@ export function appendTimeline(
       kind: 'timeline',
       bountyId,
       stage,
-      at
+      at,
+      signature: ''
     }
   ]
 }
@@ -517,20 +546,47 @@ export function exportTimeline(desk: DeskState): DeskState {
   }
 }
 
+export function releaseSpend(desk: DeskState): ReleaseSpend {
+  if (!desk.fund) throw new Error('Fund a pool first.')
+  if (!desk.verdict) throw new Error('Release a tier before spending the pool.')
+  const spend = {
+    researcherSats: desk.verdict.researcherSats,
+    feeSats: desk.verdict.feeSats,
+    poolLeft: desk.verdict.poolLeft,
+    deskKey: DESK_FEE_KEY
+  }
+  if (spend.researcherSats + spend.feeSats + spend.poolLeft !== desk.fund.poolSats) {
+    throw new Error('Release lines do not add up to the pool.')
+  }
+  return spend
+}
+
+export function remainderFund(fund: BountyFund, verdict: BountyVerdict): BountyFund | null {
+  if (verdict.poolLeft < 1) return null
+  const next: BountyFund = {
+    ...fund,
+    tiers: { ...fund.tiers, [verdict.tier]: 0 },
+    poolSats: verdict.poolLeft
+  }
+  const invalid = validateFund(next)
+  if (invalid) throw new Error(invalid)
+  return next
+}
+
 export function recordPlan(desk: DeskState): RecordPlan {
   if (!desk.fund) throw new Error('Fund a pool first.')
-  const poolLockSats = desk.verdict
-    ? desk.verdict.poolLeft + desk.verdict.feeSats
-    : desk.fund.poolSats
-  const researcherSats = desk.verdict?.researcherSats ?? 0
-  if (poolLockSats + researcherSats !== desk.fund.poolSats) {
+  const spend = desk.verdict ? releaseSpend(desk) : null
+  const poolLockSats = spend ? spend.poolLeft : desk.fund.poolSats
+  const researcherSats = spend?.researcherSats ?? 0
+  const feeSats = spend?.feeSats ?? 0
+  if (poolLockSats + researcherSats + feeSats !== desk.fund.poolSats) {
     throw new Error('Release lines do not add up to the pool.')
   }
   const receipts: RecordPlan['receipts'] = ['fund']
   if (desk.submission) receipts.push('submit')
   if (desk.verdict) receipts.push('verdict')
   for (const _event of desk.timeline) receipts.push('timeline')
-  return { poolLockSats, researcherSats, receipts }
+  return { poolLockSats, researcherSats, feeSats, receipts }
 }
 
 export function publicPayloads(desk: DeskState): BountyPayload[] {
@@ -558,20 +614,63 @@ function foldTimeline(events: TimelineEvent[], bountyId: string): TimelineEvent[
   return kept
 }
 
+export function sameKey(left: string, right: string): boolean {
+  const a = left.trim()
+  const b = right.trim()
+  return isIdentityKey(a) && isIdentityKey(b) && a.toLowerCase() === b.toLowerCase()
+}
+
+export function fundLockedToProject(lockingPublicKey: string, fund: Pick<BountyFund, 'projectIdentity'>): boolean {
+  return sameKey(lockingPublicKey, fund.projectIdentity)
+}
+
+export function verdictMessage(verdict: BountyVerdict): number[] {
+  return stringToUtf8Bytes([
+    'verdict',
+    verdict.bountyId,
+    verdict.tier,
+    String(verdict.tierSats),
+    String(verdict.payoutFeeBps),
+    String(verdict.feeSats),
+    String(verdict.researcherSats),
+    String(verdict.poolLeft),
+    verdict.reportHash,
+    verdict.releasedAt
+  ].join('|'))
+}
+
+export function timelineMessage(event: TimelineEvent): number[] {
+  return stringToUtf8Bytes(['timeline', event.bountyId, event.stage, event.at].join('|'))
+}
+
+/** ECDSA over sha256, the same preimage BRC-100 createSignature uses for this key. */
+export function signedByProject(projectIdentity: string, message: number[], signature: string): boolean {
+  if (!isIdentityKey(projectIdentity.trim()) || !/^[0-9a-fA-F]+$/.test(signature)) return false
+  try {
+    const hash = Hash.sha256(message)
+    const sig = Signature.fromDER(Utils.toArray(signature, 'hex'))
+    return ECDSA.verify(new BigNumber(hash), sig, PublicKey.fromString(projectIdentity.trim()))
+  } catch {
+    return false
+  }
+}
+
 export function deskFromRecords(rows: BountyPayload[], bountyId?: string): DeskState | null {
   const scoped = keepMagic(rows).filter((row) => !bountyId || row.bountyId === bountyId)
   const fund = scoped.find((row): row is BountyFund => row.kind === 'fund')
   if (!fund) return null
   const submits = scoped.filter((row): row is BountySubmit => row.kind === 'submit')
-  const verdict = scoped.find((row): row is BountyVerdict => row.kind === 'verdict') ?? null
+  const verdict = scoped.find((row): row is BountyVerdict =>
+    row.kind === 'verdict' && signedByProject(fund.projectIdentity, verdictMessage(row), row.signature)
+  ) ?? null
+  const timeline = scoped.filter((row): row is TimelineEvent =>
+    row.kind === 'timeline' && signedByProject(fund.projectIdentity, timelineMessage(row), row.signature)
+  )
   return {
     fund,
     submission: earlierSubmission(submits),
     verdict,
-    timeline: foldTimeline(
-      scoped.filter((row): row is TimelineEvent => row.kind === 'timeline'),
-      fund.bountyId
-    ),
+    timeline: foldTimeline(timeline, fund.bountyId),
     exportText: null,
     rejection: null,
     notice: null
@@ -674,6 +773,13 @@ export function validateTimeline(event: TimelineEvent): string | null {
   return null
 }
 
+/** Remainder lock. Kind `pool` so readers do not treat it as a second fund. */
+export function encodeRemainderFields(fund: BountyFund): number[][] {
+  const fields = encodeFundFields(fund)
+  fields[2] = stringToUtf8Bytes('pool')
+  return fields
+}
+
 export function encodeFundFields(fund: BountyFund): number[][] {
   const invalid = validateFund(fund)
   if (invalid) throw new Error(invalid)
@@ -718,7 +824,8 @@ export function encodeVerdictFields(verdict: BountyVerdict): number[][] {
     stringToUtf8Bytes(String(verdict.researcherSats)),
     stringToUtf8Bytes(String(verdict.poolLeft)),
     stringToUtf8Bytes(verdict.reportHash),
-    stringToUtf8Bytes(verdict.releasedAt)
+    stringToUtf8Bytes(verdict.releasedAt),
+    stringToUtf8Bytes(verdict.signature || 'unsigned')
   ]
 }
 
@@ -728,7 +835,8 @@ export function encodeTimelineFields(event: TimelineEvent): number[][] {
   return [
     ...encodeHead('timeline', event.bountyId),
     stringToUtf8Bytes(event.stage),
-    stringToUtf8Bytes(event.at)
+    stringToUtf8Bytes(event.at),
+    stringToUtf8Bytes(event.signature || 'unsigned')
   ]
 }
 
@@ -820,7 +928,7 @@ export function parseBountyFields(fields: Array<number[] | Uint8Array>): BountyP
     return validateSubmit(submit) ? null : submit
   }
   if (kind === 'verdict') {
-    if (rest.length < 11) return null
+    if (rest.length < 12) return null
     const tierSats = whole(rest[4] ?? '')
     const payoutFeeBps = whole(rest[5] ?? '')
     const feeSats = whole(rest[6] ?? '')
@@ -843,12 +951,13 @@ export function parseBountyFields(fields: Array<number[] | Uint8Array>): BountyP
       researcherSats,
       poolLeft,
       reportHash: rest[9] ?? '',
-      releasedAt: rest[10] ?? ''
+      releasedAt: rest[10] ?? '',
+      signature: (rest[11] ?? '') === 'unsigned' ? '' : (rest[11] ?? '')
     }
     return validateVerdict(verdict) ? null : verdict
   }
   if (kind === 'timeline') {
-    if (rest.length < 5) return null
+    if (rest.length < 6) return null
     const stage = rest[3] ?? ''
     if (!isStage(stage)) return null
     const event: TimelineEvent = {
@@ -857,7 +966,8 @@ export function parseBountyFields(fields: Array<number[] | Uint8Array>): BountyP
       kind: 'timeline',
       bountyId,
       stage,
-      at: rest[4] ?? ''
+      at: rest[4] ?? '',
+      signature: (rest[5] ?? '') === 'unsigned' ? '' : (rest[5] ?? '')
     }
     return validateTimeline(event) ? null : event
   }

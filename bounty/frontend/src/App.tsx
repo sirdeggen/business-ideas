@@ -356,7 +356,7 @@ function Shell() {
       feeSats: desk.verdict.feeSats,
       researcherSats: desk.verdict.researcherSats,
       poolLeft: desk.verdict.poolLeft,
-      projectLockSats: desk.verdict.poolLeft + desk.verdict.feeSats
+      projectLockSats: desk.verdict.poolLeft
     }
     : preview
 

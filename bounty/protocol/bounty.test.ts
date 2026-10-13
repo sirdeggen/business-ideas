@@ -1,29 +1,41 @@
+import { PrivateKey, ProtoWallet, PushDrop, Utils } from '@bsv/sdk'
 import { describe, expect, it } from 'vitest'
 import {
+  DESK_FEE_KEY,
   EXPORT_NOTE,
   MAGIC,
   MAX_PAYOUT_FEE_BPS,
+  PROTOCOL_ID,
   appendTimeline,
   bookFromRecords,
   deskFromRecords,
   earlierSubmission,
   encodeFundFields,
+  encodeRemainderFields,
   encodeSubmitFields,
   encodeTimelineFields,
   encodeVerdictFields,
   exportTimeline,
   formatExport,
+  fundLockedToProject,
   fundPool,
   hashReport,
   keepMagic,
   parseBountyFields,
   payoutFeeSats,
+  poolKeyId,
   publicPayloads,
   recordPlan,
   releaseLines,
+  releaseSpend,
   releaseTier,
   submitReport,
-  type BountySubmit
+  timelineMessage,
+  verdictMessage,
+  type BountyFund,
+  type BountySubmit,
+  type BountyVerdict,
+  type TimelineEvent
 } from './bounty'
 
 const ID = 'ab'.repeat(16)
@@ -110,7 +122,7 @@ describe('tier release and fees', () => {
       feeSats: 16_000,
       researcherSats: 184_000,
       poolLeft: 600_000,
-      projectLockSats: 616_000
+      projectLockSats: 600_000
     })
     expect(payoutFeeSats(100, 800)).toBe(8)
     const released = releaseTier(posted(), 'high', '2026-10-13T15:00:00Z')
@@ -120,10 +132,20 @@ describe('tier release and fees', () => {
       poolLeft: 600_000
     })
     expect(recordPlan(released)).toMatchObject({
-      poolLockSats: 616_000,
-      researcherSats: 184_000
+      poolLockSats: 600_000,
+      researcherSats: 184_000,
+      feeSats: 16_000
     })
-    expect(recordPlan(released).poolLockSats + recordPlan(released).researcherSats).toBe(800_000)
+    const plan = recordPlan(released)
+    expect(plan.poolLockSats + plan.researcherSats + plan.feeSats).toBe(800_000)
+    const spend = releaseSpend(released)
+    expect(spend).toEqual({
+      researcherSats: 184_000,
+      feeSats: 16_000,
+      poolLeft: 600_000,
+      deskKey: DESK_FEE_KEY
+    })
+    expect(spend.researcherSats + spend.feeSats + spend.poolLeft).toBe(800_000)
   })
 
   it('prices the payout fee under 10% and keeps the submission fee off the tier', () => {
@@ -256,7 +278,7 @@ describe('timeline and export', () => {
     expect(text).toContain('final-report-14d late')
   })
 
-  it('keeps an out-of-order timeline event off the folded book', () => {
+  it('drops an unsigned timeline, including an out-of-order stage', () => {
     const desk = posted()
     const skipped = {
       magic: 'bounty' as const,
@@ -264,10 +286,112 @@ describe('timeline and export', () => {
       kind: 'timeline' as const,
       bountyId: ID,
       stage: 'disclosed' as const,
-      at: '2026-10-13T13:00:00Z'
+      at: '2026-10-13T13:00:00Z',
+      signature: ''
     }
     const folded = deskFromRecords([desk.fund!, desk.submission!, ...desk.timeline, skipped])
-    expect(folded?.timeline.map((event) => event.stage)).toEqual(['received'])
+    expect(folded?.timeline).toEqual([])
     expect(bookFromRecords([desk.fund!, { ...desk.fund!, magic: 'cover' } as unknown as typeof desk.fund]).map((row) => row.bountyId)).toEqual([ID])
+  })
+})
+
+async function projectSigner(bountyId: string, root?: PrivateKey) {
+  const key = root ?? PrivateKey.fromRandom()
+  const wallet = new ProtoWallet(key)
+  const keyID = poolKeyId(bountyId)
+  const derived = await wallet.getPublicKey({
+    protocolID: PROTOCOL_ID,
+    keyID,
+    counterparty: 'self',
+    forSelf: true
+  })
+  async function sign(message: number[]): Promise<string> {
+    const { signature } = await wallet.createSignature({
+      data: message,
+      protocolID: PROTOCOL_ID,
+      keyID,
+      counterparty: 'self'
+    })
+    return Utils.toHex(signature)
+  }
+  return { publicKey: derived.publicKey, wallet, keyID, sign }
+}
+
+function withKey(fund: BountyFund, publicKey: string): BountyFund {
+  return { ...fund, projectIdentity: publicKey }
+}
+
+describe('readers trust the project key', () => {
+  it('re-derives the pool key from the pool id and checks the lock', async () => {
+    const { publicKey, wallet, keyID } = await projectSigner(ID)
+    const again = await wallet.getPublicKey({
+      protocolID: PROTOCOL_ID,
+      keyID,
+      counterparty: 'self',
+      forSelf: true
+    })
+    expect(keyID).toBe(`pool-${ID}`)
+    expect(again.publicKey).toBe(publicKey)
+    const fund = withKey(posted().fund!, publicKey)
+    const locking = await new PushDrop(wallet).lock(
+      encodeFundFields(fund),
+      PROTOCOL_ID,
+      keyID,
+      'self',
+      true,
+      false
+    )
+    const decoded = PushDrop.decode(locking)
+    expect(decoded.lockingPublicKey.toString()).toBe(publicKey)
+    expect(fundLockedToProject(decoded.lockingPublicKey.toString(), fund)).toBe(true)
+    expect(fundLockedToProject(`03${'ab'.repeat(32)}`, fund)).toBe(false)
+    const other = await projectSigner(ID)
+    expect(other.publicKey).not.toBe(publicKey)
+  })
+
+  it('keeps the first fund and drops a duplicate', async () => {
+    const firstKey = await projectSigner(ID)
+    const secondKey = await projectSigner(ID)
+    const first = withKey(posted().fund!, firstKey.publicKey)
+    const second: BountyFund = { ...withKey(posted().fund!, secondKey.publicKey), projectName: 'Forged Labs' }
+    const folded = deskFromRecords([first, second, posted().submission!])
+    expect(folded?.fund?.projectName).toBe('Northwind Devices')
+    expect(folded?.fund?.projectIdentity).toBe(firstKey.publicKey)
+    expect(bookFromRecords([second, first]).map((row) => row.fund.projectName)).toEqual(['Forged Labs'])
+  })
+
+  it('accepts a verdict signed by the fund key and ignores a forged one', async () => {
+    const project = await projectSigner(ID)
+    const forger = await projectSigner(ID)
+    const fund = withKey(posted().fund!, project.publicKey)
+    const verdict = releaseTier(posted(), 'high', '2026-10-13T15:00:00Z').verdict as BountyVerdict
+    const honest: BountyVerdict = { ...verdict, signature: await project.sign(verdictMessage(verdict)) }
+    const forged: BountyVerdict = { ...verdict, tier: 'critical', signature: await forger.sign(verdictMessage({ ...verdict, tier: 'critical' })) }
+    const kept = deskFromRecords([fund, honest])
+    expect(kept?.verdict?.tier).toBe('high')
+    expect(kept?.verdict?.signature).toBe(honest.signature)
+    const dropped = deskFromRecords([fund, forged, { ...verdict, signature: '' }])
+    expect(dropped?.verdict).toBeNull()
+    const firstWins = deskFromRecords([fund, honest, { ...honest, tier: 'low', signature: honest.signature }])
+    expect(firstWins?.verdict?.tier).toBe('high')
+  })
+
+  it('accepts a timeline signed by the fund key and ignores a forged stage', async () => {
+    const project = await projectSigner(ID)
+    const forger = await projectSigner(ID)
+    const fund = withKey(posted().fund!, project.publicKey)
+    const received = posted().timeline[0] as TimelineEvent
+    const honest: TimelineEvent = { ...received, signature: await project.sign(timelineMessage(received)) }
+    const forged: TimelineEvent = {
+      ...received,
+      stage: 'disclosed',
+      at: '2026-10-13T13:00:00Z',
+      signature: await forger.sign(timelineMessage({ ...received, stage: 'disclosed', at: '2026-10-13T13:00:00Z' }))
+    }
+    const folded = deskFromRecords([fund, honest, forged, { ...received, signature: 'abcd' }])
+    expect(folded?.timeline.map((event) => event.stage)).toEqual(['received'])
+    const remainder = encodeRemainderFields({ ...fund, poolSats: 600_000, tiers: { ...fund.tiers, high: 0 } })
+    expect(new TextDecoder().decode(Uint8Array.from(remainder[2]!))).toBe('pool')
+    expect(parseBountyFields(remainder)).toBeNull()
   })
 })

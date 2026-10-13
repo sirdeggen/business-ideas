@@ -4,11 +4,11 @@ A project funds a severity-tiered bug bounty pool. A researcher pays a small ant
 
 The report body never goes on-chain. Only its hash does.
 
-What the script enforces: the pool output is a locking script only the project key can spend. When you record a verdict, that spend pays the researcher the tier minus the desk fee. The withheld fee stays in the project lock with the unreleased tiers. The script does not read the severity label.
+What the script enforces: the pool output is a PushDrop lock. The key id is `pool-<bountyId>`, so anyone with the project wallet re-derives that key and can check it against the locking public key. Only that key can spend the pool. A release is a second transaction: it spends the funded pool outpoint and pays three outputs — the researcher gets the tier minus the desk fee, `DESK_FEE_KEY` gets the fee, and the unreleased sats are locked in a new pool output. The script does not read the severity label.
 
-What is desk-state: which tier matches the report, hash priority, and the disclosure timeline. The export is a record of those timestamps. It is not legal compliance advice.
+What is desk-state: which tier matches the report, hash priority, and the disclosure timeline. A public verdict or timeline row counts only when the fund's project key signed it. Duplicate fund rows: the first one wins, and a later fund does not replace it. The export is a record of those timestamps. It is not legal compliance advice.
 
-v0 records the per-submission fee and the export fee on the receipt. It does not collect them into a platform key. The payout fee is a percentage of the tier, priced under 10% (default 800 basis points, which is 8%). `floor(tier × bps / 10000)`.
+v0 records the per-submission fee and the export fee on the receipt. It does not collect those two into a platform key. The payout fee is a percentage of the tier, priced under 10% (default 800 basis points, which is 8%). `floor(tier × bps / 10000)`. That payout fee is paid to `DESK_FEE_KEY` when the pool is spent.
 
 This is not Job Escrow (one hired job, released when a deliverable hash lands). This is not Grants (a purpose-bound gift). This is not Cover (an insurance claim). This is not Vouch (a staked attestation). This is a tiered pool, a hash before the report, and a disclosure clock.
 
@@ -44,7 +44,7 @@ Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access 
 4. Pick a tier and click **Release this tier**. The page shows the desk fee, the researcher sats, and what stays locked.
 5. Append the timeline in order: **Acknowledge**, **Mark fixed**, **Disclose**.
 6. Click **Export the timeline**. The record shows the 24h, 72h, and 14-day clocks. It says it is not legal compliance advice.
-7. **Record on the public book** asks for the wallet, locks the remaining pool, and posts the hash. Add the researcher key under Advanced before recording a release. Install Desktop appears only if the wallet is missing.
+7. **Record on the public book** asks for the wallet. It creates the pool output locked to `pool-<bountyId>`. If a tier was released, a second transaction spends that outpoint and pays the researcher, the desk fee, and the remaining pool. Add the researcher key under Advanced before recording a release. Install Desktop appears only if the wallet is missing.
 
 ## Public overlay
 
@@ -85,7 +85,9 @@ Encode/decode, tier release math, fee math under 10%, timeline append-only order
 | Payout fee | 800 bps default, max 999 |
 | Submission fee | 1,000 sats default |
 | Export fee | 2,500 sats default |
-| Pool lock | remaining tiers plus withheld fee |
+| Pool key id | `pool-<bountyId>` |
+| Desk fee key | `02e3005a8945c785b61f14d32b357cdeba63e87f81662bfbcb6bb7f85c5e4f0703` |
+| Release | spends the pool outpoint: researcher, desk fee, new pool |
 
 ## Layout
 

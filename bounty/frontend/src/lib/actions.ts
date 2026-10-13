@@ -1,21 +1,30 @@
-import { P2PKH, PublicKey, PushDrop, Utils, WalletClient, type CreateActionOutput } from '@bsv/sdk'
+import { LockingScript, P2PKH, PublicKey, PushDrop, Utils, WalletClient, type CreateActionOutput } from '@bsv/sdk'
 import {
   BASKET,
+  DESK_FEE_KEY,
   PROTOCOL_ID,
   RECORD_SATS,
   encodeFundFields,
+  encodeRemainderFields,
   encodeSubmitFields,
   encodeTimelineFields,
   encodeVerdictFields,
   isIdentityKey,
+  poolKeyId,
   publicPayloads,
   recordPlan,
+  releaseSpend,
+  remainderFund,
+  timelineMessage,
+  verdictMessage,
   type BountyFund,
-  type DeskState
+  type BountyVerdict,
+  type DeskState,
+  type TimelineEvent
 } from '../../../protocol/bounty'
 import { originator } from './config'
 import { sendReport } from './messagebox'
-import { submitBountyTx } from './overlay'
+import { submitBountyTx, txFromWalletBeef } from './overlay'
 import { CONNECT_MS, CONNECT_TIMEOUT_MESSAGE, withTimeout } from './wallet'
 
 export interface RecordResult {
@@ -45,12 +54,6 @@ function pushdrop(wallet: WalletClient): PushDrop {
   return new PushDrop(wallet, originator())
 }
 
-function randomKeyId(): string {
-  const bytes = new Uint8Array(8)
-  crypto.getRandomValues(bytes)
-  return Utils.toBase64(Array.from(bytes))
-}
-
 function p2pkhFromPublicKey(publicKeyHex: string): string {
   return new P2PKH().lock(PublicKey.fromString(publicKeyHex).toHash()).toHex()
 }
@@ -60,22 +63,45 @@ function clip(label: string): string {
   return text.length <= 50 ? text : text.slice(0, 50)
 }
 
+async function projectKey(wallet: WalletClient, bountyId: string): Promise<{ keyID: string, publicKey: string }> {
+  const keyID = poolKeyId(bountyId)
+  const { publicKey } = await withTimeout(
+    wallet.getPublicKey({
+      protocolID: PROTOCOL_ID,
+      keyID,
+      counterparty: 'self',
+      forSelf: true
+    }),
+    CONNECT_MS,
+    CONNECT_TIMEOUT_MESSAGE
+  )
+  if (!isIdentityKey(publicKey)) throw new Error('Project key is invalid.')
+  return { keyID, publicKey }
+}
+
+async function signBytes(wallet: WalletClient, keyID: string, message: number[]): Promise<string> {
+  const { signature } = await withTimeout(
+    wallet.createSignature({
+      data: message,
+      protocolID: PROTOCOL_ID,
+      keyID,
+      counterparty: 'self'
+    }),
+    CONNECT_MS,
+    CONNECT_TIMEOUT_MESSAGE
+  )
+  return Utils.toHex(signature)
+}
+
 async function lockField(
   wallet: WalletClient,
   fields: number[][],
   bountyId: string,
+  keyID: string,
   tag: string,
   outputDescription: string,
   satoshis: number
-): Promise<{
-  satoshis: number
-  lockingScript: string
-  outputDescription: string
-  basket: string
-  customInstructions: string
-  tags: string[]
-}> {
-  const keyID = randomKeyId()
+): Promise<CreateActionOutput> {
   const lockingScript = await withTimeout(
     pushdrop(wallet).lock(fields, PROTOCOL_ID, keyID, 'self', true, false),
     CONNECT_MS,
@@ -90,10 +116,59 @@ async function lockField(
       protocolID: PROTOCOL_ID,
       keyID,
       counterparty: 'self',
+      forSelf: true,
       bountyId
     }),
     tags: [BASKET, tag, bountyId]
   }
+}
+
+function poolOutputIndex(txBytes: number[], lockingScriptHex: string): number {
+  const tx = txFromWalletBeef(txBytes)
+  const index = tx.outputs.findIndex((output) => output.lockingScript.toHex() === lockingScriptHex)
+  if (index < 0) throw new Error('The pool output is missing from the fund transaction.')
+  return index
+}
+
+async function unlockPool(
+  wallet: WalletClient,
+  reference: string,
+  signableTx: number[],
+  keyID: string,
+  poolSats: number,
+  lockingScriptHex: string,
+  fundTxid: string
+): Promise<{ txid: string, tx: number[] }> {
+  const txToSign = txFromWalletBeef(signableTx)
+  txToSign.inputs[0].unlockingScriptTemplate = pushdrop(wallet).unlock(
+    PROTOCOL_ID,
+    keyID,
+    'self',
+    'all',
+    false,
+    poolSats,
+    LockingScript.fromHex(lockingScriptHex)
+  )
+  await txToSign.sign()
+  const unlockingScript = txToSign.inputs[0].unlockingScript?.toHex()
+  if (!unlockingScript) throw new Error('Failed to build unlocking script')
+  const signed = await wallet.signAction({
+    reference,
+    spends: { '0': { unlockingScript } },
+    options: { sendWith: [fundTxid] }
+  })
+  if (!signed.txid || !signed.tx) throw new Error('Wallet did not return a signed transaction')
+  return { txid: signed.txid, tx: signed.tx as number[] }
+}
+
+async function signVerdict(wallet: WalletClient, keyID: string, verdict: BountyVerdict): Promise<BountyVerdict> {
+  const signature = await signBytes(wallet, keyID, verdictMessage(verdict))
+  return { ...verdict, signature }
+}
+
+async function signTimeline(wallet: WalletClient, keyID: string, event: TimelineEvent): Promise<TimelineEvent> {
+  const signature = await signBytes(wallet, keyID, timelineMessage(event))
+  return { ...event, signature }
 }
 
 export async function recordBounty(
@@ -107,76 +182,132 @@ export async function recordBounty(
   assertCanRecord(desk, researcherKey)
   const fund = desk.fund as BountyFund
   const bountyId = fund.bountyId
-  const stamped: BountyFund = {
-    ...fund,
-    projectIdentity: fund.projectIdentity || identityKey
-  }
-  const plan = recordPlan(desk)
-  const outputs: CreateActionOutput[] = [
-    await lockField(
-      wallet,
-      encodeFundFields(stamped),
-      bountyId,
-      'fund',
-      clip(`Pool ${stamped.projectName}`),
-      plan.poolLockSats
-    )
-  ]
+  const { keyID, publicKey } = await projectKey(wallet, bountyId)
+  const stamped: BountyFund = { ...fund, projectIdentity: publicKey }
+  const verdict = desk.verdict ? await signVerdict(wallet, keyID, desk.verdict) : null
+  const timeline = await Promise.all(desk.timeline.map((event) => signTimeline(wallet, keyID, event)))
+  const pool = await lockField(
+    wallet,
+    encodeFundFields(stamped),
+    bountyId,
+    keyID,
+    'fund',
+    clip(`Pool ${stamped.projectName}`),
+    stamped.poolSats
+  )
+  const outputs: CreateActionOutput[] = [pool]
   if (desk.submission) {
     outputs.push(await lockField(
       wallet,
       encodeSubmitFields(desk.submission),
       bountyId,
+      keyID,
       'submit',
       clip(`Hash ${desk.submission.researcherName}`),
       RECORD_SATS
     ))
   }
-  if (desk.verdict) {
+  if (verdict) {
     outputs.push(await lockField(
       wallet,
-      encodeVerdictFields(desk.verdict),
+      encodeVerdictFields(verdict),
       bountyId,
+      keyID,
       'verdict',
-      clip(`Verdict ${desk.verdict.tier}`),
+      clip(`Verdict ${verdict.tier}`),
       RECORD_SATS
     ))
-    outputs.push({
-      satoshis: plan.researcherSats,
-      lockingScript: p2pkhFromPublicKey(researcherKey.trim()),
-      outputDescription: clip(`Pay ${desk.submission?.researcherName ?? 'researcher'}`)
-    })
   }
-  for (const event of desk.timeline) {
+  for (const event of timeline) {
     outputs.push(await lockField(
       wallet,
       encodeTimelineFields(event),
       bountyId,
+      keyID,
       'timeline',
       clip(`Clock ${event.stage}`),
       RECORD_SATS
     ))
   }
 
-  const response = await wallet.createAction({
-    description: clip(`Record ${stamped.projectName}`),
+  const fundResponse = await wallet.createAction({
+    description: clip(`Fund ${stamped.projectName}`),
     outputs,
     labels: [BASKET, 'fund'],
-    options: { randomizeOutputs: false }
+    options: verdict ? { noSend: true, randomizeOutputs: false } : { randomizeOutputs: false }
   })
-  let txid = response.txid
-  let tx = response.tx as number[] | undefined
-  if ((!txid || !tx) && response.signableTransaction) {
+  let txid = fundResponse.txid
+  let tx = fundResponse.tx as number[] | undefined
+  if ((!txid || !tx) && fundResponse.signableTransaction) {
     const signed = await wallet.signAction({
-      reference: response.signableTransaction.reference,
-      spends: {}
+      reference: fundResponse.signableTransaction.reference,
+      spends: {},
+      options: verdict ? { noSend: true } : undefined
     })
     txid = signed.txid
     tx = signed.tx as number[] | undefined
   }
   if (!txid || !tx) {
-    throw Object.assign(new Error('Wallet did not return a transaction'), { cause: response })
+    throw Object.assign(new Error('Wallet did not return a transaction'), { cause: fundResponse })
   }
+
+  const broadcast: number[][] = []
+  if (verdict) {
+    const spend = releaseSpend({ ...desk, fund: stamped, verdict })
+    const releaseOutputs: CreateActionOutput[] = [{
+      satoshis: spend.researcherSats,
+      lockingScript: p2pkhFromPublicKey(researcherKey.trim()),
+      outputDescription: clip(`Pay ${desk.submission?.researcherName ?? 'researcher'}`)
+    }]
+    if (spend.feeSats >= 1) {
+      releaseOutputs.push({
+        satoshis: spend.feeSats,
+        lockingScript: p2pkhFromPublicKey(DESK_FEE_KEY),
+        outputDescription: 'Bounty desk fee'
+      })
+    }
+    const remainder = remainderFund(stamped, verdict)
+    if (remainder) {
+      releaseOutputs.push(await lockField(
+        wallet,
+        encodeRemainderFields(remainder),
+        bountyId,
+        keyID,
+        'fund',
+        clip(`Pool left ${stamped.projectName}`),
+        remainder.poolSats
+      ))
+    }
+    const vout = poolOutputIndex(tx, pool.lockingScript)
+    const release = await wallet.createAction({
+      description: clip(`Release ${verdict.tier}`),
+      inputBEEF: tx,
+      inputs: [{
+        outpoint: `${txid}.${vout}`,
+        inputDescription: 'Spend bounty pool',
+        unlockingScriptLength: 73
+      }],
+      outputs: releaseOutputs,
+      labels: [BASKET, 'release'],
+      options: { randomizeOutputs: false, trustSelf: 'known', knownTxids: [txid] }
+    })
+    if (!release.signableTransaction) throw new Error('Wallet did not return a signable spend')
+    const spent = await unlockPool(
+      wallet,
+      release.signableTransaction.reference,
+      release.signableTransaction.tx as number[],
+      keyID,
+      stamped.poolSats,
+      pool.lockingScript,
+      txid
+    )
+    broadcast.push(tx, spent.tx)
+    txid = spent.txid
+    tx = spent.tx
+  } else {
+    broadcast.push(tx)
+  }
+
   if (desk.submission && reportBody.trim()) {
     void sendReport(wallet, identityKey, stamped.projectIdentity, {
       bountyId,
@@ -185,7 +316,7 @@ export async function recordBounty(
     })
   }
   try {
-    await submitBountyTx(overlayUrl, tx)
+    for (const body of broadcast) await submitBountyTx(overlayUrl, body)
     return { bountyId, txid }
   } catch (error) {
     const detail = error instanceof Error && error.message.trim() ? error.message : String(error ?? '')

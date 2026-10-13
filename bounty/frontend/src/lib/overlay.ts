@@ -14,6 +14,7 @@ import {
   bookFromRecords,
   deskFromRecords,
   keepMagic,
+  fundLockedToProject,
   parseBountyFields,
   type BountyPayload,
   type DeskState,
@@ -113,8 +114,11 @@ function standardBeef(tx: Transaction): number[] {
 function parseScript(lockingScript: Parameters<typeof PushDrop.decode>[0]): BountyPayload | null {
   for (const position of ['before', 'after'] as const) {
     try {
-      const item = parseBountyFields(PushDrop.decode(lockingScript, position).fields)
-      if (item) return item
+      const decoded = PushDrop.decode(lockingScript, position)
+      const item = parseBountyFields(decoded.fields)
+      if (!item) continue
+      if (item.kind === 'fund' && !fundLockedToProject(decoded.lockingPublicKey.toString(), item)) return null
+      return item
     } catch {
       // Try the other lock() position.
     }
