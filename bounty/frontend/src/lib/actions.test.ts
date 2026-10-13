@@ -7,7 +7,7 @@ import { assertCanRecord } from './actions'
 
 const actionsSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'actions.ts'), 'utf8')
 
-const ID = 'ab'.repeat(16)
+const ID = 'ab'.repeat(32)
 const KEY = `02${'ab'.repeat(32)}`
 const TIERS = { critical: 500_000, high: 200_000, medium: 80_000, low: 20_000 }
 

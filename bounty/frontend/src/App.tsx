@@ -76,7 +76,7 @@ import {
 } from './lib/copy'
 import { bookFromItems, lookupBounty, lookupBountyItems, type ListedBounty } from './lib/overlay'
 import { clearDesk, loadDesk, saveDesk } from './lib/persist'
-import { bountyPublicUrl, goHome, goToBounty, readBountyFromLocation } from './lib/route'
+import { bountyHref, bountyPublicUrl, goHome, goToBounty, readBountyFromLocation } from './lib/route'
 
 type Busy = 'record' | null
 
@@ -216,7 +216,8 @@ function Shell() {
       })
       setDesk(next)
       setReadonly(false)
-      if (next.fund) goToBounty(next.fund.bountyId, null, pinIdentity || null)
+      setHintTxid('')
+      if (next.fund) goToBounty(next.fund.bountyId, '', identityKey || pinIdentity || null)
     } catch (err) {
       fail(err)
     }
@@ -277,11 +278,14 @@ function Shell() {
     setBusy('record')
     try {
       const result = await recordBounty(session.wallet, url, session.identityKey, desk, researcherKey, reportBody)
+      if (desk.fund && desk.fund.bountyId !== result.bountyId) clearDesk(desk.fund.bountyId)
+      setDesk(result.desk)
+      setPinIdentity(result.projectIdentity)
       setHintTxid(result.txid)
-      if (desk.fund) goToBounty(desk.fund.bountyId, result.txid, pinIdentity || null)
+      goToBounty(result.bountyId, result.txid, result.projectIdentity)
       setActionError(result.overlayError ?? null)
       const items = await lookupBountyItems(url).catch(() => null)
-      if (items) setBook(bookFromItems(items, pinIdentity || null))
+      if (items) setBook(bookFromItems(items, result.projectIdentity))
     } catch (err) {
       console.error('Record bounty failed', err)
       setActionError(errorMessage(err))
@@ -305,7 +309,11 @@ function Shell() {
   const copyLink = async (): Promise<void> => {
     if (!fund) return
     try {
-      await navigator.clipboard.writeText(bountyPublicUrl(fund.bountyId, hintTxid, pinIdentity || null))
+      await navigator.clipboard.writeText(bountyPublicUrl(
+        fund.bountyId,
+        hintTxid,
+        fund.projectIdentity || identityKey || pinIdentity || null
+      ))
       setCopied(true)
     } catch (err) {
       fail(err)
@@ -338,8 +346,9 @@ function Shell() {
       })
       setReadonly(true)
     }
+    setPinIdentity(row.fund.projectIdentity || '')
     setHintTxid(row.txid ?? '')
-    goToBounty(row.bountyId, row.txid, pinIdentity || null)
+    goToBounty(row.bountyId, row.txid, row.fund.projectIdentity || null)
   }
 
   const refreshBook = (): void => {
@@ -617,9 +626,16 @@ function Shell() {
               <ul className="receipts">
                 {book.map((row) => (
                   <li key={row.bountyId}>
-                    <button type="button" className="text-btn" onClick={() => openListed(row)}>
+                    <a
+                      className="text-btn"
+                      href={bountyHref(row.bountyId, row.txid, row.fund.projectIdentity)}
+                      onClick={(event) => {
+                        event.preventDefault()
+                        openListed(row)
+                      }}
+                    >
                       {row.fund.projectName}
-                    </button>
+                    </a>
                     <span> {formatAmount(row.fund.poolSats)} sats{row.verdict ? ` · ${row.verdict.tier} released` : ''}</span>
                   </li>
                 ))}

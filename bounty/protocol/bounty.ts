@@ -11,12 +11,15 @@
  * alone and checks it. Only the project wallet can spend that key.
  * A release spends that outpoint and pays the researcher, a BRC-29
  * output of the desk wallet, and a new pool output.
- * The fund carries the root identity. The canonical fund is the one
- * named by `?tx=` when that param is present, otherwise the oldest
- * valid fund for the bounty id (and for `?p=` when that pin is set).
- * A later fund that reuses the bounty id is ignored. The pool chain
- * follows outpoint spends: each release input is the previous pool
- * outpoint.
+ * The fund carries the root identity and a nonce. The bounty id is
+ * sha256 of that identity concatenated with the nonce, so a reader
+ * recomputes it and drops a fund whose id does not match the key,
+ * along with that fund's chain, verdicts, and timeline. The canonical
+ * fund is the one named by `?tx=` when that param is present, otherwise
+ * the oldest valid fund from the same key (`?p=` pins the key).
+ * Oldest fundedAt is only a tie-break among funds from that key.
+ * The pool chain follows outpoint spends: each release input is the
+ * previous pool outpoint.
  * Desk-state: which tier matches, hash priority, and the disclosure
  * timeline. Public verdict and timeline rows count only when that
  * derived project key signed them. The report body is never a field.
@@ -127,6 +130,8 @@ export interface BountyFund {
   submissionFeeSats: number
   exportFeeSats: number
   projectIdentity: string
+  /** 32 hex chars. Published bounty id is sha256(projectIdentity || nonce). */
+  nonce: string
   fundedAt: string
 }
 
@@ -215,6 +220,7 @@ export interface FundInput {
   submissionFeeSats: number
   exportFeeSats: number
   projectIdentity?: string
+  nonce?: string
 }
 
 export interface ReleaseLines {
@@ -246,7 +252,8 @@ export interface Duties {
   finalReport: DutyFlag
 }
 
-const BOUNTY_ID = /^[0-9a-f]{32}$/
+const BOUNTY_ID = /^[0-9a-f]{64}$/
+const NONCE = /^[0-9a-f]{32}$/
 const HASH_HEX = /^[0-9a-f]{64}$/
 const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/
 const IDENTITY_KEY = /^(02|03)[0-9a-fA-F]{64}$/
@@ -265,6 +272,44 @@ function fieldUtf8(field: number[] | Uint8Array): string {
 
 export function isBountyId(value: string): boolean {
   return BOUNTY_ID.test(value.trim().toLowerCase())
+}
+
+export function isNonce(value: string): boolean {
+  return NONCE.test(value.trim().toLowerCase())
+}
+
+export function newNonce(): string {
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+/** sha256 of the identity key concatenated with the nonce. Readers recompute this. */
+export function boundBountyId(projectIdentity: string, nonce: string): string {
+  const identity = projectIdentity.trim().toLowerCase()
+  const salt = nonce.trim().toLowerCase()
+  if (!isIdentityKey(identity) || !isNonce(salt)) throw new Error('Bounty id cannot be bound.')
+  return sha256Hex(`${identity}${salt}`)
+}
+
+/** A fund with a project key is kept only when its id is sha256(identity || nonce). */
+export function fundIdMatches(fund: Pick<BountyFund, 'bountyId' | 'projectIdentity' | 'nonce'>): boolean {
+  if (!fund.projectIdentity) return true
+  if (!isIdentityKey(fund.projectIdentity) || !isNonce(fund.nonce ?? '')) return false
+  return fund.bountyId.toLowerCase() === boundBountyId(fund.projectIdentity, fund.nonce)
+}
+
+export function bindFundToKey(fund: BountyFund, projectIdentity: string): BountyFund {
+  const identity = projectIdentity.trim().toLowerCase()
+  if (!isIdentityKey(identity)) throw new Error('Project key is invalid.')
+  const nonce = fund.nonce.trim().toLowerCase()
+  if (!isNonce(nonce)) throw new Error('Nonce is missing.')
+  return {
+    ...fund,
+    projectIdentity: identity,
+    nonce,
+    bountyId: boundBountyId(identity, nonce)
+  }
 }
 
 export function isReportHash(value: string): boolean {
@@ -401,7 +446,7 @@ export function earlierSubmission(rows: BountySubmit[]): BountySubmit | null {
   })[0] ?? null
 }
 
-export function fundPool(input: FundInput, now = nowIso(), bountyId = newBountyId()): DeskState {
+export function fundPool(input: FundInput, now = nowIso(), bountyId?: string): DeskState {
   const projectName = assertText(input.projectName, 'Name the project.', NAME_MAX)
   const scope = assertText(input.scope, 'Name the scope.', SCOPE_MAX)
   const tiers = {
@@ -414,16 +459,21 @@ export function fundPool(input: FundInput, now = nowIso(), bountyId = newBountyI
   assertPayoutFeeBps(input.payoutFeeBps)
   assertSats(input.submissionFeeSats, 'the submission fee', 1)
   assertSats(input.exportFeeSats, 'the export fee', 1)
-  const projectIdentity = (input.projectIdentity ?? '').trim()
+  const projectIdentity = (input.projectIdentity ?? '').trim().toLowerCase()
   if (projectIdentity && !isIdentityKey(projectIdentity)) {
     throw new Error('Project key must be a compressed public key.')
   }
   if (!isIsoDateTime(now)) throw new Error('Funded time is missing.')
+  const nonce = (input.nonce ?? '').trim().toLowerCase() || newNonce()
+  if (!isNonce(nonce)) throw new Error('Nonce is invalid.')
+  const id = projectIdentity
+    ? boundBountyId(projectIdentity, nonce)
+    : (bountyId && isBountyId(bountyId) ? bountyId.toLowerCase() : sha256Hex(nonce))
   const fund: BountyFund = {
     magic: MAGIC,
     version: SCHEMA_VERSION,
     kind: 'fund',
-    bountyId,
+    bountyId: id,
     projectName,
     scope,
     tiers,
@@ -432,6 +482,7 @@ export function fundPool(input: FundInput, now = nowIso(), bountyId = newBountyI
     submissionFeeSats: input.submissionFeeSats,
     exportFeeSats: input.exportFeeSats,
     projectIdentity,
+    nonce,
     fundedAt: now
   }
   return {
@@ -743,7 +794,7 @@ function oldestFund(funds: BountyFund[]): BountyFund | null {
 
 export function deskFromRecords(rows: BountyPayload[], bountyId?: string): DeskState | null {
   const scoped = keepMagic(rows).filter((row) => !bountyId || row.bountyId === bountyId)
-  const fund = oldestFund(scoped.filter((row): row is BountyFund => row.kind === 'fund'))
+  const fund = oldestFund(scoped.filter((row): row is BountyFund => row.kind === 'fund' && fundIdMatches(row)))
   if (!fund) return null
   const submits = scoped.filter((row): row is BountySubmit => row.kind === 'submit')
   const verdict = scoped.find((row): row is BountyVerdict =>
@@ -772,6 +823,7 @@ function fundIsValid(record: ChainRecord, bountyId?: string, pinIdentity?: strin
   const fund = record.payload
   if (bountyId && fund.bountyId !== bountyId) return false
   if (pinIdentity && !sameKey(fund.projectIdentity, pinIdentity)) return false
+  if (!fundIdMatches(fund)) return false
   if (!record.lockingPublicKey) return !fund.projectIdentity
   if (!isIdentityKey(fund.projectIdentity)) return false
   return fundLockedToProject(record.lockingPublicKey, fund)
@@ -952,6 +1004,8 @@ export function validateFund(fund: BountyFund): string | null {
     return error instanceof Error ? error.message : 'Pool is invalid.'
   }
   if (fund.projectIdentity && !isIdentityKey(fund.projectIdentity)) return 'Project key is invalid.'
+  if (!isNonce(fund.nonce)) return 'Nonce is missing.'
+  if (!fundIdMatches(fund)) return 'Bounty id does not match the project key.'
   if (!isIsoDateTime(fund.fundedAt)) return 'Funded time is missing.'
   return null
 }
@@ -1022,7 +1076,8 @@ export function encodeFundFields(fund: BountyFund): number[][] {
     stringToUtf8Bytes(String(fund.submissionFeeSats)),
     stringToUtf8Bytes(String(fund.exportFeeSats)),
     stringToUtf8Bytes(fund.projectIdentity || 'pending'),
-    stringToUtf8Bytes(fund.fundedAt)
+    stringToUtf8Bytes(fund.fundedAt),
+    stringToUtf8Bytes(fund.nonce)
   ]
 }
 
@@ -1107,7 +1162,7 @@ export function parseBountyFields(fields: Array<number[] | Uint8Array>): BountyP
   const kind = rest[1]
   const bountyId = rest[2] ?? ''
   if (kind === 'fund') {
-    if (rest.length < 15) return null
+    if (rest.length < 16) return null
     const critical = whole(rest[5] ?? '')
     const high = whole(rest[6] ?? '')
     const medium = whole(rest[7] ?? '')
@@ -1133,6 +1188,7 @@ export function parseBountyFields(fields: Array<number[] | Uint8Array>): BountyP
       submissionFeeSats,
       exportFeeSats,
       projectIdentity: (rest[13] ?? '') === 'pending' ? '' : (rest[13] ?? ''),
+      nonce: (rest[15] ?? '').toLowerCase(),
       fundedAt: rest[14] ?? ''
     }
     return validateFund(fund) ? null : fund

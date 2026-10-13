@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { bountyHref, parseBountyLocation } from './route'
 
-const BOUNTY_ID = 'ab'.repeat(16)
+const BOUNTY_ID = 'ab'.repeat(32)
 const HINT_TX = 'cd'.repeat(32)
 const PIN = `02${'ab'.repeat(32)}`
 

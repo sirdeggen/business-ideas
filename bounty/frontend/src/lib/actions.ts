@@ -6,6 +6,7 @@ import {
   DESK_FEE_KEY_ID,
   PROTOCOL_ID,
   RECORD_SATS,
+  bindFundToKey,
   deskFeeLockingKey,
   encodeFundFields,
   encodeRemainderFields,
@@ -37,6 +38,8 @@ export interface RecordResult {
   /** Canonical fund transaction. Deep links use this as `?tx=`. */
   txid: string
   releaseTxid?: string
+  projectIdentity: string
+  desk: DeskState
   overlayError?: string
 }
 
@@ -192,13 +195,14 @@ export async function recordBounty(
 ): Promise<RecordResult> {
   assertCanRecord(desk, researcherKey)
   const fund = desk.fund as BountyFund
-  const bountyId = fund.bountyId
-  const root = identityKey.trim()
+  const root = identityKey.trim().toLowerCase()
   if (!isIdentityKey(root)) throw new Error('Project key is invalid.')
+  const stamped = bindFundToKey(fund, root)
+  const bountyId = stamped.bountyId
   const keyID = await assertPoolKey(wallet, root, bountyId)
-  const stamped: BountyFund = { ...fund, projectIdentity: root }
-  const verdict = desk.verdict ? await signVerdict(wallet, keyID, desk.verdict) : null
-  const timeline = await Promise.all(desk.timeline.map((event) => signTimeline(wallet, keyID, event)))
+  const submission = desk.submission ? { ...desk.submission, bountyId } : null
+  const verdict = desk.verdict ? await signVerdict(wallet, keyID, { ...desk.verdict, bountyId }) : null
+  const timeline = await Promise.all(desk.timeline.map((event) => signTimeline(wallet, keyID, { ...event, bountyId })))
   const pool = await lockField(
     wallet,
     encodeFundFields(stamped),
@@ -209,14 +213,14 @@ export async function recordBounty(
     stamped.poolSats
   )
   const outputs: CreateActionOutput[] = [pool]
-  if (desk.submission) {
+  if (submission) {
     outputs.push(await lockField(
       wallet,
-      encodeSubmitFields(desk.submission),
+      encodeSubmitFields(submission),
       bountyId,
       keyID,
       'submit',
-      clip(`Hash ${desk.submission.researcherName}`),
+      clip(`Hash ${submission.researcherName}`),
       RECORD_SATS
     ))
   }
@@ -338,9 +342,22 @@ export async function recordBounty(
   }
   try {
     for (const body of broadcast) await submitBountyTx(overlayUrl, body)
-    return { bountyId, txid: fundTxid, releaseTxid }
+    return {
+      bountyId,
+      txid: fundTxid,
+      releaseTxid,
+      projectIdentity: root,
+      desk: { ...desk, fund: stamped, submission, verdict, timeline }
+    }
   } catch (error) {
     const detail = error instanceof Error && error.message.trim() ? error.message : String(error ?? '')
-    return { bountyId, txid: fundTxid, releaseTxid, overlayError: detail.trim() || 'overlay submit failed with no message' }
+    return {
+      bountyId,
+      txid: fundTxid,
+      releaseTxid,
+      projectIdentity: root,
+      desk: { ...desk, fund: stamped, submission, verdict, timeline },
+      overlayError: detail.trim() || 'overlay submit failed with no message'
+    }
   }
 }

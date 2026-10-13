@@ -3,7 +3,7 @@ import { MAGIC, fundPool, submitReport } from '../../../protocol/bounty'
 import { PUBLIC_LOOKUP, PUBLIC_OVERLAY_URL, PUBLIC_TOPIC } from './config'
 import { bookFromItems, overlayLookupService, overlayTopic, viewFromItems, type OverlayItem } from './overlay'
 
-const ID = 'ab'.repeat(16)
+const ID = 'ab'.repeat(32)
 const TIERS = { critical: 500_000, high: 200_000, medium: 80_000, low: 20_000 }
 
 describe('overlay topic rails', () => {
@@ -39,7 +39,7 @@ describe('client MAGIC filter', () => {
       payoutFeeBps: 800,
       submissionFeeSats: 1_000,
       exportFeeSats: 2_500
-    }, '2026-10-13T12:00:00Z', 'cd'.repeat(16))
+    }, '2026-10-13T12:00:00Z', 'cd'.repeat(32))
     const foreign = {
       payload: { ...desk.fund!, magic: 'jobescrow' },
       txid: '11'.repeat(32),
