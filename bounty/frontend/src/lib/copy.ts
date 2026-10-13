@@ -23,10 +23,10 @@ export const HASH_NOTE = 'The report body never goes on-chain. Only its hash doe
 export const SCRIPT_NOTE = 'The pool lock is what the script enforces: only the project key can spend it. A recorded verdict pays the researcher the tier minus the desk fee. The script does not read the severity label.'
 export const DESK_NOTE = 'Hash priority and the disclosure timeline are desk records. They are not written into the locking script.'
 export const EXPORT_NOTE = 'This export is a record of those timestamps. It is not legal compliance advice.'
-export const FEE_HELPER = 'The payout fee is a percent of the tier, priced under 10%. 800 basis points is 8%. The researcher also pays a per-submission fee. The timeline export has its own fee.'
-export const LOCAL_NOTE = 'The walkthrough keeps the pool in this browser. Record on the public book locks the remaining pool to the project key and posts the hash. The report body is not in that transaction. v0 does not collect the submission fee or the export fee into a platform key. The payout fee is withheld from the researcher and stays in the project lock.'
+export const FEE_HELPER = 'Payout fee is a percent of the released tier, under 10%. 800 basis points is 8%. Submission and export are separate fees.'
+export const LOCAL_NOTE = 'Recording locks the remaining pool to the project key and posts the hash. The report body is not in that transaction. v0 does not collect the submission fee or the export fee.'
 export const STRANGER_LINE = 'Anyone with this link can read the pool, the hash, and the timeline. No wallet to look.'
-export const FOOTER = 'Not a hired job. Not a purpose-bound gift. Not an insurance claim. Not a staked attestation. A tiered pool, a hash before the report, and a disclosure clock.'
+export const FOOTER = 'A tiered pool, a hash before the report, and a disclosure clock.'
 export const BOOK_EMPTY = 'No pools on the public book yet.'
 export const BOOK_HEADING = 'Public book'
 export const PROJECT_LABEL = 'Project'
@@ -48,19 +48,19 @@ export const LINE_SUBMISSION = 'Submission fee'
 export const BUSINESS_CASE_TITLE = 'Business case'
 
 export const BUSINESS_CASE_WHY =
-  'Software and device makers selling into the EU need a disclosure clock they can show, and open-source maintainers need a bounty without a large platform contract. A researcher should be able to prove they reported first without publishing the bug.'
+  'Software and device makers selling into the EU need a disclosure clock they can show. A researcher should be able to prove they reported first without publishing the bug.'
 
 export const BUSINESS_CASE_WHO =
   'Projects fund the severity-tiered pool and pay a percentage of each payout. Researchers pay a small anti-spam fee to post a hash. Compliance teams pay to export the disclosure timeline.'
 
 export const BUSINESS_CASE_MARKET =
-  'Immunefi (DefiLlama, 2026-10-13): ~$67k / 30d from researcher submission and identity-verification fees (~$383k trailing 1y). Projects also pay a 10% fee on payouts. Bug bounty and vulnerability disclosure on X ~2,709 posts / 7d. EU Cyber Resilience Act reporting duty live since 11 Sep 2026: early warning 24h, full notice 72h, final report 14 days after a fix. Share of that market this desk can take is unknown.'
+  'Immunefi researcher submission and identity-verification fees, from DefiLlama daily fees fetched 13 Oct 2026: $66,945 over 30 days and $382,689 over the trailing year. Those totals leave out Immunefi\'s separate 10% project fee on payouts (Immunefi FAQ). The EU Cyber Resilience Act requires manufacturers to report actively exploited vulnerabilities from 11 Sep 2026 (ENISA): early warning within 24 hours, a full notice within 72 hours, and a final report within 14 days of a fix (European Commission). Share of that market this desk can take is unknown.'
 
 export const BUSINESS_CASE_PROOF_CHAIN =
-  'Other-chain analog: Immunefi researcher submission fees plus a 10% project fee on payouts. Hats Finance lists 5–8% of payouts (secondary source).'
+  'Other-chain analog: Immunefi charges researchers a submission fee, and charges projects an additional 10% of the bounty payout (Immunefi support FAQ). The DefiLlama totals above count the researcher fees.'
 
 export const BUSINESS_CASE_PROOF_FIAT =
-  'Non-chain analog: HackerOne managed programs at $20k–$100k+ per year. Manufacturers already staff disclosure and regulatory reporting.'
+  'Non-chain analog: manufacturers selling into the EU already staff disclosure against that CRA clock. Public program list prices are left out of this case.'
 
 export const BUSINESS_CASE_PROOF = `${BUSINESS_CASE_PROOF_CHAIN} ${BUSINESS_CASE_PROOF_FIAT}`
 

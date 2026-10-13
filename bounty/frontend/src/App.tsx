@@ -366,7 +366,7 @@ function Shell() {
         <img
           className="scene"
           src={`${import.meta.env.BASE_URL}scene.webp`}
-          alt="A researcher at a bright desk with a sealed envelope and a sky-blue seal, beside a board of four severity tiers."
+          alt="A blonde researcher with a laptop showing a report hash, and a white male triager beside a board of four severity tiers, in a bright modern office."
           width="1280"
           height="720"
         />
@@ -429,7 +429,6 @@ function Shell() {
                   <input id="export-fee" inputMode="numeric" value={exportFee} onChange={(event) => setExportFee(event.target.value)} />
                 </div>
               </div>
-              <p className="helper">{FEE_HELPER}</p>
               <div className="actions">
                 <button type="button" className="btn primary" disabled={busy !== null} onClick={runFund}>
                   {FUND_BUTTON}
@@ -645,10 +644,14 @@ function Shell() {
         {combinedError === CHROME_ALLOW_HINT && <p className="helper">{CHROME_ALLOW_HINT}</p>}
 
         <details className="advanced">
-          <summary>Advanced</summary>
-          <p>Amounts are in sats.</p>
+          <summary>How it works</summary>
           <p>{LOCAL_NOTE}</p>
           <p>{FEE_HELPER}</p>
+        </details>
+
+        <details className="advanced">
+          <summary>Advanced</summary>
+          <p>Amounts are in sats.</p>
           <p>Recording uses a BSV Desktop wallet. The report body, when you still have it in this tab, goes out over Message Box and not in the transaction.</p>
           {online === false && <p>{overlayCheckFailed(probeError, url)}</p>}
           {identityKey && <p>Wallet key <code>{shortKey(identityKey, 8)}</code></p>}

@@ -94,10 +94,8 @@ describe('first-paint copy', () => {
   })
 
   it('is a tiered bounty, distinct from a hired job, a gift, a claim, and a vouch', () => {
-    expect(FOOTER).toMatch(/Not a hired job/)
-    expect(FOOTER).toMatch(/Not a purpose-bound gift/)
-    expect(FOOTER).toMatch(/Not an insurance claim/)
-    expect(FOOTER).toMatch(/Not a staked attestation/)
+    expect(FOOTER).toBe('A tiered pool, a hash before the report, and a disclosure clock.')
+    expect(FOOTER).not.toMatch(/Not a /)
     expect(readme).toMatch(/not Job Escrow/i)
     expect(readme).toMatch(/not Grants/i)
     expect(readme).toMatch(/not Cover/i)
@@ -125,8 +123,13 @@ describe('first-paint copy', () => {
     const ledger = catalog.slice(catalog.indexOf('aria-label="Server"'), catalog.indexOf('aria-label="Live"'))
     const spotlight = catalog.slice(catalog.indexOf('aria-label="Live"'))
     expect(ledger.indexOf('id="bounty-desk"')).toBeGreaterThan(-1)
-    expect(ledger.indexOf('id="bounty-desk"')).toBeLessThan(ledger.indexOf('id="scrip-desk"'))
+    expect(ledger.indexOf('id="bounty-desk"')).toBeLessThan(ledger.indexOf('id="check-desk"'))
+    expect(ledger.indexOf('id="check-desk"')).toBeLessThan(ledger.indexOf('id="scrip-desk"'))
     expect(ledger.indexOf('id="scrip-desk"')).toBeLessThan(ledger.indexOf('id="boost-desk"'))
+    const sceneAlt = 'A blonde researcher with a laptop showing a report hash, and a white male triager beside a board of four severity tiers, in a bright modern office.'
+    expect(bountyCard).toContain(sceneAlt)
+    expect(app).toContain(`alt="${sceneAlt}"`)
+    expect(sceneAlt).toMatch(/four severity tiers/)
     expect(spotlight).not.toContain('id="bounty-desk"')
     expect(readme).toContain('# Bounty Desk (v0)')
     expect(readme).toContain('tm_anytx')
@@ -145,7 +148,7 @@ describe('first-paint copy', () => {
     expect(streamCard).toContain('Pay as they work.')
     expect(grantCard).toContain('A gift for a purpose.')
     for (const slug of [
-      'scrip', 'boost', 'private-pay', 'closing', 'cover', 'inference', 'feed', 'registry', 'credit', 'handoff', 'vouch', 'kya',
+      'check', 'scrip', 'boost', 'private-pay', 'closing', 'cover', 'inference', 'feed', 'registry', 'credit', 'handoff', 'vouch', 'kya',
       'vault-claim', 'job-escrow', 'trace', 'titles', 'names', 'memberships', 'datasets',
       'session', 'spend-policy', 'raffle', 'treasury', 'tickets', 'records',
       'receivables', 'grants', 'streampay', 'invoices'
@@ -154,12 +157,13 @@ describe('first-paint copy', () => {
     }
   })
 
-  it('uses a sky-blue chip and adds the bounty desk to Pages without dropping the others', () => {
+  it('uses the orange chip and adds the bounty desk to Pages without dropping the others', () => {
     expect(css).toContain('--seal: #0369a1')
     expect(css).toContain('Source Serif 4')
     expect(catalogCss).toContain('.demo-bounty')
-    expect(catalogCss).toContain('--chip: #0369a1')
-    expect(catalogCss.match(/--chip: #0369a1/g)).toHaveLength(1)
+    expect(catalogCss).toContain('--chip: #FF7A3D')
+    expect(catalogCss.match(/--chip: #FF7A3D/g)).toHaveLength(1)
+    expect(pagesYml).toContain('# check-desk')
     expect(catalogCss).toContain('.demo-scrip')
     expect(catalogCss).toContain('.demo-job-escrow')
     expect(pagesYml).toContain('# bounty-desk')
@@ -177,7 +181,7 @@ describe('first-paint copy', () => {
       'records', 'raffle', 'spend-policy', 'session', 'datasets', 'memberships',
       'names', 'titles', 'trace', 'job-escrow', 'vault-claim', 'kya', 'vouch',
       'handoff', 'credit', 'registry', 'feed', 'inference', 'cover', 'scenes', 'closing',
-      'private-pay', 'boost', 'scrip', 'bounty'
+      'private-pay', 'boost', 'scrip', 'check', 'bounty'
     ]) {
       expect(pagesYml).toContain(`site/${slug}`)
     }
@@ -215,9 +219,18 @@ describe('first-paint copy', () => {
     expect(rootReadme).toContain(LEDE)
     expect(BUSINESS_CASE_WHY).not.toMatch(/\bBSV\b/)
     expect(LEDE).not.toMatch(/\bBSV\b/)
-    expect(BUSINESS_CASE_MARKET).toMatch(/\$67k/)
+    expect(BUSINESS_CASE_MARKET).toMatch(/\$66,945/)
+    expect(BUSINESS_CASE_MARKET).toMatch(/\$382,689/)
     expect(BUSINESS_CASE_MARKET).toMatch(/11 Sep 2026/)
-    expect(BUSINESS_CASE_MARKET).toMatch(/2,709/)
+    expect(BUSINESS_CASE_MARKET).not.toMatch(/2,709/)
+    expect(BUSINESS_CASE_PROOF).toMatch(/10%/)
+    expect(BUSINESS_CASE_PROOF).not.toMatch(/5–8%/)
+    expect(BUSINESS_CASE_PROOF).not.toMatch(/HackerOne/)
+    expect(app).toContain('<summary>How it works</summary>')
+    const how = app.slice(app.indexOf('<summary>How it works</summary>'), app.indexOf('<summary>Advanced</summary>'))
+    expect(how).toContain('{LOCAL_NOTE}')
+    expect(how).toContain('{FEE_HELPER}')
+    expect(app.slice(0, app.indexOf('<summary>How it works</summary>'))).not.toContain('{FEE_HELPER}')
   })
 })
 

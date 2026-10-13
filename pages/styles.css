@@ -676,8 +676,8 @@ a.card .hit,
 }
 
 .demo-bounty {
-  --chip: #0369a1;
-  --title: #0c4a6e;
+  --chip: #FF7A3D;
+  --title: #7c2d12;
   --title-font: var(--serif);
   --title-size: 22px;
   --title-weight: 600;
