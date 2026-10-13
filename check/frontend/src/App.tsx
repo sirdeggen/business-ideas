@@ -393,7 +393,7 @@ function Shell() {
         <img
           className="scene"
           src={`${import.meta.env.BASE_URL}scene.webp`}
-          alt="An accounts payable clerk at a modern desk pauses a payment on a warning card with an amber seal."
+          alt="An accounts payable clerk at a modern desk pauses a payment on a warning card with a warning icon."
           width="1280"
           height="720"
         />

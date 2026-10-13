@@ -160,11 +160,18 @@ describe('first-paint copy', () => {
     }
   })
 
-  it('uses an amber chip and adds the check desk to Pages without dropping the others', () => {
-    expect(css).toContain('--seal: #b45309')
+  it('uses a yellow chip and adds the check desk to Pages without dropping the others', () => {
+    expect(css).toContain('--seal: #FFC800')
+    expect(css).toContain('--on-seal: #1c1408')
+    expect(css).toContain('.btn.primary { background: var(--seal); border-color: var(--seal); color: var(--on-seal); }')
     expect(css).toContain('Fraunces')
     expect(catalogCss).toContain('.demo-check')
-    expect(catalogCss).toContain('--chip: #b45309')
+    expect(catalogCss).toContain('--chip: #FFC800')
+    expect(catalogCss).toContain('--title: #78350f')
+    expect(app).toContain('warning icon')
+    expect(app).not.toContain('amber seal')
+    expect(checkCard).toContain('warning icon')
+    expect(checkCard).not.toContain('amber seal')
     expect(catalogCss).toContain('.demo-scrip')
     expect(catalogCss).toContain('.demo-inference')
     expect(catalogCss).toContain('--chip: #d97706')

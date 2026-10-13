@@ -685,7 +685,7 @@ a.card .hit,
 }
 
 .demo-check {
-  --chip: #b45309;
+  --chip: #FFC800;
   --title: #78350f;
   --title-font: var(--serif);
   --title-size: 22px;

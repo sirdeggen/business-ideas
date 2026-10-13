@@ -5,7 +5,8 @@
   --muted: #92400e;
   --quiet: #a16207;
   --hair: rgba(180, 83, 9, 0.2);
-  --seal: #b45309;
+  --seal: #FFC800;
+  --on-seal: #1c1408;
   --paper: #fffbeb;
   --slip: #fffdf8;
   --ok: #3f6212;
@@ -93,7 +94,7 @@ a { color: var(--ink); }
   font-weight: 700;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: var(--seal);
+  color: var(--ink);
 }
 
 h1 {
@@ -137,7 +138,7 @@ h2 {
   font-weight: 700;
   font-style: normal;
   letter-spacing: 0.01em;
-  color: var(--seal);
+  color: var(--ink);
   margin: 0;
   cursor: pointer;
 }
@@ -253,7 +254,7 @@ input:focus, textarea:focus, select:focus {
   align-items: center;
 }
 
-.btn.primary { background: var(--seal); border-color: var(--seal); color: #fffbeb; }
+.btn.primary { background: var(--seal); border-color: var(--seal); color: var(--on-seal); }
 .btn.danger { border-color: var(--failed); color: var(--failed); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -294,8 +295,8 @@ code {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  background: rgba(180, 83, 9, 0.16);
-  color: var(--seal);
+  background: rgba(255, 200, 0, 0.28);
+  color: var(--on-seal);
 }
 
 .stamp.released { background: rgba(15, 118, 110, 0.14); color: var(--ok); }
@@ -331,7 +332,7 @@ code {
   background: none;
   border: 0;
   padding: 0;
-  color: var(--seal);
+  color: var(--ink);
   font-weight: 700;
   cursor: pointer;
   text-decoration: underline;
