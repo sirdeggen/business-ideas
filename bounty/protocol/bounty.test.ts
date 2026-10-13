@@ -19,6 +19,7 @@ import {
   earlierSubmission,
   encodeFundFields,
   encodeRemainderFields,
+  fundMessage,
   encodeSubmitFields,
   encodeTimelineFields,
   encodeVerdictFields,
@@ -353,6 +354,10 @@ function withKey(fund: BountyFund, publicKey: string): BountyFund {
   return bindFundToKey({ ...fund, nonce: NONCE }, publicKey)
 }
 
+async function signedFund(fund: BountyFund, sign: (message: number[]) => Promise<string>): Promise<BountyFund> {
+  return { ...fund, signature: await sign(fundMessage({ ...fund, signature: '' })) }
+}
+
 function chainFund(fund: BountyFund, txid: string, vout = 0): ChainRecord {
   return {
     txid,
@@ -401,8 +406,11 @@ describe('readers trust the project key', () => {
 
   it('breaks a same-key tie by the oldest fund', async () => {
     const project = await projectSigner()
-    const honest = postedFor(project.publicKey).fund!
-    const later: BountyFund = { ...honest, projectName: 'Later Note', fundedAt: '2026-10-14T00:00:00Z' }
+    const honest = await signedFund(postedFor(project.publicKey).fund!, project.sign)
+    const later = await signedFund(
+      { ...honest, projectName: 'Later Note', fundedAt: '2026-10-14T00:00:00Z', signature: '' },
+      project.sign
+    )
     expect(deskFromRecords([later, honest])?.fund?.projectName).toBe('Northwind Devices')
     expect(deskFromChain([
       chainFund(later, 'bb'.repeat(32)),
@@ -415,13 +423,14 @@ describe('readers trust the project key', () => {
     const project = await projectSigner()
     const attacker = await projectSigner()
     const honestDesk = postedFor(project.publicKey)
-    const honest = honestDesk.fund!
+    const unsigned = honestDesk.fund!
     const copied: BountyFund = {
-      ...honest,
+      ...unsigned,
       projectIdentity: attacker.publicKey,
       projectName: 'Forged Labs',
       fundedAt: '2026-10-12T00:00:00Z'
     }
+    const honest = await signedFund(unsigned, project.sign)
     expect(copied.bountyId).toBe(honest.bountyId)
     expect(boundBountyId(copied.projectIdentity, copied.nonce)).not.toBe(copied.bountyId)
     const verdict = releaseTier(honestDesk, 'high', '2026-10-13T15:00:00Z').verdict as BountyVerdict
@@ -492,11 +501,38 @@ describe('readers trust the project key', () => {
     expect(bookFromRecords([copied, honest]).map((row) => row.fund.projectName)).toEqual(['Northwind Devices'])
   })
 
+  it('ignores a forged fund that matches the key but is not signed by it', async () => {
+    const project = await projectSigner()
+    const attacker = await projectSigner()
+    const honest = await signedFund(postedFor(project.publicKey).fund!, project.sign)
+    const forged: BountyFund = {
+      ...honest,
+      projectName: 'Forged Labs',
+      fundedAt: '2026-10-12T00:00:00Z',
+      signature: ''
+    }
+    forged.signature = await attacker.sign(fundMessage(forged))
+    expect(forged.projectIdentity).toBe(honest.projectIdentity)
+    expect(forged.nonce).toBe(honest.nonce)
+    expect(forged.bountyId).toBe(boundBountyId(forged.projectIdentity, forged.nonce))
+    expect(forged.fundedAt < honest.fundedAt).toBe(true)
+    const attack = chainFund(forged, 'bb'.repeat(32))
+    expect(attack.lockingPublicKey).toBe(poolLockingKey(forged.projectIdentity, forged.bountyId))
+    expect(deskFromChain([attack])).toBeNull()
+    const kept = deskFromChain([
+      attack,
+      chainFund(honest, 'aa'.repeat(32))
+    ])
+    expect(kept?.fund?.projectName).toBe('Northwind Devices')
+    expect(kept?.fund?.fundedAt).toBe(honest.fundedAt)
+    expect(kept?.fund?.signature).toBe(honest.signature)
+  })
+
   it('follows pool outpoints and drops a forged chain', async () => {
     const project = await projectSigner()
     const attacker = await projectSigner()
     const desk = postedFor(project.publicKey)
-    const fund = desk.fund!
+    const fund = await signedFund(desk.fund!, project.sign)
     const verdict = releaseTier(desk, 'high', '2026-10-13T15:00:00Z').verdict as BountyVerdict
     const honest: BountyVerdict = { ...verdict, signature: await project.sign(verdictMessage(verdict)) }
     const fundTx = 'aa'.repeat(32)

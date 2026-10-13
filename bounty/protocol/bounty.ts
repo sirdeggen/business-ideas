@@ -14,7 +14,9 @@
  * The fund carries the root identity and a nonce. The bounty id is
  * sha256 of that identity concatenated with the nonce, so a reader
  * recomputes it and drops a fund whose id does not match the key,
- * along with that fund's chain, verdicts, and timeline. The canonical
+ * along with that fund's chain, verdicts, and timeline. The fund
+ * fields are signed by the pool key. A fund whose signature does not
+ * verify against that key is dropped the same way. The canonical
  * fund is the one named by `?tx=` when that param is present, otherwise
  * the oldest valid fund from the same key (`?p=` pins the key).
  * Oldest fundedAt is only a tie-break among funds from that key.
@@ -133,6 +135,8 @@ export interface BountyFund {
   /** 32 hex chars. Published bounty id is sha256(projectIdentity || nonce). */
   nonce: string
   fundedAt: string
+  /** ECDSA by the pool key over fundMessage. Empty until record. */
+  signature: string
 }
 
 export interface BountySubmit {
@@ -483,7 +487,8 @@ export function fundPool(input: FundInput, now = nowIso(), bountyId?: string): D
     exportFeeSats: input.exportFeeSats,
     projectIdentity,
     nonce,
-    fundedAt: now
+    fundedAt: now,
+    signature: ''
   }
   return {
     ...emptyDesk(),
@@ -750,6 +755,26 @@ export function fundLockedToProject(
   }
 }
 
+export function fundMessage(fund: BountyFund): number[] {
+  return stringToUtf8Bytes([
+    'fund',
+    fund.bountyId,
+    fund.projectName,
+    fund.scope,
+    String(fund.tiers.critical),
+    String(fund.tiers.high),
+    String(fund.tiers.medium),
+    String(fund.tiers.low),
+    String(fund.poolSats),
+    String(fund.payoutFeeBps),
+    String(fund.submissionFeeSats),
+    String(fund.exportFeeSats),
+    fund.projectIdentity,
+    fund.nonce,
+    fund.fundedAt
+  ].join('|'))
+}
+
 export function verdictMessage(verdict: BountyVerdict): number[] {
   return stringToUtf8Bytes([
     'verdict',
@@ -826,7 +851,8 @@ function fundIsValid(record: ChainRecord, bountyId?: string, pinIdentity?: strin
   if (!fundIdMatches(fund)) return false
   if (!record.lockingPublicKey) return !fund.projectIdentity
   if (!isIdentityKey(fund.projectIdentity)) return false
-  return fundLockedToProject(record.lockingPublicKey, fund)
+  if (!fundLockedToProject(record.lockingPublicKey, fund)) return false
+  return signedByProject(fund.projectIdentity, fund.bountyId, fundMessage(fund), fund.signature)
 }
 
 /** The fund named by hintTxid, otherwise the oldest valid fund. A bad hint does not fall through. */
@@ -1077,7 +1103,8 @@ export function encodeFundFields(fund: BountyFund): number[][] {
     stringToUtf8Bytes(String(fund.exportFeeSats)),
     stringToUtf8Bytes(fund.projectIdentity || 'pending'),
     stringToUtf8Bytes(fund.fundedAt),
-    stringToUtf8Bytes(fund.nonce)
+    stringToUtf8Bytes(fund.nonce),
+    stringToUtf8Bytes(fund.signature || 'unsigned')
   ]
 }
 
@@ -1189,7 +1216,8 @@ export function parseBountyFields(fields: Array<number[] | Uint8Array>): BountyP
       exportFeeSats,
       projectIdentity: (rest[13] ?? '') === 'pending' ? '' : (rest[13] ?? ''),
       nonce: (rest[15] ?? '').toLowerCase(),
-      fundedAt: rest[14] ?? ''
+      fundedAt: rest[14] ?? '',
+      signature: (rest[16] ?? '') === 'unsigned' ? '' : (rest[16] ?? '')
     }
     return validateFund(fund) ? null : fund
   }

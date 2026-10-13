@@ -10,6 +10,7 @@ import {
   deskFeeLockingKey,
   encodeFundFields,
   encodeRemainderFields,
+  fundMessage,
   encodeSubmitFields,
   encodeTimelineFields,
   encodeVerdictFields,
@@ -175,6 +176,11 @@ async function unlockPool(
   return { txid: signed.txid, tx: signed.tx as number[] }
 }
 
+async function signFund(wallet: WalletClient, keyID: string, fund: BountyFund): Promise<BountyFund> {
+  const signature = await signBytes(wallet, keyID, fundMessage({ ...fund, signature: '' }))
+  return { ...fund, signature }
+}
+
 async function signVerdict(wallet: WalletClient, keyID: string, verdict: BountyVerdict): Promise<BountyVerdict> {
   const signature = await signBytes(wallet, keyID, verdictMessage(verdict))
   return { ...verdict, signature }
@@ -200,17 +206,18 @@ export async function recordBounty(
   const stamped = bindFundToKey(fund, root)
   const bountyId = stamped.bountyId
   const keyID = await assertPoolKey(wallet, root, bountyId)
+  const signedFund = await signFund(wallet, keyID, stamped)
   const submission = desk.submission ? { ...desk.submission, bountyId } : null
   const verdict = desk.verdict ? await signVerdict(wallet, keyID, { ...desk.verdict, bountyId }) : null
   const timeline = await Promise.all(desk.timeline.map((event) => signTimeline(wallet, keyID, { ...event, bountyId })))
   const pool = await lockField(
     wallet,
-    encodeFundFields(stamped),
+    encodeFundFields(signedFund),
     bountyId,
     keyID,
     'fund',
-    clip(`Pool ${stamped.projectName}`),
-    stamped.poolSats
+    clip(`Pool ${signedFund.projectName}`),
+    signedFund.poolSats
   )
   const outputs: CreateActionOutput[] = [pool]
   if (submission) {
@@ -237,7 +244,7 @@ export async function recordBounty(
   }
 
   const fundResponse = await wallet.createAction({
-    description: clip(`Fund ${stamped.projectName}`),
+    description: clip(`Fund ${signedFund.projectName}`),
     outputs,
     labels: [BASKET, 'fund'],
     options: verdict ? { noSend: true, randomizeOutputs: false } : { randomizeOutputs: false }
@@ -261,7 +268,7 @@ export async function recordBounty(
   const broadcast: number[][] = []
   let releaseTxid: string | undefined
   if (verdict) {
-    const spend = releaseSpend({ ...desk, fund: stamped, verdict })
+    const spend = releaseSpend({ ...desk, fund: signedFund, verdict })
     const releaseOutputs: CreateActionOutput[] = [{
       satoshis: spend.researcherSats,
       lockingScript: p2pkhFromPublicKey(researcherKey.trim()),
@@ -280,7 +287,7 @@ export async function recordBounty(
         })
       })
     }
-    const remainder = remainderFund(stamped, verdict)
+    const remainder = remainderFund(signedFund, verdict)
     if (remainder) {
       releaseOutputs.push(await lockField(
         wallet,
@@ -288,7 +295,7 @@ export async function recordBounty(
         bountyId,
         keyID,
         'fund',
-        clip(`Pool left ${stamped.projectName}`),
+        clip(`Pool left ${signedFund.projectName}`),
         remainder.poolSats
       ))
     }
@@ -320,7 +327,7 @@ export async function recordBounty(
       release.signableTransaction.reference,
       release.signableTransaction.tx as number[],
       keyID,
-      stamped.poolSats,
+      signedFund.poolSats,
       pool.lockingScript,
       txid
     )
@@ -334,7 +341,7 @@ export async function recordBounty(
   }
 
   if (desk.submission && reportBody.trim()) {
-    void sendReport(wallet, identityKey, stamped.projectIdentity, {
+    void sendReport(wallet, identityKey, signedFund.projectIdentity, {
       bountyId,
       reportHash: desk.submission.reportHash,
       reportBody
@@ -347,7 +354,7 @@ export async function recordBounty(
       txid: fundTxid,
       releaseTxid,
       projectIdentity: root,
-      desk: { ...desk, fund: stamped, submission, verdict, timeline }
+      desk: { ...desk, fund: signedFund, submission, verdict, timeline }
     }
   } catch (error) {
     const detail = error instanceof Error && error.message.trim() ? error.message : String(error ?? '')
@@ -356,7 +363,7 @@ export async function recordBounty(
       txid: fundTxid,
       releaseTxid,
       projectIdentity: root,
-      desk: { ...desk, fund: stamped, submission, verdict, timeline },
+      desk: { ...desk, fund: signedFund, submission, verdict, timeline },
       overlayError: detail.trim() || 'overlay submit failed with no message'
     }
   }
