@@ -8,9 +8,10 @@
  * The piece lock, when present, is the holder pubkey and OP_CHECKSIG.
  * OP_PUSH_TX output enforcement is v1.
  * Edition size is public on the overlay. MAGIC `keepsake`. Public Pages
- * uses tm_anytx / ls_anytx. Client filters on MAGIC. A mint counts only when
- * the issuer key signed it, the serial is inside the edition, and it is the
- * first signed record for that serial.
+ * uses tm_anytx / ls_anytx. Client filters on MAGIC. Readers sort oldest-first,
+ * keep the oldest edition signed by its issuer, then count a mint only when
+ * that issuer's derived key signed it, the serial is inside the edition, and
+ * it is the first signed record for that serial.
  *
  * Not Grants (a purpose-bound gift of money). Not Memberships (access).
  * Not Tickets (spent at the door). Not Vault Claim (a physical redeem).
@@ -21,6 +22,9 @@ import { BigNumber, ECDSA, Hash, PrivateKey, PublicKey, Signature } from '@bsv/s
 import { sha256Hex } from './sha256'
 
 export const PROTOCOL_ID: [0, string] = [0, 'keepsake']
+/** BRC-42 key id. createSignature counterparty is `anyone`, so readers can derive the signing key. */
+export const SIGNING_KEY_ID = 'keepsake'
+export const SIGNING_COUNTERPARTY = 'anyone' as const
 export const BASKET = 'keepsake'
 export const MAGIC = 'keepsake'
 export const SCHEMA_VERSION = '1'
@@ -73,6 +77,8 @@ export interface Edition {
   deskBps: number
   issuerKey: string
   openedAt: string
+  /** DER hex of the issuer signature. Empty until Record. */
+  issuerSig: string
 }
 
 export interface MintRecord {
@@ -399,7 +405,8 @@ export function openEdition(input: OpenInput, now = nowIso(), keepsakeId = newKe
     royaltyBps: input.royaltyBps,
     deskBps: input.deskBps,
     issuerKey,
-    openedAt: now
+    openedAt: now,
+    issuerSig: ''
   }
   const invalid = validateEdition(edition)
   if (invalid) throw new Error(invalid)
@@ -575,6 +582,7 @@ export function validateEdition(edition: Edition): string | null {
     return error instanceof Error ? error.message : 'Edition is invalid.'
   }
   if (!isIsoDateTime(edition.openedAt)) return 'Opened time is missing.'
+  if (edition.issuerSig !== '' && !/^[0-9a-f]+$/i.test(edition.issuerSig)) return 'Edition signature is missing.'
   return null
 }
 
@@ -662,7 +670,8 @@ export function encodeEditionFields(edition: Edition): number[][] {
     stringToUtf8Bytes(String(edition.royaltyBps)),
     stringToUtf8Bytes(String(edition.deskBps)),
     stringToUtf8Bytes(edition.issuerKey),
-    stringToUtf8Bytes(edition.openedAt)
+    stringToUtf8Bytes(edition.openedAt),
+    stringToUtf8Bytes(edition.issuerSig)
   ]
 }
 
@@ -772,7 +781,7 @@ export function parseKeepsakeFields(fields: Array<number[] | Uint8Array>): Keeps
   const kind = rest[1]
   const keepsakeId = rest[2]
   if (kind === 'edition') {
-    if (rest.length < 11) return null
+    if (rest.length < 12) return null
     const editionSize = whole(rest[5])
     const mintFeeSats = whole(rest[6])
     const royaltyBps = whole(rest[7])
@@ -790,7 +799,8 @@ export function parseKeepsakeFields(fields: Array<number[] | Uint8Array>): Keeps
       royaltyBps,
       deskBps,
       issuerKey: rest[9],
-      openedAt: rest[10]
+      openedAt: rest[10],
+      issuerSig: rest[11]
     }
     return validateEdition(edition) ? null : edition
   }
@@ -892,9 +902,30 @@ export function parseKeepsakeFields(fields: Array<number[] | Uint8Array>): Keeps
   return null
 }
 
+function recordTime(row: KeepsakePayload): string {
+  switch (row.kind) {
+    case 'edition': return row.openedAt
+    case 'mint': return row.mintedAt
+    case 'send': return row.sentAt
+    case 'gift': return row.giftedAt
+    case 'show': return row.shownAt
+    case 'resale': return row.resoldAt
+  }
+}
+
+/** Oldest timestamp first. Equal times keep the order the records arrived in. */
+export function oldestFirst(records: KeepsakePayload[]): KeepsakePayload[] {
+  return records.map((row, index) => ({ row, index })).sort((left, right) => {
+    const leftTime = recordTime(left.row)
+    const rightTime = recordTime(right.row)
+    if (leftTime === rightTime) return left.index - right.index
+    return leftTime < rightTime ? -1 : 1
+  }).map((item) => item.row)
+}
+
 export function deskFromRecords(records: KeepsakePayload[], keepsakeId?: string): DeskState | null {
-  const scoped = keepMagic(keepsakeId ? records.filter((row) => row.keepsakeId === keepsakeId) : records)
-  const edition = scoped.find((row): row is Edition => row.kind === 'edition') ?? null
+  const scoped = oldestFirst(keepMagic(keepsakeId ? records.filter((row) => row.keepsakeId === keepsakeId) : records))
+  const edition = scoped.find((row): row is Edition => row.kind === 'edition' && editionSignedByIssuer(row)) ?? null
   if (!edition) return null
   const mine = scoped.filter((row) => row.keepsakeId === edition.keepsakeId)
   return {
@@ -941,13 +972,90 @@ export function mintMessage(mint: Pick<MintRecord, 'keepsakeId' | 'serial' | 'mi
   ].join('\n'))
 }
 
-export function issuerSigFor(
-  privateKey: PrivateKey,
-  mint: Pick<MintRecord, 'keepsakeId' | 'serial' | 'mintFeeSats' | 'mintedAt'>
-): string {
-  const der = privateKey.sign(mintMessage(mint)).toDER('hex')
-  if (typeof der !== 'string') throw new Error('Mint signature is missing.')
-  return der
+export function editionMessage(edition: Pick<Edition, 'keepsakeId' | 'orgName' | 'title' | 'editionSize' | 'mintFeeSats' | 'royaltyBps' | 'deskBps' | 'issuerKey' | 'openedAt'>): number[] {
+  return stringToUtf8Bytes([
+    'keepsake',
+    'edition',
+    edition.keepsakeId,
+    edition.orgName,
+    edition.title,
+    String(edition.editionSize),
+    String(edition.mintFeeSats),
+    String(edition.royaltyBps),
+    String(edition.deskBps),
+    edition.issuerKey,
+    edition.openedAt
+  ].join('\n'))
+}
+
+/** Invoice number for PROTOCOL_ID + SIGNING_KEY_ID, matching KeyDeriver. */
+export function signingInvoice(): string {
+  return `${PROTOCOL_ID[0]}-${PROTOCOL_ID[1]}-${SIGNING_KEY_ID}`
+}
+
+/**
+ * Public half of a wallet createSignature with counterparty `anyone`.
+ * The reader has the issuer identity key and derives the same child the wallet signed with.
+ */
+export function derivedSigningKey(identityKey: string): PublicKey | null {
+  if (!isIdentityKey(identityKey)) return null
+  try {
+    return PublicKey.fromString(identityKey.trim()).deriveChild(new PrivateKey(1), signingInvoice())
+  } catch {
+    return null
+  }
+}
+
+function signatureOk(identityKey: string, message: number[], signatureHex: string): boolean {
+  const key = derivedSigningKey(identityKey)
+  const der = hexToBytes(signatureHex)
+  if (!key || !der) return false
+  try {
+    const hash = Hash.sha256(message)
+    const signature = Signature.fromDER(der)
+    return ECDSA.verify(new BigNumber(hash), signature, key)
+  } catch {
+    return false
+  }
+}
+
+export function editionSignedByIssuer(edition: Edition): boolean {
+  return signatureOk(edition.issuerKey, editionMessage(edition), edition.issuerSig)
+}
+
+export interface RecordSigner {
+  getPublicKey(args: { identityKey: true }): Promise<{ publicKey: string }>
+  createSignature(args: {
+    data: number[]
+    protocolID: typeof PROTOCOL_ID
+    keyID: typeof SIGNING_KEY_ID
+    counterparty: typeof SIGNING_COUNTERPARTY
+  }): Promise<{ signature: number[] }>
+}
+
+async function walletSig(wallet: RecordSigner, message: number[]): Promise<string> {
+  const { signature } = await wallet.createSignature({
+    data: message,
+    protocolID: PROTOCOL_ID,
+    keyID: SIGNING_KEY_ID,
+    counterparty: SIGNING_COUNTERPARTY
+  })
+  return signature.map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+/** What Record writes: issuer identity key, then edition and mint signatures from that wallet. */
+export async function signRecordedDesk(wallet: RecordSigner, desk: DeskState): Promise<DeskState> {
+  if (!desk.edition) throw new Error('Open an edition first.')
+  const { publicKey } = await wallet.getPublicKey({ identityKey: true })
+  const issuerKey = assertKey(publicKey, 'issuer')
+  const draft: Edition = { ...desk.edition, issuerKey, issuerSig: '' }
+  const edition: Edition = { ...draft, issuerSig: await walletSig(wallet, editionMessage(draft)) }
+  const mints: MintRecord[] = []
+  for (const mint of desk.mints) {
+    const next = { ...mint, issuerSig: '' }
+    mints.push({ ...next, issuerSig: await walletSig(wallet, mintMessage(next)) })
+  }
+  return { ...desk, edition, mints }
 }
 
 function hexToBytes(value: string): number[] | null {
@@ -960,24 +1068,15 @@ function hexToBytes(value: string): number[] | null {
   return out
 }
 
-/** True only when issuerSig verifies against the edition issuer key. */
+/** True only when issuerSig verifies under the issuer's protocolID/keyID/anyone derivation. */
 export function mintSignedByIssuer(mint: MintRecord, issuerKey: string): boolean {
-  if (!isIdentityKey(issuerKey)) return false
-  const der = hexToBytes(mint.issuerSig)
-  if (!der) return false
-  try {
-    const hash = Hash.sha256(mintMessage(mint))
-    const key = PublicKey.fromString(issuerKey.trim())
-    const signature = Signature.fromDER(der)
-    return ECDSA.verify(new BigNumber(hash), signature, key)
-  } catch {
-    return false
-  }
+  return signatureOk(issuerKey, mintMessage(mint), mint.issuerSig)
 }
 
 /**
- * Fixed edition on read: drop serials outside 1..editionSize, drop mints the
- * issuer key did not sign, then keep the first signed record for each serial.
+ * Fixed edition on read. Callers pass mints oldest-first. Drop serials outside
+ * 1..editionSize, drop mints the issuer key did not sign, then keep the first
+ * signed record for each serial.
  */
 export function acceptedMints(mints: MintRecord[], edition: Edition): MintRecord[] {
   const seen = new Set<number>()

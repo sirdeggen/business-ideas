@@ -1,4 +1,4 @@
-import { PrivateKey } from '@bsv/sdk'
+import { PrivateKey, ProtoWallet } from '@bsv/sdk'
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_DESK_BPS,
@@ -11,6 +11,8 @@ import {
   OP_CHECKSIG,
   SAMPLE_BUYER,
   SAMPLE_RECIPIENT,
+  SIGNING_COUNTERPARTY,
+  SIGNING_KEY_ID,
   bookFromRecords,
   deskFromRecords,
   encodeEditionFields,
@@ -22,9 +24,10 @@ import {
   feeSatsOf,
   giftPiece,
   holderOf,
-  issuerSigFor,
+  identityFor,
   keepMagic,
   mintedCount,
+  mintMessage,
   mintPiece,
   openEdition,
   parseKeepsakeFields,
@@ -34,10 +37,11 @@ import {
   resellPiece,
   sendPiece,
   showPiece,
+  signRecordedDesk,
   stringToUtf8Bytes,
   supplyOf,
-  type DeskState,
-  type MintRecord
+  type MintRecord,
+  type RecordSigner
 } from './keepsake'
 
 const NOW = '2026-10-13T16:00:00Z'
@@ -57,13 +61,23 @@ function opened(editionSize = 2, issuerKey?: string) {
   }, NOW, ID)
 }
 
-function signMint(key: PrivateKey, mint: MintRecord, patch: Partial<MintRecord> = {}): MintRecord {
-  const next = { ...mint, ...patch, issuerSig: '' }
-  return { ...next, issuerSig: issuerSigFor(key, next) }
+function walletOf(key = PrivateKey.fromRandom()): { wallet: RecordSigner, identityPromise: Promise<string> } {
+  const wallet = new ProtoWallet(key)
+  return {
+    wallet,
+    identityPromise: wallet.getPublicKey({ identityKey: true }).then((result) => result.publicKey)
+  }
 }
 
-function signDesk(key: PrivateKey, desk: DeskState): DeskState {
-  return { ...desk, mints: desk.mints.map((mint) => signMint(key, mint)) }
+async function signMint(wallet: RecordSigner, mint: MintRecord, patch: Partial<MintRecord> = {}): Promise<MintRecord> {
+  const next = { ...mint, ...patch, issuerSig: '' }
+  const { signature } = await wallet.createSignature({
+    data: mintMessage(next),
+    protocolID: PROTOCOL_ID,
+    keyID: SIGNING_KEY_ID,
+    counterparty: SIGNING_COUNTERPARTY
+  })
+  return { ...next, issuerSig: signature.map((byte) => byte.toString(16).padStart(2, '0')).join('') }
 }
 
 describe('keepsake protocol', () => {
@@ -100,20 +114,22 @@ describe('keepsake protocol', () => {
     expect(desk.rejection).toBe(EDITION_FULL)
   })
 
-  it('round-trips edition, mint, send, gift, show, and resale fields', () => {
-    const key = PrivateKey.fromRandom()
-    let desk = opened(500, key.toPublicKey().toString())
+  it('round-trips edition, mint, send, gift, show, and resale fields', async () => {
+    const { wallet } = walletOf()
+    let desk = opened(500)
     desk = mintPiece(desk, NOW)
     desk = sendPiece(desk, 1, SAMPLE_RECIPIENT, LATER)
     desk = showPiece(desk, 1, LATER)
     desk = resellPiece(desk, 1, SAMPLE_BUYER, 10_000, AFTER)
     expect(desk.mints[0]?.issuerSig).toBe('')
+    expect(desk.edition?.issuerSig).toBe('')
     expect(parseKeepsakeFields(encodeEditionFields(desk.edition!))).toEqual(desk.edition)
     expect(parseKeepsakeFields(encodeMintFields(desk.mints[0]))).toEqual(desk.mints[0])
     expect(parseKeepsakeFields(encodeSendFields(desk.sends[0]))).toEqual(desk.sends[0])
     expect(parseKeepsakeFields(encodeShowFields(desk.shows[0]))).toEqual(desk.shows[0])
     expect(parseKeepsakeFields(encodeResaleFields(desk.resales[0]))).toEqual(desk.resales[0])
-    desk = signDesk(key, desk)
+    desk = await signRecordedDesk(wallet, desk)
+    expect(parseKeepsakeFields(encodeEditionFields(desk.edition!))).toEqual(desk.edition)
     expect(parseKeepsakeFields(encodeMintFields(desk.mints[0]))).toEqual(desk.mints[0])
     const restored = deskFromRecords([
       desk.edition!,
@@ -139,41 +155,41 @@ describe('keepsake protocol', () => {
     expect(resold.resales[0]).toMatchObject({ royaltySats: 500, deskSats: 200, sellerSats: 9_300 })
   })
 
-  it('drops mints above the edition size when reading the records', () => {
-    const key = PrivateKey.fromRandom()
-    const desk = opened(2, key.toPublicKey().toString())
-    const mint = mintPiece(desk, NOW).mints[0]!
-    const inside = signMint(key, mint, { serial: 2 })
-    const above = signMint(key, mint, { serial: 3 })
-    const records = [desk.edition!, inside, above]
+  it('drops mints above the edition size when reading the records', async () => {
+    const { wallet } = walletOf()
+    const recorded = await signRecordedDesk(wallet, mintPiece(opened(2), NOW))
+    const mint = recorded.mints[0]!
+    const inside = await signMint(wallet, mint, { serial: 2 })
+    const above = await signMint(wallet, mint, { serial: 3 })
+    const records = [recorded.edition!, inside, above]
     expect(deskFromRecords(records, ID)?.mints).toEqual([inside])
     expect(bookFromRecords(records)[0]?.mints).toEqual([inside])
     expect(mintedCount(records, ID)).toBe(1)
   })
 
-  it('keeps the first signed mint for a serial and drops the later duplicate', () => {
-    const key = PrivateKey.fromRandom()
-    const desk = opened(2, key.toPublicKey().toString())
-    const mint = mintPiece(desk, NOW).mints[0]!
-    const first = signMint(key, mint)
-    const duplicate = signMint(key, mint, { mintedAt: LATER })
-    const records = [desk.edition!, first, duplicate]
+  it('keeps the oldest signed mint for a serial and drops the later duplicate', async () => {
+    const { wallet } = walletOf()
+    const recorded = await signRecordedDesk(wallet, mintPiece(opened(2), NOW))
+    const mint = recorded.mints[0]!
+    const first = mint
+    const duplicate = await signMint(wallet, mint, { mintedAt: LATER })
+    const records = [recorded.edition!, duplicate, first]
     expect(deskFromRecords(records, ID)?.mints).toEqual([first])
     expect(bookFromRecords(records)[0]?.mints).toEqual([first])
     expect(mintedCount(records, ID)).toBe(1)
     expect(first.issuerSig).not.toBe(duplicate.issuerSig)
   })
 
-  it('accepts only mints signed by the issuer key', () => {
-    const issuer = PrivateKey.fromRandom()
-    const stranger = PrivateKey.fromRandom()
-    const desk = opened(2, issuer.toPublicKey().toString())
-    const mint = mintPiece(desk, NOW).mints[0]!
-    const signed = signMint(issuer, mint, { serial: 1 })
-    const foreign = signMint(stranger, mint, { serial: 2 })
+  it('accepts only mints signed by the issuer key', async () => {
+    const issuer = walletOf()
+    const stranger = walletOf()
+    const recorded = await signRecordedDesk(issuer.wallet, mintPiece(opened(2), NOW))
+    const mint = recorded.mints[0]!
+    const signed = mint
+    const foreign = await signMint(stranger.wallet, mint, { serial: 2 })
     const unsigned = { ...mint, serial: 2, issuerSig: '' }
     const records = [
-      desk.edition!,
+      recorded.edition!,
       unsigned,
       foreign,
       signed,
@@ -183,17 +199,55 @@ describe('keepsake protocol', () => {
     expect(bookFromRecords(records)[0]?.mints).toEqual([signed])
     expect(mintedCount(records, ID)).toBe(1)
     expect(mintedCount([signed], ID)).toBe(0)
+    const later = await signMint(issuer.wallet, mint, { serial: 1, mintedAt: LATER })
     const sameSerial = [
-      desk.edition!,
+      recorded.edition!,
       { ...mint, serial: 1, issuerSig: '' },
-      signMint(issuer, mint, { serial: 1, mintedAt: LATER })
+      later
     ]
     expect(deskFromRecords(sameSerial, ID)?.mints.map((row) => row.mintedAt)).toEqual([LATER])
     expect(bookFromRecords(sameSerial)[0]?.mints).toHaveLength(1)
     expect(mintedCount(sameSerial, ID)).toBe(1)
   })
 
-  it('keeps only MAGIC keepsake on the public book', () => {
+  it('a recorded mint survives deskFromRecords and the public book shows 1', async () => {
+    const { wallet, identityPromise } = walletOf()
+    let desk = opened(500)
+    expect(desk.edition?.issuerKey).toBe(identityFor('North Hall Volunteers'))
+    desk = mintPiece(desk, NOW)
+    const recorded = await signRecordedDesk(wallet, desk)
+    expect(recorded.edition?.issuerKey).toBe(await identityPromise)
+    expect(recorded.edition?.issuerKey).not.toBe(identityFor('North Hall Volunteers'))
+    const records = [recorded.edition!, ...recorded.mints]
+    expect(deskFromRecords(records, recorded.edition!.keepsakeId)?.mints).toHaveLength(1)
+    expect(bookFromRecords(records)[0]?.mints).toHaveLength(1)
+    expect(mintedCount(records, recorded.edition!.keepsakeId)).toBe(1)
+  })
+
+  it('ignores a later edition that reuses the keepsake id', async () => {
+    const org = walletOf()
+    const attacker = walletOf()
+    const recorded = await signRecordedDesk(org.wallet, mintPiece(opened(2), NOW))
+    const attack = openEdition({
+      orgName: 'North Hall Volunteers',
+      title: 'Taken over',
+      editionSize: 9_000,
+      mintFeeSats: DEFAULT_MINT_FEE_SATS,
+      royaltyBps: 0,
+      deskBps: 0
+    }, LATER, ID)
+    const stolen = await signRecordedDesk(attacker.wallet, mintPiece(attack, AFTER))
+    const records = [stolen.edition!, stolen.mints[0]!, recorded.mints[0]!, recorded.edition!]
+    const restored = deskFromRecords(records, ID)
+    expect(restored?.edition?.title).toBe('Founding Volunteer 2026')
+    expect(restored?.edition?.editionSize).toBe(2)
+    expect(restored?.edition?.issuerKey).toBe(await org.identityPromise)
+    expect(restored?.mints).toEqual([recorded.mints[0]])
+    expect(bookFromRecords(records)[0]?.mints).toHaveLength(1)
+    expect(mintedCount(records, ID)).toBe(1)
+  })
+
+  it('keeps only MAGIC keepsake on the public book', async () => {
     const desk = opened()
     const foreign = { magic: 'grant', keepsakeId: ID, kind: 'edition' as const }
     expect(keepMagic([desk.edition!, foreign])).toEqual([desk.edition])
@@ -209,9 +263,11 @@ describe('keepsake protocol', () => {
       stringToUtf8Bytes('pack'),
       stringToUtf8Bytes(ID)
     ])).toBeNull()
-    const book = bookFromRecords([desk.edition!])
+    const recorded = await signRecordedDesk(walletOf().wallet, desk)
+    const book = bookFromRecords([recorded.edition!])
     expect(book).toHaveLength(1)
     expect(book[0]?.edition.editionSize).toBe(2)
+    expect(bookFromRecords([desk.edition!])).toEqual([])
     expect(bookFromRecords([])).toEqual([])
     expect(MAGIC).toBe('keepsake')
     expect(PROTOCOL_ID).toEqual([0, 'keepsake'])

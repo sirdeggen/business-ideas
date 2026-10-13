@@ -50,7 +50,7 @@ export const BUSINESS_CASE_WHO =
   'The org pays a mint fee per piece: companies, campuses, venues, and volunteer groups. On a resale, the buyer pays the price. The desk records a cut under 5% and an issuer royalty.'
 
 export const BUSINESS_CASE_MARKET =
-  'Fragment, Telegram\'s marketplace on TON (DefiLlama, 2026-10-13): ~$32.2M user fees / 30d across Stars, Ads, Premium, usernames and Gifts; the Gifts-only share is unknown. Fragment takes 5% on collectible sales; Telegram\'s own gift market keeps 20% of a Stars price. Telegram Gifts on X: 604 posts / 7d.'
+  'Fragment, Telegram\'s marketplace on TON (DefiLlama, 2026-10-13): ~$32.2M user fees / 30d across Stars, Ads, Premium, usernames and Gifts; the Gifts-only share is unknown. Fragment takes 5% on collectible sales; Telegram\'s own gift market keeps 20% of a Stars price.'
 
 export const BUSINESS_CASE_PROOF_CHAIN =
   'Fragment fees across all products (DefiLlama, 2026-10-13): ~$32.2M user fees / 30d. Fragment takes 5% on collectible sales.'

@@ -1,5 +1,6 @@
+import { PrivateKey, ProtoWallet } from '@bsv/sdk'
 import { describe, expect, it } from 'vitest'
-import { MAGIC, openEdition } from '../../../protocol/keepsake'
+import { MAGIC, openEdition, signRecordedDesk } from '../../../protocol/keepsake'
 import { PUBLIC_LOOKUP, PUBLIC_OVERLAY_URL, PUBLIC_TOPIC } from './config'
 import { bookFromItems, overlayLookupService, overlayTopic, viewFromItems, type OverlayItem } from './overlay'
 
@@ -18,23 +19,23 @@ describe('overlay topic rails', () => {
 })
 
 describe('client MAGIC filter', () => {
-  it('keeps only keepsake editions on the public book', () => {
-    const desk = openEdition({
+  it('keeps only keepsake editions on the public book', async () => {
+    const desk = await signRecordedDesk(new ProtoWallet(PrivateKey.fromRandom()), openEdition({
       orgName: 'North Hall Volunteers',
       title: 'Founding Volunteer 2026',
       editionSize: 500,
       mintFeeSats: 1_000,
       royaltyBps: 500,
       deskBps: 200
-    }, '2026-10-13T16:00:00Z', ID)
-    const other = openEdition({
+    }, '2026-10-13T16:00:00Z', ID))
+    const other = await signRecordedDesk(new ProtoWallet(PrivateKey.fromRandom()), openEdition({
       orgName: 'Other Hall',
       title: 'Opening Night',
       editionSize: 40,
       mintFeeSats: 1,
       royaltyBps: 0,
       deskBps: 200
-    }, '2026-10-13T16:00:00Z', 'cd'.repeat(16))
+    }, '2026-10-13T16:05:00Z', 'cd'.repeat(16)))
     const foreign = {
       payload: { ...desk.edition!, magic: 'grant' },
       txid: '11'.repeat(32),

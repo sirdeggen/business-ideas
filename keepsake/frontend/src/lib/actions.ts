@@ -11,6 +11,7 @@ import {
   encodeShowFields,
   holderOf,
   openEdition,
+  signRecordedDesk,
   type DeskState
 } from '../../../protocol/keepsake'
 import { originator } from './config'
@@ -102,30 +103,32 @@ export async function recordKeepsake(
   desk: DeskState
 ): Promise<RecordResult> {
   if (!desk.edition) throw new Error('Open an edition first.')
-  const keepsakeId = desk.edition.keepsakeId
+  const recorded = await signRecordedDesk(wallet, desk)
+  if (!recorded.edition) throw new Error('Open an edition first.')
+  const keepsakeId = recorded.edition.keepsakeId
   const specs: Array<{ fields: number[][], tag: string, description: string }> = [
-    { fields: encodeEditionFields(desk.edition), tag: 'edition', description: `Keepsake ${desk.edition.title}` },
-    ...desk.mints.map((mint) => ({
+    { fields: encodeEditionFields(recorded.edition), tag: 'edition', description: `Keepsake ${recorded.edition.title}` },
+    ...recorded.mints.map((mint) => ({
       fields: encodeMintFields(mint),
       tag: 'mint',
       description: `Mint #${mint.serial}`
     })),
-    ...desk.sends.map((send) => ({
+    ...recorded.sends.map((send) => ({
       fields: encodeSendFields(send),
       tag: 'send',
       description: `Send #${send.serial}`
     })),
-    ...desk.gifts.map((gift) => ({
+    ...recorded.gifts.map((gift) => ({
       fields: encodeGiftFields(gift),
       tag: 'gift',
       description: `Gift #${gift.serial}`
     })),
-    ...desk.shows.map((show) => ({
+    ...recorded.shows.map((show) => ({
       fields: encodeShowFields(show),
       tag: 'show',
       description: `Profile #${show.serial}`
     })),
-    ...desk.resales.map((resale) => ({
+    ...recorded.resales.map((resale) => ({
       fields: encodeResaleFields(resale),
       tag: 'resale',
       description: `Resale #${resale.serial}`
@@ -136,7 +139,7 @@ export async function recordKeepsake(
     outputs.push(await lockField(wallet, spec.fields, keepsakeId, spec.tag, spec.description))
   }
   const response = await wallet.createAction({
-    description: `Record keepsake: ${desk.edition.title}`,
+    description: `Record keepsake: ${recorded.edition.title}`,
     outputs,
     labels: [BASKET, 'edition'],
     options: { randomizeOutputs: false }
@@ -154,13 +157,13 @@ export async function recordKeepsake(
   if (!txid || !tx) {
     throw Object.assign(new Error('Wallet did not return a transaction'), { cause: response })
   }
-  const latest = desk.resales.at(-1) ?? desk.gifts.at(-1) ?? desk.sends.at(-1)
+  const latest = recorded.resales.at(-1) ?? recorded.gifts.at(-1) ?? recorded.sends.at(-1)
   const recipient = latest
     ? ('toKey' in latest ? latest.toKey : latest.recipientKey)
     : ''
-  const serial = latest?.serial ?? desk.mints.at(-1)?.serial
-  await nudgeKeepsake(wallet, identityKey, recipient || holderOf(desk, serial ?? 0) || '', {
-    kind: desk.resales.length > 0 ? 'resale' : desk.gifts.length > 0 ? 'gift' : desk.sends.length > 0 ? 'send' : 'edition',
+  const serial = latest?.serial ?? recorded.mints.at(-1)?.serial
+  await nudgeKeepsake(wallet, identityKey, recipient || holderOf(recorded, serial ?? 0) || '', {
+    kind: recorded.resales.length > 0 ? 'resale' : recorded.gifts.length > 0 ? 'gift' : recorded.sends.length > 0 ? 'send' : 'edition',
     keepsakeId,
     serial,
     txid
