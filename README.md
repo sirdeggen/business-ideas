@@ -6,6 +6,13 @@ Switcher on GitHub Pages: https://sirdeggen.github.io/business-ideas/
 
 The catalog lists newest ideas first. Prepend the next Server demo at the top of the ledger in `pages/index.html`, and the next Live demo at the top of the spotlight. Mirror that order at the top of this list. Invoices stay last: they were the first product. The receivable desk is a collections list — not a bank.
 
+## Keepsake Desk
+
+Mint a numbered keepsake. Send it to someone. They can keep it, show it, give it, or resell it.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/keepsake/
+- How to run: [keepsake/README.md](./keepsake/README.md)
+
 ## Check Desk
 
 Enterprise AP teams subscribe to screen a vendor file before a batch payment. One payee is a small fee.
