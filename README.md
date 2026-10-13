@@ -6,6 +6,13 @@ Switcher on GitHub Pages: https://sirdeggen.github.io/business-ideas/
 
 The catalog lists newest ideas first. Prepend the next Server demo at the top of the ledger in `pages/index.html`, and the next Live demo at the top of the spotlight. Mirror that order at the top of this list. Invoices stay last: they were the first product. The receivable desk is a collections list — not a bank.
 
+## Bounty Desk
+
+Fund a severity-tiered bounty pool. Post a report hash. Release the matching tier.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/bounty/
+- How to run: [bounty/README.md](./bounty/README.md)
+
 ## Keepsake Desk
 
 Mint a numbered keepsake. Send it to someone. They can keep it, show it, give it, or resell it.
