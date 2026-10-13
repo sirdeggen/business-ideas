@@ -237,6 +237,7 @@ describe('first-paint copy', () => {
     expect(readme).toContain('computes and records')
     expect(readme).toContain('OP_CHECKSIG')
     expect(readme).toContain('OP_PUSH_TX')
+    expect(readme).toContain('send, gift, show, and resale records get signed by the current holder')
     expect(readme).not.toMatch(/script checks/i)
     expect(readme).not.toContain('OP_MUL')
     expect(readme).toContain('desk state')

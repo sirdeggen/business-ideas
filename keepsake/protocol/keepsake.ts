@@ -8,10 +8,13 @@
  * The piece lock, when present, is the holder pubkey and OP_CHECKSIG.
  * OP_PUSH_TX output enforcement is v1.
  * Edition size is public on the overlay. MAGIC `keepsake`. Public Pages
- * uses tm_anytx / ls_anytx. Client filters on MAGIC. Readers sort oldest-first,
- * keep the oldest edition signed by its issuer, then count a mint only when
- * that issuer's derived key signed it, the serial is inside the edition, and
- * it is the first signed record for that serial.
+ * uses tm_anytx / ls_anytx. Client filters on MAGIC. The keepsake id is
+ * sha256(issuerKey || nonce). Readers recompute it and drop an edition, and
+ * that edition's mints, when the id does not match the signer. Oldest-first
+ * is only a tie-break. A mint counts only when that issuer's derived key
+ * signed it, the serial is inside the edition, and it is the first signed
+ * record for that serial. v1 signs send, gift, show, and resale with the
+ * current holder.
  *
  * Not Grants (a purpose-bound gift of money). Not Memberships (access).
  * Not Tickets (spent at the door). Not Vault Claim (a physical redeem).
@@ -76,6 +79,8 @@ export interface Edition {
   royaltyBps: number
   deskBps: number
   issuerKey: string
+  /** Random hex stored with the edition. The id is sha256(issuerKey || nonce). */
+  nonce: string
   openedAt: string
   /** DER hex of the issuer signature. Empty until Record. */
   issuerSig: string
@@ -192,7 +197,8 @@ export interface BookEdition {
   resales: ResaleRecord[]
 }
 
-const KEEPSAKE_ID = /^[0-9a-f]{32}$/
+const KEEPSAKE_ID = /^[0-9a-f]{64}$/
+const NONCE = /^[0-9a-f]{32}$/
 const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/
 const IDENTITY_KEY = /^0[23][0-9a-f]{64}$/i
 const LOCK_HEX = /^[0-9a-f]+$/i
@@ -224,10 +230,26 @@ export function isIsoDateTime(value: string): boolean {
   return !Number.isNaN(date.getTime())
 }
 
-export function newKeepsakeId(): string {
+export function newNonce(): string {
   const bytes = new Uint8Array(16)
   crypto.getRandomValues(bytes)
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+/** SHA-256 hex of the lowercase issuer key concatenated with the lowercase nonce. */
+export function keepsakeIdFor(issuerKey: string, nonce: string): string {
+  const key = issuerKey.trim().toLowerCase()
+  const idNonce = nonce.trim().toLowerCase()
+  if (!isIdentityKey(key) || !NONCE.test(idNonce)) throw new Error('Keepsake id is missing.')
+  return sha256Hex(`${key}${idNonce}`)
+}
+
+export function editionIdMatches(edition: Pick<Edition, 'keepsakeId' | 'issuerKey' | 'nonce'>): boolean {
+  try {
+    return edition.keepsakeId === keepsakeIdFor(edition.issuerKey, edition.nonce)
+  } catch {
+    return false
+  }
 }
 
 export function nowIso(from = new Date()): string {
@@ -384,7 +406,7 @@ export function profileOf(state: DeskState, holderKey: string): HeldPiece[] {
   })
 }
 
-export function openEdition(input: OpenInput, now = nowIso(), keepsakeId = newKeepsakeId()): DeskState {
+export function openEdition(input: OpenInput, now = nowIso(), nonce = newNonce()): DeskState {
   const orgName = assertName(input.orgName, 'Name the org.')
   const title = assertName(input.title, 'Name the keepsake.')
   assertEditionSize(input.editionSize)
@@ -392,7 +414,9 @@ export function openEdition(input: OpenInput, now = nowIso(), keepsakeId = newKe
   assertRoyaltyBps(input.royaltyBps)
   assertDeskBps(input.deskBps)
   const issuerKey = input.issuerKey ? assertKey(input.issuerKey, 'issuer') : identityFor(orgName)
-  if (!isKeepsakeId(keepsakeId)) throw new Error('Keepsake id is missing.')
+  const idNonce = nonce.trim().toLowerCase()
+  if (!NONCE.test(idNonce)) throw new Error('Nonce is missing.')
+  const keepsakeId = keepsakeIdFor(issuerKey, idNonce)
   const edition: Edition = {
     magic: MAGIC,
     version: SCHEMA_VERSION,
@@ -405,6 +429,7 @@ export function openEdition(input: OpenInput, now = nowIso(), keepsakeId = newKe
     royaltyBps: input.royaltyBps,
     deskBps: input.deskBps,
     issuerKey,
+    nonce: idNonce,
     openedAt: now,
     issuerSig: ''
   }
@@ -573,6 +598,8 @@ export function validateEdition(edition: Edition): string | null {
   if (!edition.orgName.trim() || edition.orgName.length > NAME_MAX) return 'The org name is missing.'
   if (!edition.title.trim() || edition.title.length > NAME_MAX) return 'The keepsake name is missing.'
   if (!isIdentityKey(edition.issuerKey)) return 'Issuer key is missing.'
+  if (!NONCE.test(edition.nonce.trim().toLowerCase())) return 'Nonce is missing.'
+  if (!editionIdMatches(edition)) return 'Keepsake id does not match the issuer.'
   try {
     assertEditionSize(edition.editionSize)
     assertMintFee(edition.mintFeeSats)
@@ -670,6 +697,7 @@ export function encodeEditionFields(edition: Edition): number[][] {
     stringToUtf8Bytes(String(edition.royaltyBps)),
     stringToUtf8Bytes(String(edition.deskBps)),
     stringToUtf8Bytes(edition.issuerKey),
+    stringToUtf8Bytes(edition.nonce),
     stringToUtf8Bytes(edition.openedAt),
     stringToUtf8Bytes(edition.issuerSig)
   ]
@@ -781,7 +809,7 @@ export function parseKeepsakeFields(fields: Array<number[] | Uint8Array>): Keeps
   const kind = rest[1]
   const keepsakeId = rest[2]
   if (kind === 'edition') {
-    if (rest.length < 12) return null
+    if (rest.length < 13) return null
     const editionSize = whole(rest[5])
     const mintFeeSats = whole(rest[6])
     const royaltyBps = whole(rest[7])
@@ -799,8 +827,9 @@ export function parseKeepsakeFields(fields: Array<number[] | Uint8Array>): Keeps
       royaltyBps,
       deskBps,
       issuerKey: rest[9],
-      openedAt: rest[10],
-      issuerSig: rest[11]
+      nonce: rest[10],
+      openedAt: rest[11],
+      issuerSig: rest[12]
     }
     return validateEdition(edition) ? null : edition
   }
@@ -923,9 +952,13 @@ export function oldestFirst(records: KeepsakePayload[]): KeepsakePayload[] {
   }).map((item) => item.row)
 }
 
+function editionAccepted(edition: Edition): boolean {
+  return editionIdMatches(edition) && editionSignedByIssuer(edition)
+}
+
 export function deskFromRecords(records: KeepsakePayload[], keepsakeId?: string): DeskState | null {
   const scoped = oldestFirst(keepMagic(keepsakeId ? records.filter((row) => row.keepsakeId === keepsakeId) : records))
-  const edition = scoped.find((row): row is Edition => row.kind === 'edition' && editionSignedByIssuer(row)) ?? null
+  const edition = scoped.find((row): row is Edition => row.kind === 'edition' && editionAccepted(row)) ?? null
   if (!edition) return null
   const mine = scoped.filter((row) => row.keepsakeId === edition.keepsakeId)
   return {
@@ -972,7 +1005,7 @@ export function mintMessage(mint: Pick<MintRecord, 'keepsakeId' | 'serial' | 'mi
   ].join('\n'))
 }
 
-export function editionMessage(edition: Pick<Edition, 'keepsakeId' | 'orgName' | 'title' | 'editionSize' | 'mintFeeSats' | 'royaltyBps' | 'deskBps' | 'issuerKey' | 'openedAt'>): number[] {
+export function editionMessage(edition: Pick<Edition, 'keepsakeId' | 'orgName' | 'title' | 'editionSize' | 'mintFeeSats' | 'royaltyBps' | 'deskBps' | 'issuerKey' | 'nonce' | 'openedAt'>): number[] {
   return stringToUtf8Bytes([
     'keepsake',
     'edition',
@@ -984,6 +1017,7 @@ export function editionMessage(edition: Pick<Edition, 'keepsakeId' | 'orgName' |
     String(edition.royaltyBps),
     String(edition.deskBps),
     edition.issuerKey,
+    edition.nonce,
     edition.openedAt
   ].join('\n'))
 }
@@ -1043,19 +1077,37 @@ async function walletSig(wallet: RecordSigner, message: number[]): Promise<strin
   return signature.map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-/** What Record writes: issuer identity key, then edition and mint signatures from that wallet. */
+/** Point every record at sha256(issuerKey || nonce). Record does this before it signs. */
+export function bindDeskIssuer(desk: DeskState, issuerKey: string): DeskState {
+  if (!desk.edition) return desk
+  const key = assertKey(issuerKey, 'issuer')
+  const keepsakeId = keepsakeIdFor(key, desk.edition.nonce)
+  const retarget = <T extends { keepsakeId: string }>(row: T): T => ({ ...row, keepsakeId })
+  return {
+    ...desk,
+    edition: { ...desk.edition, issuerKey: key, keepsakeId, issuerSig: '' },
+    mints: desk.mints.map((row) => ({ ...retarget(row), issuerSig: '' })),
+    sends: desk.sends.map(retarget),
+    gifts: desk.gifts.map(retarget),
+    shows: desk.shows.map(retarget),
+    resales: desk.resales.map(retarget)
+  }
+}
+
+/** What Record writes: issuer identity key, rebound id, then edition and mint signatures. */
 export async function signRecordedDesk(wallet: RecordSigner, desk: DeskState): Promise<DeskState> {
   if (!desk.edition) throw new Error('Open an edition first.')
   const { publicKey } = await wallet.getPublicKey({ identityKey: true })
-  const issuerKey = assertKey(publicKey, 'issuer')
-  const draft: Edition = { ...desk.edition, issuerKey, issuerSig: '' }
+  const bound = bindDeskIssuer(desk, publicKey)
+  if (!bound.edition) throw new Error('Open an edition first.')
+  const draft = bound.edition
   const edition: Edition = { ...draft, issuerSig: await walletSig(wallet, editionMessage(draft)) }
   const mints: MintRecord[] = []
-  for (const mint of desk.mints) {
+  for (const mint of bound.mints) {
     const next = { ...mint, issuerSig: '' }
     mints.push({ ...next, issuerSig: await walletSig(wallet, mintMessage(next)) })
   }
-  return { ...desk, edition, mints }
+  return { ...bound, edition, mints }
 }
 
 function hexToBytes(value: string): number[] | null {

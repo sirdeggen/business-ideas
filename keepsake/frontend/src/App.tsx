@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   SAMPLE_BUYER,
   SAMPLE_RECIPIENT,
+  bindDeskIssuer,
   emptyDesk,
   giftPiece,
   holderOf,
@@ -280,7 +281,12 @@ function Shell() {
     try {
       const result = await recordKeepsake(session.wallet, url, session.identityKey, desk)
       setHintTxid(result.txid)
-      if (desk.edition) goToKeepsake(desk.edition.keepsakeId, result.txid)
+      if (desk.edition) {
+        const next = bindDeskIssuer(desk, session.identityKey)
+        if (next.edition && next.edition.keepsakeId !== desk.edition.keepsakeId) clearDesk(desk.edition.keepsakeId)
+        setDesk(next)
+        goToKeepsake(result.keepsakeId, result.txid)
+      }
       setActionError(result.overlayError ?? null)
       const items = await lookupKeepsakeItems(url).catch(() => null)
       if (items) setBook(bookFromItems(items))

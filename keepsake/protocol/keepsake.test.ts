@@ -14,6 +14,7 @@ import {
   SIGNING_COUNTERPARTY,
   SIGNING_KEY_ID,
   bookFromRecords,
+  editionMessage,
   deskFromRecords,
   encodeEditionFields,
   encodeGiftFields,
@@ -47,7 +48,8 @@ import {
 const NOW = '2026-10-13T16:00:00Z'
 const LATER = '2026-10-13T16:05:00Z'
 const AFTER = '2026-10-13T16:10:00Z'
-const ID = 'ab'.repeat(16)
+const NONCE = 'ab'.repeat(16)
+const EARLIER = '2026-10-13T15:00:00Z'
 
 function opened(editionSize = 2, issuerKey?: string) {
   return openEdition({
@@ -58,7 +60,7 @@ function opened(editionSize = 2, issuerKey?: string) {
     royaltyBps: DEFAULT_ROYALTY_BPS,
     deskBps: DEFAULT_DESK_BPS,
     issuerKey
-  }, NOW, ID)
+  }, NOW, NONCE)
 }
 
 function walletOf(key = PrivateKey.fromRandom()): { wallet: RecordSigner, identityPromise: Promise<string> } {
@@ -137,7 +139,7 @@ describe('keepsake protocol', () => {
       desk.sends[0],
       desk.shows[0],
       desk.resales[0]
-    ], ID)
+    ], desk.edition!.keepsakeId)
     expect(restored?.edition?.title).toBe('Founding Volunteer 2026')
     expect(holderOf(restored!, 1)).toBe(SAMPLE_BUYER)
     expect(profileOf(desk, SAMPLE_RECIPIENT)).toEqual([])
@@ -162,9 +164,10 @@ describe('keepsake protocol', () => {
     const inside = await signMint(wallet, mint, { serial: 2 })
     const above = await signMint(wallet, mint, { serial: 3 })
     const records = [recorded.edition!, inside, above]
-    expect(deskFromRecords(records, ID)?.mints).toEqual([inside])
+    const id = recorded.edition!.keepsakeId
+    expect(deskFromRecords(records, id)?.mints).toEqual([inside])
     expect(bookFromRecords(records)[0]?.mints).toEqual([inside])
-    expect(mintedCount(records, ID)).toBe(1)
+    expect(mintedCount(records, id)).toBe(1)
   })
 
   it('keeps the oldest signed mint for a serial and drops the later duplicate', async () => {
@@ -174,9 +177,10 @@ describe('keepsake protocol', () => {
     const first = mint
     const duplicate = await signMint(wallet, mint, { mintedAt: LATER })
     const records = [recorded.edition!, duplicate, first]
-    expect(deskFromRecords(records, ID)?.mints).toEqual([first])
+    const id = recorded.edition!.keepsakeId
+    expect(deskFromRecords(records, id)?.mints).toEqual([first])
     expect(bookFromRecords(records)[0]?.mints).toEqual([first])
-    expect(mintedCount(records, ID)).toBe(1)
+    expect(mintedCount(records, id)).toBe(1)
     expect(first.issuerSig).not.toBe(duplicate.issuerSig)
   })
 
@@ -193,21 +197,22 @@ describe('keepsake protocol', () => {
       unsigned,
       foreign,
       signed,
-      { magic: 'raffle', kind: 'mint', keepsakeId: ID, serial: 1 } as never
+      { magic: 'raffle', kind: 'mint', keepsakeId: recorded.edition!.keepsakeId, serial: 1 } as never
     ]
-    expect(deskFromRecords(records, ID)?.mints).toEqual([signed])
+    const id = recorded.edition!.keepsakeId
+    expect(deskFromRecords(records, id)?.mints).toEqual([signed])
     expect(bookFromRecords(records)[0]?.mints).toEqual([signed])
-    expect(mintedCount(records, ID)).toBe(1)
-    expect(mintedCount([signed], ID)).toBe(0)
+    expect(mintedCount(records, id)).toBe(1)
+    expect(mintedCount([signed], id)).toBe(0)
     const later = await signMint(issuer.wallet, mint, { serial: 1, mintedAt: LATER })
     const sameSerial = [
       recorded.edition!,
       { ...mint, serial: 1, issuerSig: '' },
       later
     ]
-    expect(deskFromRecords(sameSerial, ID)?.mints.map((row) => row.mintedAt)).toEqual([LATER])
+    expect(deskFromRecords(sameSerial, id)?.mints.map((row) => row.mintedAt)).toEqual([LATER])
     expect(bookFromRecords(sameSerial)[0]?.mints).toHaveLength(1)
-    expect(mintedCount(sameSerial, ID)).toBe(1)
+    expect(mintedCount(sameSerial, id)).toBe(1)
   })
 
   it('a recorded mint survives deskFromRecords and the public book shows 1', async () => {
@@ -224,44 +229,82 @@ describe('keepsake protocol', () => {
     expect(mintedCount(records, recorded.edition!.keepsakeId)).toBe(1)
   })
 
-  it('ignores a later edition that reuses the keepsake id', async () => {
+  it('ignores an attacker who copies the id, signs with their own key, and backdates openedAt', async () => {
     const org = walletOf()
     const attacker = walletOf()
     const recorded = await signRecordedDesk(org.wallet, mintPiece(opened(2), NOW))
-    const attack = openEdition({
-      orgName: 'North Hall Volunteers',
+    const real = recorded.edition!
+    const attackerKey = await attacker.identityPromise
+    const forgedDraft = {
+      ...real,
       title: 'Taken over',
       editionSize: 9_000,
-      mintFeeSats: DEFAULT_MINT_FEE_SATS,
-      royaltyBps: 0,
-      deskBps: 0
-    }, LATER, ID)
-    const stolen = await signRecordedDesk(attacker.wallet, mintPiece(attack, AFTER))
-    const records = [stolen.edition!, stolen.mints[0]!, recorded.mints[0]!, recorded.edition!]
-    const restored = deskFromRecords(records, ID)
+      issuerKey: attackerKey,
+      openedAt: EARLIER,
+      issuerSig: ''
+    }
+    const { signature } = await attacker.wallet.createSignature({
+      data: editionMessage(forgedDraft),
+      protocolID: PROTOCOL_ID,
+      keyID: SIGNING_KEY_ID,
+      counterparty: SIGNING_COUNTERPARTY
+    })
+    const forged = {
+      ...forgedDraft,
+      issuerSig: signature.map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    }
+    const forgedMint = await signMint(attacker.wallet, { ...recorded.mints[0]!, issuerSig: '' })
+    const records = [forged, forgedMint, recorded.mints[0]!, real]
+    const restored = deskFromRecords(records, real.keepsakeId)
+    expect(forged.keepsakeId).toBe(real.keepsakeId)
+    expect(forged.openedAt < real.openedAt).toBe(true)
     expect(restored?.edition?.title).toBe('Founding Volunteer 2026')
     expect(restored?.edition?.editionSize).toBe(2)
     expect(restored?.edition?.issuerKey).toBe(await org.identityPromise)
     expect(restored?.mints).toEqual([recorded.mints[0]])
-    expect(bookFromRecords(records)[0]?.mints).toHaveLength(1)
-    expect(mintedCount(records, ID)).toBe(1)
+    expect(bookFromRecords(records)).toEqual([expect.objectContaining({
+      keepsakeId: real.keepsakeId,
+      mints: [recorded.mints[0]]
+    })])
+    expect(mintedCount(records, real.keepsakeId)).toBe(1)
+    expect(deskFromRecords([forged, forgedMint], real.keepsakeId)).toBeNull()
+  })
+
+  it('uses oldest-first only when two editions bind the same id', async () => {
+    const { wallet } = walletOf()
+    const recorded = await signRecordedDesk(wallet, mintPiece(opened(2), NOW))
+    const real = recorded.edition!
+    const laterDraft = { ...real, title: 'Renamed later', openedAt: LATER, issuerSig: '' }
+    const { signature } = await wallet.createSignature({
+      data: editionMessage(laterDraft),
+      protocolID: PROTOCOL_ID,
+      keyID: SIGNING_KEY_ID,
+      counterparty: SIGNING_COUNTERPARTY
+    })
+    const later = {
+      ...laterDraft,
+      issuerSig: signature.map((byte) => byte.toString(16).padStart(2, '0')).join('')
+    }
+    const records = [later, real, recorded.mints[0]!]
+    expect(deskFromRecords(records, real.keepsakeId)?.edition?.title).toBe('Founding Volunteer 2026')
+    expect(deskFromRecords(records, real.keepsakeId)?.mints).toEqual([recorded.mints[0]])
   })
 
   it('keeps only MAGIC keepsake on the public book', async () => {
     const desk = opened()
-    const foreign = { magic: 'grant', keepsakeId: ID, kind: 'edition' as const }
+    const foreign = { magic: 'grant', keepsakeId: desk.edition!.keepsakeId, kind: 'edition' as const }
     expect(keepMagic([desk.edition!, foreign])).toEqual([desk.edition])
     expect(parseKeepsakeFields([
       stringToUtf8Bytes('grant'),
       stringToUtf8Bytes('1'),
       stringToUtf8Bytes('edition'),
-      stringToUtf8Bytes(ID)
+      stringToUtf8Bytes(desk.edition!.keepsakeId)
     ])).toBeNull()
     expect(parseKeepsakeFields([
       stringToUtf8Bytes('keepsake'),
       stringToUtf8Bytes('1'),
       stringToUtf8Bytes('pack'),
-      stringToUtf8Bytes(ID)
+      stringToUtf8Bytes(desk.edition!.keepsakeId)
     ])).toBeNull()
     const recorded = await signRecordedDesk(walletOf().wallet, desk)
     const book = bookFromRecords([recorded.edition!])

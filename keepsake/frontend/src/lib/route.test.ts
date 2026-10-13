@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { keepsakeHref, parseKeepsakeLocation } from './route'
 
-const KEEPSAKE_ID = 'ab'.repeat(16)
+const KEEPSAKE_ID = 'ab'.repeat(32)
 const HINT_TX = 'cd'.repeat(32)
 
 describe('keepsake deep links', () => {
@@ -21,7 +21,7 @@ describe('keepsake deep links', () => {
     expect(href).toContain(`?k=${KEEPSAKE_ID}`)
     expect(href).toContain(`tx=${HINT_TX}`)
     expect(href).not.toContain('/k/')
-    expect(href).not.toMatch(/\/k\/[0-9a-f]{32}/)
+    expect(href).not.toMatch(/\/k\/[0-9a-f]{64}/)
   })
 
   it('does not treat a path /k/:id as a keepsake id', () => {
