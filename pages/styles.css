@@ -675,6 +675,15 @@ a.card .hit,
   --title-tracking: -0.03em;
 }
 
+.demo-bounty {
+  --chip: #0369a1;
+  --title: #0c4a6e;
+  --title-font: var(--serif);
+  --title-size: 22px;
+  --title-weight: 600;
+  --title-style: italic;
+}
+
 .demo-scrip {
   --chip: #059669;
   --title: #064e3b;
@@ -722,6 +731,7 @@ a.card .hit,
 .demo-closing .scene { object-position: 50% 42%; }
 .demo-private-pay .scene { object-position: 50% 42%; }
 .demo-boost .scene { object-position: 32% 28%; }
+.demo-bounty .scene { object-position: 50% 42%; }
 .demo-scrip .scene { object-position: 50% 42%; }
 .demo-check .scene { object-position: 50% 42%; }
 .demo-keepsake .scene { object-position: 50% 42%; }
