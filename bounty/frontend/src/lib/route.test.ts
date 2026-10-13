@@ -3,17 +3,31 @@ import { bountyHref, parseBountyLocation } from './route'
 
 const BOUNTY_ID = 'ab'.repeat(16)
 const HINT_TX = 'cd'.repeat(32)
+const PIN = `02${'ab'.repeat(32)}`
 
 describe('bounty deep links', () => {
   it('reads ?b= and optional ?tx=', () => {
     expect(parseBountyLocation(`?b=${BOUNTY_ID}&tx=${HINT_TX}`)).toEqual({
       bountyId: BOUNTY_ID,
-      hintTxid: HINT_TX
+      hintTxid: HINT_TX,
+      pinIdentity: null
     })
     expect(parseBountyLocation(`?b=${BOUNTY_ID}`)).toEqual({
       bountyId: BOUNTY_ID,
-      hintTxid: null
+      hintTxid: null,
+      pinIdentity: null
     })
+  })
+
+  it('reads ?p= and puts it on the link', () => {
+    expect(parseBountyLocation(`?b=${BOUNTY_ID}&p=${PIN}`)).toEqual({
+      bountyId: BOUNTY_ID,
+      hintTxid: null,
+      pinIdentity: PIN
+    })
+    const href = bountyHref(BOUNTY_ID, HINT_TX, PIN)
+    expect(href).toContain(`p=${PIN}`)
+    expect(href).not.toContain('/b/')
   })
 
   it('builds query-param links, never /b/:id', () => {
@@ -27,14 +41,16 @@ describe('bounty deep links', () => {
   it('does not treat a path /b/:id as a bounty id', () => {
     expect(parseBountyLocation('', `#/b/${BOUNTY_ID}`)).toEqual({
       bountyId: null,
-      hintTxid: null
+      hintTxid: null,
+      pinIdentity: null
     })
   })
 
   it('reads hash ?b= after a Pages 404 redirect', () => {
     expect(parseBountyLocation('', `#/?b=${BOUNTY_ID}&tx=${HINT_TX}`)).toEqual({
       bountyId: BOUNTY_ID,
-      hintTxid: HINT_TX
+      hintTxid: HINT_TX,
+      pinIdentity: null
     })
   })
 })

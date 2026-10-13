@@ -95,6 +95,7 @@ function Shell() {
   const [desk, setDesk] = useState<DeskState>(emptyDesk())
   const [readonly, setReadonly] = useState(false)
   const [hintTxid, setHintTxid] = useState(initial.hintTxid ?? '')
+  const [pinIdentity, setPinIdentity] = useState(initial.pinIdentity ?? '')
   const [projectName, setProjectName] = useState('')
   const [scope, setScope] = useState('')
   const [critical, setCritical] = useState('500000')
@@ -148,7 +149,7 @@ function Shell() {
     void lookupBountyItems(url)
       .then((items) => {
         if (cancel) return
-        setBook(bookFromItems(items))
+        setBook(bookFromItems(items, pinIdentity || null))
         setBookError(null)
       })
       .catch(() => {
@@ -157,10 +158,11 @@ function Shell() {
     return () => {
       cancel = true
     }
-  }, [url])
+  }, [url, pinIdentity])
 
   useEffect(() => {
     const located = readBountyFromLocation()
+    if (located.pinIdentity) setPinIdentity(located.pinIdentity)
     if (!located.bountyId) return
     const local = loadDesk(located.bountyId)
     if (local) {
@@ -169,7 +171,7 @@ function Shell() {
       return
     }
     let cancel = false
-    void lookupBounty(url, located.bountyId, located.hintTxid ?? undefined)
+    void lookupBounty(url, located.bountyId, located.hintTxid ?? undefined, located.pinIdentity || pinIdentity || undefined)
       .then((remote) => {
         if (cancel || !remote?.fund) return
         setDesk(remote)
@@ -214,7 +216,7 @@ function Shell() {
       })
       setDesk(next)
       setReadonly(false)
-      if (next.fund) goToBounty(next.fund.bountyId)
+      if (next.fund) goToBounty(next.fund.bountyId, null, pinIdentity || null)
     } catch (err) {
       fail(err)
     }
@@ -276,10 +278,10 @@ function Shell() {
     try {
       const result = await recordBounty(session.wallet, url, session.identityKey, desk, researcherKey, reportBody)
       setHintTxid(result.txid)
-      if (desk.fund) goToBounty(desk.fund.bountyId, result.txid)
+      if (desk.fund) goToBounty(desk.fund.bountyId, result.txid, pinIdentity || null)
       setActionError(result.overlayError ?? null)
       const items = await lookupBountyItems(url).catch(() => null)
-      if (items) setBook(bookFromItems(items))
+      if (items) setBook(bookFromItems(items, pinIdentity || null))
     } catch (err) {
       console.error('Record bounty failed', err)
       setActionError(errorMessage(err))
@@ -303,7 +305,7 @@ function Shell() {
   const copyLink = async (): Promise<void> => {
     if (!fund) return
     try {
-      await navigator.clipboard.writeText(bountyPublicUrl(fund.bountyId, hintTxid))
+      await navigator.clipboard.writeText(bountyPublicUrl(fund.bountyId, hintTxid, pinIdentity || null))
       setCopied(true)
     } catch (err) {
       fail(err)
@@ -337,13 +339,13 @@ function Shell() {
       setReadonly(true)
     }
     setHintTxid(row.txid ?? '')
-    goToBounty(row.bountyId, row.txid)
+    goToBounty(row.bountyId, row.txid, pinIdentity || null)
   }
 
   const refreshBook = (): void => {
     void lookupBountyItems(url)
       .then((items) => {
-        setBook(bookFromItems(items))
+        setBook(bookFromItems(items, pinIdentity || null))
         setBookError(null)
       })
       .catch(() => setBookError('The public book didn’t load.'))

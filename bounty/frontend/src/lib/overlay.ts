@@ -11,21 +11,26 @@ import {
 } from '@bsv/sdk'
 import {
   MAGIC,
-  bookFromRecords,
-  deskFromRecords,
-  keepMagic,
+  bookFromChain,
+  deskFromChain,
   fundLockedToProject,
-  parseBountyFields,
-  type BountyPayload,
+  parseChainFields,
+  poolLockingKey,
+  sameKey,
+  type ChainPayload,
+  type ChainRecord,
   type DeskState,
-  type ListedPool
+  type ListedPool,
+  type ReadOptions
 } from '../../../protocol/bounty'
 import { PUBLIC_LOOKUP, PUBLIC_TOPIC } from './config'
 
 export interface OverlayItem {
-  payload: BountyPayload
+  payload: ChainPayload
   txid: string
   outputIndex: number
+  inputs?: string[]
+  lockingPublicKey?: string
 }
 
 export interface SubmitResult {
@@ -111,14 +116,16 @@ function standardBeef(tx: Transaction): number[] {
   }
 }
 
-function parseScript(lockingScript: Parameters<typeof PushDrop.decode>[0]): BountyPayload | null {
+function parseScript(lockingScript: Parameters<typeof PushDrop.decode>[0]): { payload: ChainPayload, lockingPublicKey: string } | null {
   for (const position of ['before', 'after'] as const) {
     try {
       const decoded = PushDrop.decode(lockingScript, position)
-      const item = parseBountyFields(decoded.fields)
+      const item = parseChainFields(decoded.fields)
       if (!item) continue
-      if (item.kind === 'fund' && !fundLockedToProject(decoded.lockingPublicKey.toString(), item)) return null
-      return item
+      const lockingPublicKey = decoded.lockingPublicKey.toString()
+      if (item.kind === 'fund' && !fundLockedToProject(lockingPublicKey, item)) return null
+      if (item.kind === 'pool' && !sameKey(lockingPublicKey, poolLockingKey(item.projectIdentity, item.bountyId))) return null
+      return { payload: item, lockingPublicKey }
     } catch {
       // Try the other lock() position.
     }
@@ -132,6 +139,26 @@ function bountyOutputIndexes(tx: Transaction): number[] {
     if (parseScript(output.lockingScript)) indexes.push(index)
   }
   return indexes
+}
+
+function inputOutpoints(tx: Transaction): string[] {
+  const points: string[] = []
+  for (const input of tx.inputs) {
+    const source = input.sourceTXID || input.sourceTransaction?.id('hex')
+    if (!source || input.sourceOutputIndex == null) continue
+    points.push(`${source}.${input.sourceOutputIndex}`.toLowerCase())
+  }
+  return points
+}
+
+function toChain(item: OverlayItem): ChainRecord {
+  return {
+    txid: item.txid.trim().toLowerCase(),
+    vout: item.outputIndex,
+    inputs: (item.inputs ?? []).map((input) => input.trim().toLowerCase()),
+    lockingPublicKey: item.lockingPublicKey ?? '',
+    payload: item.payload
+  }
 }
 
 function overlayErrorText(error: unknown): string {
@@ -241,10 +268,7 @@ async function queryLookup(
 }
 
 export function keepBounty(items: OverlayItem[]): OverlayItem[] {
-  return keepMagic(items.map((item) => item.payload)).flatMap((payload) => {
-    const item = items.find((row) => row.payload === payload)
-    return item ? [item] : []
-  })
+  return items.filter((item) => item.payload.magic === MAGIC)
 }
 
 function matchesQuery(item: OverlayItem, query: BountyQuery): boolean {
@@ -257,17 +281,13 @@ function matchesQuery(item: OverlayItem, query: BountyQuery): boolean {
   return true
 }
 
-export function bookFromItems(items: OverlayItem[]): ListedBounty[] {
-  const kept = keepBounty(items)
-  return bookFromRecords(kept.map((item) => item.payload)).map((pool) => ({
-    ...pool,
-    txid: kept.find((item) => item.payload.kind === 'fund' && item.payload.bountyId === pool.bountyId)?.txid ?? null
-  }))
+export function bookFromItems(items: OverlayItem[], pinIdentity?: string | null): ListedBounty[] {
+  return bookFromChain(keepBounty(items).map(toChain), pinIdentity)
 }
 
-export function viewFromItems(items: OverlayItem[], bountyId?: string): DeskState | null {
+export function viewFromItems(items: OverlayItem[], bountyId?: string, options: ReadOptions = {}): DeskState | null {
   const scoped = keepBounty(items).filter((item) => !bountyId || item.payload.bountyId === bountyId)
-  return deskFromRecords(scoped.map((item) => item.payload), bountyId)
+  return deskFromChain(scoped.map(toChain), { ...options, bountyId })
 }
 
 async function queryAnytx(host: string, service: string, query: BountyQuery): Promise<LookupAnswer[]> {
@@ -294,11 +314,18 @@ function itemsFromBeef(beef: number[] | undefined, txidHint?: string): OverlayIt
   try {
     const tx = txFromWalletBeef(beef)
     const txid = txidHint || tx.id('hex')
+    const inputs = inputOutpoints(tx)
     const rows: OverlayItem[] = []
     for (const [outputIndex, output] of tx.outputs.entries()) {
-      const payload = parseScript(output.lockingScript)
-      if (!payload) continue
-      rows.push({ payload, txid, outputIndex })
+      const parsed = parseScript(output.lockingScript)
+      if (!parsed) continue
+      rows.push({
+        payload: parsed.payload,
+        txid,
+        outputIndex,
+        inputs,
+        lockingPublicKey: parsed.lockingPublicKey
+      })
     }
     return rows
   } catch {
@@ -330,9 +357,14 @@ export async function lookupBountyItems(base: string, query: BountyQuery = {}): 
   return items.filter((item) => matchesQuery(item, query))
 }
 
-export async function lookupBounty(base: string, bountyId: string, txid?: string): Promise<DeskState | null> {
+export async function lookupBounty(
+  base: string,
+  bountyId: string,
+  txid?: string,
+  pinIdentity?: string | null
+): Promise<DeskState | null> {
   const items = await lookupBountyItems(base, { bountyId, txid })
-  return viewFromItems(items, bountyId)
+  return viewFromItems(items, bountyId, { hintTxid: txid, pinIdentity })
 }
 
 function fetchFailure(path: string, error: unknown): string {

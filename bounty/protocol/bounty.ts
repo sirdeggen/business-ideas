@@ -6,19 +6,27 @@
  * Public Pages uses tm_anytx / ls_anytx. Client filters on MAGIC.
  *
  * Script-enforced: the pool output is a PushDrop lock. Its key id is
- * `pool-<bountyId>`, so the project wallet re-derives the same key and
- * is the only one that can spend it. A release spends that outpoint and
- * pays the researcher, the desk fee key, and a new pool output.
+ * `pool-<bountyId>` and the counterparty is `anyone`, so any reader
+ * re-derives the locking key from the project's public identity key
+ * alone and checks it. Only the project wallet can spend that key.
+ * A release spends that outpoint and pays the researcher, a BRC-29
+ * output of the desk wallet, and a new pool output.
+ * The fund carries the root identity. The canonical fund is the one
+ * named by `?tx=` when that param is present, otherwise the oldest
+ * valid fund for the bounty id (and for `?p=` when that pin is set).
+ * A later fund that reuses the bounty id is ignored. The pool chain
+ * follows outpoint spends: each release input is the previous pool
+ * outpoint.
  * Desk-state: which tier matches, hash priority, and the disclosure
  * timeline. Public verdict and timeline rows count only when that
- * project key signed them. The report body is never a field.
+ * derived project key signed them. The report body is never a field.
  * The export is a record of those timestamps, not legal advice.
  *
  * Not Job Escrow (one hired job). Not Grants (a purpose-bound gift).
  * Not Cover (an insurance claim). Not Vouch (a staked attestation).
  */
 
-import { BigNumber, ECDSA, Hash, PublicKey, Signature, Utils } from '@bsv/sdk'
+import { BigNumber, ECDSA, Hash, KeyDeriver, PublicKey, Signature, Utils } from '@bsv/sdk'
 import { sha256Hex } from './sha256'
 
 export const PROTOCOL_ID: [0, string] = [0, 'bounty']
@@ -50,13 +58,44 @@ export const DEFAULT_SUBMISSION_FEE_SATS = 1_000
 export const DEFAULT_EXPORT_FEE_SATS = 2_500
 export const RECORD_SATS = 1
 
-/** P2PKH destination for the desk fee. The matching private key is not in this repo. */
-export const DESK_FEE_KEY = '02e3005a8945c785b61f14d32b357cdeba63e87f81662bfbcb6bb7f85c5e4f0703'
+/**
+ * Desk wallet identity. BRC-100 cannot sign this root, so the fee is not
+ * a P2PKH of the root. It is a P2PKH of the BRC-29 child below.
+ */
+export const DESK_FEE_KEY = '02c5313bc21f0a61418640c94a23d3cdb09ea50a8a3dd8daababe93f57a5fa0082'
+
+/** BRC-29 payment protocol. Counterparty is `anyone`, so the child is public. */
+export const BRC29_PROTOCOL: [2, string] = [2, '3241645161d8']
+
+/** Stable key id for the desk fee child. The desk spends it with forSelf true. */
+export const DESK_FEE_KEY_ID = 'bounty-fee'
 
 /** Reproducible wallet key id for the pool lock. Readers re-derive this, not a random id. */
 export function poolKeyId(bountyId: string): string {
   if (!isBountyId(bountyId)) throw new Error('Bounty id is missing.')
   return `pool-${bountyId}`
+}
+
+/**
+ * Public child of an identity key. Counterparty is `anyone` (the point 1·G),
+ * so the shared secret is the identity point and any reader can compute the
+ * child from the public key alone. The owner spends it with forSelf true.
+ */
+export function derivedLockingKey(identityKey: string, protocolID: [0 | 1 | 2, string], keyID: string): string {
+  if (!isIdentityKey(identityKey)) throw new Error('Identity key is invalid.')
+  return new KeyDeriver('anyone')
+    .derivePublicKey(protocolID, keyID, PublicKey.fromString(identityKey.trim()))
+    .toString()
+}
+
+/** Locking key for `pool-<bountyId>`, derived from the project's root identity. */
+export function poolLockingKey(identityKey: string, bountyId: string): string {
+  return derivedLockingKey(identityKey, PROTOCOL_ID, poolKeyId(bountyId))
+}
+
+/** P2PKH key for the desk fee. Not the desk wallet root. */
+export function deskFeeLockingKey(): string {
+  return derivedLockingKey(DESK_FEE_KEY, BRC29_PROTOCOL, DESK_FEE_KEY_ID)
 }
 
 export const EARLY_WARNING_MS = 24 * 60 * 60 * 1000
@@ -129,6 +168,34 @@ export interface TimelineEvent {
 }
 
 export type BountyPayload = BountyFund | BountySubmit | BountyVerdict | TimelineEvent
+
+/** Remainder of a spent pool. Kind `pool` so it is not a second fund. */
+export interface PoolLink {
+  magic: typeof MAGIC
+  version: typeof SCHEMA_VERSION
+  kind: 'pool'
+  bountyId: string
+  projectIdentity: string
+  poolSats: number
+  fundedAt: string
+}
+
+export type ChainPayload = BountyPayload | PoolLink
+
+/** One bounty output plus the outpoints its transaction spends. */
+export interface ChainRecord {
+  txid: string
+  vout: number
+  inputs: string[]
+  lockingPublicKey: string
+  payload: ChainPayload
+}
+
+export interface ReadOptions {
+  bountyId?: string
+  hintTxid?: string | null
+  pinIdentity?: string | null
+}
 
 export interface DeskState {
   fund: BountyFund | null
@@ -620,8 +687,16 @@ export function sameKey(left: string, right: string): boolean {
   return isIdentityKey(a) && isIdentityKey(b) && a.toLowerCase() === b.toLowerCase()
 }
 
-export function fundLockedToProject(lockingPublicKey: string, fund: Pick<BountyFund, 'projectIdentity'>): boolean {
-  return sameKey(lockingPublicKey, fund.projectIdentity)
+export function fundLockedToProject(
+  lockingPublicKey: string,
+  fund: Pick<BountyFund, 'projectIdentity' | 'bountyId'>
+): boolean {
+  if (!isIdentityKey(fund.projectIdentity)) return false
+  try {
+    return sameKey(lockingPublicKey, poolLockingKey(fund.projectIdentity, fund.bountyId))
+  } catch {
+    return false
+  }
 }
 
 export function verdictMessage(verdict: BountyVerdict): number[] {
@@ -643,28 +718,39 @@ export function timelineMessage(event: TimelineEvent): number[] {
   return stringToUtf8Bytes(['timeline', event.bountyId, event.stage, event.at].join('|'))
 }
 
-/** ECDSA over sha256, the same preimage BRC-100 createSignature uses for this key. */
-export function signedByProject(projectIdentity: string, message: number[], signature: string): boolean {
-  if (!isIdentityKey(projectIdentity.trim()) || !/^[0-9a-fA-F]+$/.test(signature)) return false
+/** ECDSA over sha256, the same preimage BRC-100 createSignature uses for the pool key. */
+export function signedByProject(projectIdentity: string, bountyId: string, message: number[], signature: string): boolean {
+  if (!isIdentityKey(projectIdentity.trim()) || !isBountyId(bountyId) || !/^[0-9a-fA-F]+$/.test(signature)) return false
   try {
     const hash = Hash.sha256(message)
     const sig = Signature.fromDER(Utils.toArray(signature, 'hex'))
-    return ECDSA.verify(new BigNumber(hash), sig, PublicKey.fromString(projectIdentity.trim()))
+    const locking = poolLockingKey(projectIdentity, bountyId)
+    return ECDSA.verify(new BigNumber(hash), sig, PublicKey.fromString(locking))
   } catch {
     return false
   }
 }
 
+function oldestFund(funds: BountyFund[]): BountyFund | null {
+  const ranked = funds.map((fund, index) => ({ fund, index }))
+  ranked.sort((left, right) => {
+    if (left.fund.fundedAt < right.fund.fundedAt) return -1
+    if (left.fund.fundedAt > right.fund.fundedAt) return 1
+    return left.index - right.index
+  })
+  return ranked[0]?.fund ?? null
+}
+
 export function deskFromRecords(rows: BountyPayload[], bountyId?: string): DeskState | null {
   const scoped = keepMagic(rows).filter((row) => !bountyId || row.bountyId === bountyId)
-  const fund = scoped.find((row): row is BountyFund => row.kind === 'fund')
+  const fund = oldestFund(scoped.filter((row): row is BountyFund => row.kind === 'fund'))
   if (!fund) return null
   const submits = scoped.filter((row): row is BountySubmit => row.kind === 'submit')
   const verdict = scoped.find((row): row is BountyVerdict =>
-    row.kind === 'verdict' && signedByProject(fund.projectIdentity, verdictMessage(row), row.signature)
+    row.kind === 'verdict' && signedByProject(fund.projectIdentity, fund.bountyId, verdictMessage(row), row.signature)
   ) ?? null
   const timeline = scoped.filter((row): row is TimelineEvent =>
-    row.kind === 'timeline' && signedByProject(fund.projectIdentity, timelineMessage(row), row.signature)
+    row.kind === 'timeline' && signedByProject(fund.projectIdentity, fund.bountyId, timelineMessage(row), row.signature)
   )
   return {
     fund,
@@ -675,6 +761,146 @@ export function deskFromRecords(rows: BountyPayload[], bountyId?: string): DeskS
     rejection: null,
     notice: null
   }
+}
+
+function outpointOf(record: ChainRecord): string {
+  return `${record.txid.trim().toLowerCase()}.${record.vout}`
+}
+
+function fundIsValid(record: ChainRecord, bountyId?: string, pinIdentity?: string | null): record is ChainRecord & { payload: BountyFund } {
+  if (record.payload.kind !== 'fund') return false
+  const fund = record.payload
+  if (bountyId && fund.bountyId !== bountyId) return false
+  if (pinIdentity && !sameKey(fund.projectIdentity, pinIdentity)) return false
+  if (!record.lockingPublicKey) return !fund.projectIdentity
+  if (!isIdentityKey(fund.projectIdentity)) return false
+  return fundLockedToProject(record.lockingPublicKey, fund)
+}
+
+/** The fund named by hintTxid, otherwise the oldest valid fund. A bad hint does not fall through. */
+export function canonicalFundRecord(records: ChainRecord[], options: ReadOptions = {}): ChainRecord | null {
+  const hint = options.hintTxid?.trim().toLowerCase() || null
+  const pin = options.pinIdentity?.trim() || null
+  const funds = records
+    .map((record, index) => ({ record, index }))
+    .filter(({ record }) => fundIsValid(record, options.bountyId, pin))
+  if (hint) return funds.find(({ record }) => record.txid.trim().toLowerCase() === hint)?.record ?? null
+  funds.sort((left, right) => {
+    const older = left.record.payload as BountyFund
+    const newer = right.record.payload as BountyFund
+    if (older.fundedAt < newer.fundedAt) return -1
+    if (older.fundedAt > newer.fundedAt) return 1
+    return left.index - right.index
+  })
+  return funds[0]?.record ?? null
+}
+
+function poolContinuations(records: ChainRecord[], fund: BountyFund, expected: string, head: string, seen: Set<string>): ChainRecord[] {
+  return records
+    .filter((row) => {
+      if (row.payload.kind !== 'pool') return false
+      if (row.payload.bountyId !== fund.bountyId) return false
+      if (!sameKey(row.payload.projectIdentity, fund.projectIdentity)) return false
+      if (!sameKey(row.lockingPublicKey, expected)) return false
+      if (!row.inputs.includes(head)) return false
+      return !seen.has(outpointOf(row))
+    })
+    .sort((left, right) => left.txid.localeCompare(right.txid) || left.vout - right.vout)
+}
+
+/** Release txids, in chain order. Each step spends the previous pool outpoint. */
+export function poolReleaseTxids(records: ChainRecord[], fundRecord: ChainRecord): string[] {
+  if (fundRecord.payload.kind !== 'fund' || !isIdentityKey(fundRecord.payload.projectIdentity)) return []
+  const fund = fundRecord.payload
+  let expected = ''
+  try {
+    expected = poolLockingKey(fund.projectIdentity, fund.bountyId)
+  } catch {
+    return []
+  }
+  const releases: string[] = []
+  const seen = new Set<string>([outpointOf(fundRecord)])
+  let head = outpointOf(fundRecord)
+  for (;;) {
+    const next = poolContinuations(records, fund, expected, head, seen)[0]
+    if (next) {
+      releases.push(next.txid.trim().toLowerCase())
+      head = outpointOf(next)
+      seen.add(head)
+      continue
+    }
+    const terminal = records.find((row) => {
+      if (row.payload.kind !== 'verdict') return false
+      if (row.payload.bountyId !== fund.bountyId || row.payload.poolLeft !== 0) return false
+      if (!row.inputs.includes(head)) return false
+      if (!signedByProject(fund.projectIdentity, fund.bountyId, verdictMessage(row.payload), row.payload.signature)) return false
+      const txid = row.txid.trim().toLowerCase()
+      return !records.some((other) => other.txid.trim().toLowerCase() === txid && other.payload.kind === 'pool')
+    })
+    if (terminal) releases.push(terminal.txid.trim().toLowerCase())
+    break
+  }
+  return releases
+}
+
+export function deskFromChain(records: ChainRecord[], options: ReadOptions = {}): DeskState | null {
+  const chosen = canonicalFundRecord(records, options)
+  if (!chosen || chosen.payload.kind !== 'fund') return null
+  const fund = chosen.payload
+  const scoped = records.filter((row) => row.payload.bountyId === fund.bountyId)
+  const submits = scoped
+    .map((row) => row.payload)
+    .filter((row): row is BountySubmit => row.kind === 'submit')
+  const releases = poolReleaseTxids(records, chosen)
+  let verdict: BountyVerdict | null = null
+  for (const releaseTxid of releases) {
+    const row = scoped.find((item) =>
+      item.txid.trim().toLowerCase() === releaseTxid
+      && item.payload.kind === 'verdict'
+      && signedByProject(fund.projectIdentity, fund.bountyId, verdictMessage(item.payload), item.payload.signature)
+    )
+    if (row && row.payload.kind === 'verdict') {
+      verdict = row.payload
+      break
+    }
+  }
+  const timeline = scoped
+    .map((row) => row.payload)
+    .filter((row): row is TimelineEvent =>
+      row.kind === 'timeline' && signedByProject(fund.projectIdentity, fund.bountyId, timelineMessage(row), row.signature)
+    )
+  return {
+    fund,
+    submission: earlierSubmission(submits),
+    verdict,
+    timeline: foldTimeline(timeline, fund.bountyId),
+    exportText: null,
+    rejection: null,
+    notice: null
+  }
+}
+
+export function bookFromChain(records: ChainRecord[], pinIdentity?: string | null): Array<ListedPool & { txid: string }> {
+  const ids: string[] = []
+  for (const row of records) {
+    if (row.payload.kind !== 'fund') continue
+    if (!ids.includes(row.payload.bountyId)) ids.push(row.payload.bountyId)
+  }
+  const book: Array<ListedPool & { txid: string }> = []
+  for (const bountyId of ids) {
+    const chosen = canonicalFundRecord(records, { bountyId, pinIdentity })
+    if (!chosen || chosen.payload.kind !== 'fund') continue
+    const desk = deskFromChain(records, { bountyId, pinIdentity })
+    if (!desk?.fund) continue
+    book.push({
+      bountyId,
+      fund: desk.fund,
+      submission: desk.submission,
+      verdict: desk.verdict,
+      txid: chosen.txid
+    })
+  }
+  return book
 }
 
 export interface ListedPool {
@@ -972,4 +1198,44 @@ export function parseBountyFields(fields: Array<number[] | Uint8Array>): BountyP
     return validateTimeline(event) ? null : event
   }
   return null
+}
+
+function fundShaped(rest: string[]): {
+  bountyId: string
+  projectIdentity: string
+  poolSats: number
+  fundedAt: string
+} | null {
+  if (rest.length < 15) return null
+  const bountyId = rest[2] ?? ''
+  const poolSats = whole(rest[9] ?? '')
+  const projectIdentity = (rest[13] ?? '') === 'pending' ? '' : (rest[13] ?? '')
+  const fundedAt = rest[14] ?? ''
+  if (!isBountyId(bountyId) || poolSats == null || poolSats < 1) return null
+  if (!isIdentityKey(projectIdentity) || !isIsoDateTime(fundedAt)) return null
+  return { bountyId, projectIdentity, poolSats, fundedAt }
+}
+
+/** Remainder output. Not a fund, so parseBountyFields stays null for kind `pool`. */
+export function parsePoolLink(fields: Array<number[] | Uint8Array>): PoolLink | null {
+  const semantic = semanticFields(fields)
+  const start = magicIndex(semantic)
+  if (start < 0) return null
+  const rest = semantic.slice(start + 1).map((field) => fieldUtf8(field))
+  if (rest.length < 3 || rest[0] !== SCHEMA_VERSION || rest[1] !== 'pool') return null
+  const shaped = fundShaped(rest)
+  if (!shaped) return null
+  return {
+    magic: MAGIC,
+    version: SCHEMA_VERSION,
+    kind: 'pool',
+    bountyId: shaped.bountyId,
+    projectIdentity: shaped.projectIdentity,
+    poolSats: shaped.poolSats,
+    fundedAt: shaped.fundedAt
+  }
+}
+
+export function parseChainFields(fields: Array<number[] | Uint8Array>): ChainPayload | null {
+  return parseBountyFields(fields) ?? parsePoolLink(fields)
 }

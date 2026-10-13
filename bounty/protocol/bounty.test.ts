@@ -1,14 +1,19 @@
 import { PrivateKey, ProtoWallet, PushDrop, Utils } from '@bsv/sdk'
 import { describe, expect, it } from 'vitest'
 import {
+  BRC29_PROTOCOL,
   DESK_FEE_KEY,
+  DESK_FEE_KEY_ID,
   EXPORT_NOTE,
   MAGIC,
   MAX_PAYOUT_FEE_BPS,
   PROTOCOL_ID,
   appendTimeline,
   bookFromRecords,
+  deskFeeLockingKey,
+  deskFromChain,
   deskFromRecords,
+  derivedLockingKey,
   earlierSubmission,
   encodeFundFields,
   encodeRemainderFields,
@@ -20,10 +25,13 @@ import {
   fundLockedToProject,
   fundPool,
   hashReport,
+  isIdentityKey,
   keepMagic,
   parseBountyFields,
+  parseChainFields,
   payoutFeeSats,
   poolKeyId,
+  poolLockingKey,
   publicPayloads,
   recordPlan,
   releaseLines,
@@ -35,6 +43,8 @@ import {
   type BountyFund,
   type BountySubmit,
   type BountyVerdict,
+  type ChainRecord,
+  type PoolLink,
   type TimelineEvent
 } from './bounty'
 
@@ -299,10 +309,11 @@ async function projectSigner(bountyId: string, root?: PrivateKey) {
   const key = root ?? PrivateKey.fromRandom()
   const wallet = new ProtoWallet(key)
   const keyID = poolKeyId(bountyId)
+  const identity = key.toPublicKey().toString()
   const derived = await wallet.getPublicKey({
     protocolID: PROTOCOL_ID,
     keyID,
-    counterparty: 'self',
+    counterparty: 'anyone',
     forSelf: true
   })
   async function sign(message: number[]): Promise<string> {
@@ -310,54 +321,171 @@ async function projectSigner(bountyId: string, root?: PrivateKey) {
       data: message,
       protocolID: PROTOCOL_ID,
       keyID,
-      counterparty: 'self'
+      counterparty: 'anyone'
     })
     return Utils.toHex(signature)
   }
-  return { publicKey: derived.publicKey, wallet, keyID, sign }
+  return { publicKey: identity, lockingKey: derived.publicKey, wallet, keyID, sign }
 }
 
 function withKey(fund: BountyFund, publicKey: string): BountyFund {
   return { ...fund, projectIdentity: publicKey }
 }
 
+function chainFund(fund: BountyFund, txid: string, vout = 0): ChainRecord {
+  return {
+    txid,
+    vout,
+    inputs: [],
+    lockingPublicKey: poolLockingKey(fund.projectIdentity, fund.bountyId),
+    payload: fund
+  }
+}
+
+function poolLink(fund: BountyFund, poolSats: number): PoolLink {
+  return {
+    magic: 'bounty',
+    version: '1',
+    kind: 'pool',
+    bountyId: fund.bountyId,
+    projectIdentity: fund.projectIdentity,
+    poolSats,
+    fundedAt: fund.fundedAt
+  }
+}
+
 describe('readers trust the project key', () => {
-  it('re-derives the pool key from the pool id and checks the lock', async () => {
-    const { publicKey, wallet, keyID } = await projectSigner(ID)
-    const again = await wallet.getPublicKey({
-      protocolID: PROTOCOL_ID,
-      keyID,
-      counterparty: 'self',
-      forSelf: true
-    })
+  it('re-derives the pool key from the public identity alone', async () => {
+    const { publicKey, lockingKey, wallet, keyID } = await projectSigner(ID)
     expect(keyID).toBe(`pool-${ID}`)
-    expect(again.publicKey).toBe(publicKey)
+    expect(publicKey).not.toBe(lockingKey)
+    expect(poolLockingKey(publicKey, ID)).toBe(lockingKey)
     const fund = withKey(posted().fund!, publicKey)
     const locking = await new PushDrop(wallet).lock(
       encodeFundFields(fund),
       PROTOCOL_ID,
       keyID,
-      'self',
+      'anyone',
       true,
       false
     )
     const decoded = PushDrop.decode(locking)
-    expect(decoded.lockingPublicKey.toString()).toBe(publicKey)
+    expect(decoded.lockingPublicKey.toString()).toBe(lockingKey)
     expect(fundLockedToProject(decoded.lockingPublicKey.toString(), fund)).toBe(true)
-    expect(fundLockedToProject(`03${'ab'.repeat(32)}`, fund)).toBe(false)
+    expect(fundLockedToProject(publicKey, fund)).toBe(false)
     const other = await projectSigner(ID)
-    expect(other.publicKey).not.toBe(publicKey)
+    expect(poolLockingKey(other.publicKey, ID)).not.toBe(lockingKey)
   })
 
-  it('keeps the first fund and drops a duplicate', async () => {
+  it('keeps the oldest fund and drops a later one', async () => {
     const firstKey = await projectSigner(ID)
     const secondKey = await projectSigner(ID)
     const first = withKey(posted().fund!, firstKey.publicKey)
-    const second: BountyFund = { ...withKey(posted().fund!, secondKey.publicKey), projectName: 'Forged Labs' }
-    const folded = deskFromRecords([first, second, posted().submission!])
+    const second: BountyFund = {
+      ...withKey(posted().fund!, secondKey.publicKey),
+      projectName: 'Forged Labs',
+      fundedAt: '2026-10-14T00:00:00Z'
+    }
+    const folded = deskFromRecords([second, first, posted().submission!])
     expect(folded?.fund?.projectName).toBe('Northwind Devices')
     expect(folded?.fund?.projectIdentity).toBe(firstKey.publicKey)
-    expect(bookFromRecords([second, first]).map((row) => row.fund.projectName)).toEqual(['Forged Labs'])
+    expect(bookFromRecords([second, first]).map((row) => row.fund.projectName)).toEqual(['Northwind Devices'])
+  })
+
+  it('ignores an attacker fund that reuses the bounty id later', async () => {
+    const project = await projectSigner(ID)
+    const attacker = await projectSigner(ID)
+    const honest = withKey(posted().fund!, project.publicKey)
+    const later: BountyFund = {
+      ...withKey(posted().fund!, attacker.publicKey),
+      projectName: 'Forged Labs',
+      fundedAt: '2026-10-14T00:00:00Z'
+    }
+    const olderAttack: BountyFund = {
+      ...later,
+      fundedAt: '2026-10-12T00:00:00Z'
+    }
+    const laterOnly = [
+      chainFund(later, 'bb'.repeat(32)),
+      chainFund(honest, 'aa'.repeat(32))
+    ]
+    expect(deskFromChain(laterOnly)?.fund?.projectName).toBe('Northwind Devices')
+    expect(deskFromChain(laterOnly)?.fund?.projectIdentity).toBe(project.publicKey)
+    const records = [...laterOnly, chainFund(olderAttack, 'cc'.repeat(32))]
+    expect(deskFromChain(records)?.fund?.fundedAt).toBe('2026-10-12T00:00:00Z')
+    const pinned = deskFromChain(records, { pinIdentity: project.publicKey })
+    expect(pinned?.fund?.projectIdentity).toBe(project.publicKey)
+    expect(pinned?.fund?.projectName).toBe('Northwind Devices')
+    expect(deskFromChain(records, { hintTxid: 'aa'.repeat(32) })?.fund?.projectIdentity).toBe(project.publicKey)
+    expect(deskFromChain(records, { hintTxid: 'ab'.repeat(32), pinIdentity: project.publicKey })).toBeNull()
+    expect(deskFromChain(records, { hintTxid: 'bb'.repeat(32), pinIdentity: project.publicKey })).toBeNull()
+  })
+
+  it('follows pool outpoints and drops a forged chain', async () => {
+    const project = await projectSigner(ID)
+    const attacker = await projectSigner(ID)
+    const fund = withKey(posted().fund!, project.publicKey)
+    const verdict = releaseTier(posted(), 'high', '2026-10-13T15:00:00Z').verdict as BountyVerdict
+    const honest: BountyVerdict = { ...verdict, signature: await project.sign(verdictMessage(verdict)) }
+    const fundTx = 'aa'.repeat(32)
+    const releaseTx = 'bb'.repeat(32)
+    const forgedTx = 'cc'.repeat(32)
+    const wrongTx = 'dd'.repeat(32)
+    const spent = `${fundTx}.0`
+    const records: ChainRecord[] = [
+      chainFund(fund, fundTx),
+      {
+        txid: releaseTx,
+        vout: 2,
+        inputs: [spent],
+        lockingPublicKey: project.lockingKey,
+        payload: poolLink(fund, honest.poolLeft)
+      },
+      {
+        txid: releaseTx,
+        vout: 3,
+        inputs: [spent],
+        lockingPublicKey: project.lockingKey,
+        payload: honest
+      },
+      {
+        txid: forgedTx,
+        vout: 0,
+        inputs: [`${'ff'.repeat(32)}.1`],
+        lockingPublicKey: attacker.lockingKey,
+        payload: poolLink({ ...fund, projectIdentity: attacker.publicKey }, honest.poolLeft)
+      },
+      {
+        txid: forgedTx,
+        vout: 1,
+        inputs: [`${'ff'.repeat(32)}.1`],
+        lockingPublicKey: attacker.lockingKey,
+        payload: { ...honest, signature: await attacker.sign(verdictMessage(honest)) }
+      },
+      {
+        txid: wrongTx,
+        vout: 0,
+        inputs: [spent],
+        lockingPublicKey: attacker.lockingKey,
+        payload: poolLink(fund, honest.poolLeft)
+      },
+      {
+        txid: wrongTx,
+        vout: 1,
+        inputs: [spent],
+        lockingPublicKey: attacker.lockingKey,
+        payload: honest
+      }
+    ]
+    const folded = deskFromChain(records)
+    expect(folded?.verdict?.tier).toBe('high')
+    expect(folded?.verdict?.signature).toBe(honest.signature)
+    expect(deskFromChain([chainFund(fund, fundTx), records[5]!, records[6]!])?.verdict).toBeNull()
+    const copiedOnly = deskFromChain([
+      chainFund(fund, fundTx),
+      { ...records[2]!, txid: 'ee'.repeat(32), inputs: [`${'11'.repeat(32)}.0`] }
+    ])
+    expect(copiedOnly?.verdict).toBeNull()
   })
 
   it('accepts a verdict signed by the fund key and ignores a forged one', async () => {
@@ -393,5 +521,18 @@ describe('readers trust the project key', () => {
     const remainder = encodeRemainderFields({ ...fund, poolSats: 600_000, tiers: { ...fund.tiers, high: 0 } })
     expect(new TextDecoder().decode(Uint8Array.from(remainder[2]!))).toBe('pool')
     expect(parseBountyFields(remainder)).toBeNull()
+    expect(parseChainFields(remainder)).toMatchObject({ kind: 'pool', poolSats: 600_000, projectIdentity: project.publicKey })
+    expect(DESK_FEE_KEY).toBe('02c5313bc21f0a61418640c94a23d3cdb09ea50a8a3dd8daababe93f57a5fa0082')
+    expect(deskFeeLockingKey()).not.toBe(DESK_FEE_KEY)
+    expect(isIdentityKey(deskFeeLockingKey())).toBe(true)
+    const root = PrivateKey.fromRandom()
+    const wallet = new ProtoWallet(root)
+    const derived = await wallet.getPublicKey({
+      protocolID: BRC29_PROTOCOL,
+      keyID: DESK_FEE_KEY_ID,
+      counterparty: 'anyone',
+      forSelf: true
+    })
+    expect(derivedLockingKey(root.toPublicKey().toString(), BRC29_PROTOCOL, DESK_FEE_KEY_ID)).toBe(derived.publicKey)
   })
 })

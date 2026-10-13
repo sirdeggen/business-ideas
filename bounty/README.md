@@ -4,11 +4,15 @@ A project funds a severity-tiered bug bounty pool. A researcher pays a small ant
 
 The report body never goes on-chain. Only its hash does.
 
-What the script enforces: the pool output is a PushDrop lock. The key id is `pool-<bountyId>`, so anyone with the project wallet re-derives that key and can check it against the locking public key. Only that key can spend the pool. A release is a second transaction: it spends the funded pool outpoint and pays three outputs — the researcher gets the tier minus the desk fee, `DESK_FEE_KEY` gets the fee, and the unreleased sats are locked in a new pool output. The script does not read the severity label.
+What the script enforces: the pool output is a PushDrop lock. The key id is `pool-<bountyId>` and the counterparty is `anyone`, so any reader re-derives the locking key from the project's public identity key alone and checks it against the locking public key. The fund record carries that root identity as `projectIdentity`. Only the project wallet can spend the derived key. A release is a second transaction: it spends the funded pool outpoint and pays three outputs — the researcher gets the tier minus the desk fee, the desk wallet gets the fee, and the unreleased sats are locked in a new pool output. The script does not read the severity label.
 
-What is desk-state: which tier matches the report, hash priority, and the disclosure timeline. A public verdict or timeline row counts only when the fund's project key signed it. Duplicate fund rows: the first one wins, and a later fund does not replace it. The export is a record of those timestamps. It is not legal compliance advice.
+What is desk-state: which tier matches the report, hash priority, and the disclosure timeline. A public verdict or timeline row counts only when the key derived from the fund's project identity signed it. A verdict also has to sit on a transaction that spends the previous pool outpoint. The canonical fund is the one named by `?tx=` when that param is present. Otherwise it is the oldest valid fund for that bounty id, and only from the key pinned by `?p=` when that param is present. A later fund that reuses the bounty id is ignored. The pool chain follows the outpoints: each release input is the previous pool output. The export is a record of those timestamps. It is not legal compliance advice.
 
-v0 records the per-submission fee and the export fee on the receipt. It does not collect those two into a platform key. The payout fee is a percentage of the tier, priced under 10% (default 800 basis points, which is 8%). `floor(tier × bps / 10000)`. That payout fee is paid to `DESK_FEE_KEY` when the pool is spent.
+v0 records the per-submission fee and the export fee on the receipt. It does not collect those two into a platform key. The payout fee is a percentage of the tier, priced under 10% (default 800 basis points, which is 8%). `floor(tier × bps / 10000)`. That payout fee is paid to the desk wallet when the pool is spent.
+
+`DESK_FEE_KEY` is the desk wallet identity: `02c5313bc21f0a61418640c94a23d3cdb09ea50a8a3dd8daababe93f57a5fa0082`. BRC-100 cannot sign a plain P2PKH of that root, so the fee is not paid to the root. It is a P2PKH of a BRC-29 child. Protocol `[2, "3241645161d8"]`, key id `bounty-fee`, counterparty `anyone`. Anyone can compute that child from `DESK_FEE_KEY`. The desk wallet spends it with the same protocol and key id, `forSelf: true`.
+
+When a release follows the fund, the fund is created with `noSend`. The release `signAction` uses `sendWith` so the wallet broadcasts the fund together with the release. The app also submits both transaction bodies to overlay topic `tm_anytx`. The fund is broadcast either way.
 
 This is not Job Escrow (one hired job, released when a deliverable hash lands). This is not Grants (a purpose-bound gift). This is not Cover (an insurance claim). This is not Vouch (a staked attestation). This is a tiered pool, a hash before the report, and a disclosure clock.
 
@@ -18,7 +22,7 @@ Message Box at `https://gmb.bsvblockchain.tech` (box `bounty`) carries the repor
 
 Public UI: `https://sirdeggen.github.io/business-ideas/bounty/`
 
-Deep links are query params: `?b=<bountyId>&tx=<txid>`. Do not use a path like `/b/:id` — GitHub Pages 404s those.
+Deep links are query params: `?b=<bountyId>&tx=<txid>&p=<identityKey>`. `?tx=` names the canonical fund transaction. `?p=` pins a project identity key and drops funds from every other key. Do not use a path like `/b/:id` — GitHub Pages 404s those.
 
 Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access other apps and services on this device,” then Retry with Desktop unlocked. Use the shared funded Desktop. Do not create a new wallet. Wallet is only asked on **Record on the public book**. Install Desktop appears only if that wallet is missing.
 
@@ -44,7 +48,7 @@ Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access 
 4. Pick a tier and click **Release this tier**. The page shows the desk fee, the researcher sats, and what stays locked.
 5. Append the timeline in order: **Acknowledge**, **Mark fixed**, **Disclose**.
 6. Click **Export the timeline**. The record shows the 24h, 72h, and 14-day clocks. It says it is not legal compliance advice.
-7. **Record on the public book** asks for the wallet. It creates the pool output locked to `pool-<bountyId>`. If a tier was released, a second transaction spends that outpoint and pays the researcher, the desk fee, and the remaining pool. Add the researcher key under Advanced before recording a release. Install Desktop appears only if the wallet is missing.
+7. **Record on the public book** asks for the wallet. It creates the pool output locked to `pool-<bountyId>` with counterparty `anyone`, and it writes the wallet's root identity into the fund. If a tier was released, the fund is held with `noSend` and a second transaction spends that outpoint. That release pays the researcher, the desk fee (BRC-29 child of the desk wallet), the remaining pool, and the signed verdict. The wallet's `sendWith` broadcasts the fund with the release, and the app also submits both to `tm_anytx`. Add the researcher key under Advanced before recording a release. Install Desktop appears only if the wallet is missing.
 
 ## Public overlay
 
@@ -85,9 +89,11 @@ Encode/decode, tier release math, fee math under 10%, timeline append-only order
 | Payout fee | 800 bps default, max 999 |
 | Submission fee | 1,000 sats default |
 | Export fee | 2,500 sats default |
-| Pool key id | `pool-<bountyId>` |
-| Desk fee key | `02e3005a8945c785b61f14d32b357cdeba63e87f81662bfbcb6bb7f85c5e4f0703` |
+| Pool key id | `pool-<bountyId>`, counterparty `anyone` |
+| Desk wallet (`DESK_FEE_KEY`) | `02c5313bc21f0a61418640c94a23d3cdb09ea50a8a3dd8daababe93f57a5fa0082` |
+| Desk fee output | BRC-29 `[2, "3241645161d8"]`, key id `bounty-fee`, counterparty `anyone` |
 | Release | spends the pool outpoint: researcher, desk fee, new pool |
+| Canonical fund | `?tx=` if present, otherwise the oldest valid fund (`?p=` pins the identity) |
 
 ## Layout
 
