@@ -6,6 +6,13 @@ Switcher on GitHub Pages: https://sirdeggen.github.io/business-ideas/
 
 The catalog lists newest ideas first. Prepend the next Server demo at the top of the ledger in `pages/index.html`, and the next Live demo at the top of the spotlight. Mirror that order at the top of this list. Invoices stay last: they were the first product. The receivable desk is a collections list — not a bank.
 
+## Mandate Desk
+
+Hire a manager without handing over the keys. A whitelist, a period cap, and a fee by formula. The owner can always pull the balance back.
+
+- Pages UI: https://sirdeggen.github.io/business-ideas/mandate/
+- How to run: [mandate/README.md](./mandate/README.md)
+
 ## Capture Desk
 
 Post a capture of one place. Lock the reward first. Accept a preview, or take the reward back after the deadline.

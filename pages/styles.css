@@ -720,6 +720,15 @@ a.card .hit,
   --title-style: italic;
 }
 
+.demo-mandate {
+  --chip: #0f766e;
+  --title: #134e4a;
+  --title-font: var(--serif);
+  --title-size: 22px;
+  --title-weight: 600;
+  --title-style: italic;
+}
+
 .demo-tickets .scene { object-position: 50% 35%; }
 .demo-memberships .scene { object-position: 50% 40%; }
 .demo-treasury .scene { object-position: 50% 42%; }
@@ -745,6 +754,7 @@ a.card .hit,
 .demo-scrip .scene { object-position: 50% 42%; }
 .demo-check .scene { object-position: 50% 42%; }
 .demo-keepsake .scene { object-position: 50% 42%; }
+.demo-mandate .scene { object-position: 50% 42%; }
 
 footer {
   margin-top: 36px;
