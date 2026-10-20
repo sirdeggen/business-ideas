@@ -67,6 +67,8 @@ jobs:
             check/frontend/package-lock.json
             # keepsake-desk
             keepsake/frontend/package-lock.json
+            # round-desk
+            round/frontend/package-lock.json
             # bounty-desk
             bounty/frontend/package-lock.json
             # capture-desk
@@ -332,6 +334,16 @@ jobs:
           npm ci
           npm run build
           cp dist/index.html dist/404.html
+      # round-desk
+      - name: Install and build round
+        working-directory: round/frontend
+        env:
+          VITE_BASE: /business-ideas/round/
+          VITE_OVERLAY_URL: https://overlay-us-1.bsvb.tech
+        run: |
+          npm ci
+          npm run build
+          cp dist/index.html dist/404.html
       # bounty-desk
       - name: Install and build bounty
         working-directory: bounty/frontend
@@ -394,7 +406,7 @@ jobs:
           cp dist/index.html dist/404.html
       - name: Compose Pages site
         run: |
-          mkdir -p site/tickets site/receivables site/invoices site/treasury site/streampay site/grants site/records site/raffle site/spend-policy site/session site/datasets site/memberships site/names site/titles site/trace site/job-escrow site/vault-claim site/kya site/vouch site/handoff site/credit site/registry site/scenes site/feed site/inference site/cover site/closing site/private-pay site/boost site/scrip site/check site/keepsake site/bounty site/capture site/mandate
+          mkdir -p site/tickets site/receivables site/invoices site/treasury site/streampay site/grants site/records site/raffle site/spend-policy site/session site/datasets site/memberships site/names site/titles site/trace site/job-escrow site/vault-claim site/kya site/vouch site/handoff site/credit site/registry site/scenes site/feed site/inference site/cover site/closing site/private-pay site/boost site/scrip site/check site/keepsake site/bounty site/capture site/mandate site/round
           cp pages/index.html pages/styles.css site/
           cp -r pages/scenes/. site/scenes/
           cp -r event-tickets/frontend/dist/. site/tickets/
@@ -432,6 +444,8 @@ jobs:
           cp -r private-pay/frontend/dist/. site/private-pay/
           # boost-desk
           cp -r boost/frontend/dist/. site/boost/
+          # round-desk
+          cp -r round/frontend/dist/. site/round/
           # mandate-desk
           cp -r mandate/frontend/dist/. site/mandate/
           # bounty-desk
