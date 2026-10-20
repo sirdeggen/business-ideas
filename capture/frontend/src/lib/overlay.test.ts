@@ -1,9 +1,10 @@
-import { LockingScript, MerklePath, PrivateKey, ProtoWallet, Transaction, UnlockingScript, Utils } from '@bsv/sdk'
+import { LockingScript, MerklePath, PrivateKey, ProtoWallet, PushDrop, Transaction, UnlockingScript, Utils } from '@bsv/sdk'
 import { describe, expect, it } from 'vitest'
 import {
   MAGIC,
   PROTOCOL_ID,
   boundRequestId,
+  encodeRequestFields,
   escrowKeyId,
   escrowLockingKey,
   hashCapture,
@@ -103,7 +104,7 @@ async function requesterSigner() {
     })
     return Utils.toHex(signature)
   }
-  return { publicKey, lockingKey: derived.publicKey.toLowerCase(), sign }
+  return { publicKey, lockingKey: derived.publicKey.toLowerCase(), wallet, keyID, sign }
 }
 
 async function signedRequest(request: CaptureRequest, sign: (message: number[]) => Promise<string>): Promise<CaptureRequest> {
@@ -251,5 +252,42 @@ describe('verified block headers', () => {
     const decoded = decodeOverlayBeef(tx.toBEEF())
     expect(decoded.items).toEqual([])
     expect(decoded.spentOutpoints).toContain(`${fundTx}.0`)
+  })
+
+  it('drops a capture when the host txid does not match the parsed transaction', async () => {
+    const requester = await requesterSigner()
+    const request = await signedRequest(postRequest({
+      location: '12 Market Street storefront',
+      brief: 'Film the awning.',
+      rewardSats: 100_000,
+      processingFeeSats: 1_000,
+      deadline: DEADLINE,
+      requesterIdentity: requester.publicKey,
+      nonce: NONCE,
+      postedAt: WHEN
+    }).request!, requester.sign)
+    const locking = await new PushDrop(requester.wallet).lock(
+      encodeRequestFields(request),
+      PROTOCOL_ID,
+      requester.keyID,
+      'anyone',
+      true,
+      false
+    )
+    const tx = new Transaction()
+    tx.addOutput({ satoshis: 1, lockingScript: locking })
+    const txid = tx.id('hex').trim().toLowerCase()
+    tx.merklePath = MerklePath.fromCoinbaseTxidAndHeight(txid, 800000)
+    const beef = tx.toBEEF()
+    const kept = decodeOverlayBeef(beef, txid.toUpperCase())
+    expect(kept.items).toHaveLength(1)
+    expect(kept.items[0]?.txid).toBe(txid)
+    expect(kept.items[0]?.merkleRoot).toBe(txid)
+    expect(kept.items[0]?.blockHeight).toBe(800000)
+    const unhinted = decodeOverlayBeef(beef)
+    expect(unhinted.items[0]?.txid).toBe(txid)
+    const dropped = decodeOverlayBeef(beef, 'ff'.repeat(32))
+    expect(dropped.items).toEqual([])
+    expect(JSON.stringify(dropped)).not.toContain(request.location)
   })
 })

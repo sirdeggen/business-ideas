@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
   AGENT_402_CURL,
+  BOARD_NOTE,
   AGENT_402_NOTE,
   BUSINESS_CASE_DEMO,
   BUSINESS_CASE_FIELDS,
@@ -122,6 +123,8 @@ describe('first-paint copy', () => {
     expect(DESK_NOTE).toMatch(/host-asserted/)
     expect(DESK_NOTE).toMatch(/stay pending/)
     expect(readme).toMatch(/Refunds count once the network timestamps them after the deadline/)
+    expect(readme).toMatch(/WhatsOnChain/)
+    expect(readme).toMatch(/Header time trusts WhatsOnChain/)
     expect(readme).toMatch(/host-asserted/)
     expect(readme).toMatch(/checked by readers/)
     expect(readme).not.toMatch(/OP_PUSH_TX is v1/)
@@ -134,6 +137,9 @@ describe('first-paint copy', () => {
     expect(app).toContain('{HASH_NOTE}')
     expect(app).toContain('{SCRIPT_NOTE}')
     expect(app).toContain('{DESK_NOTE}')
+    expect(app).toContain('{BOARD_NOTE}')
+    expect(BOARD_NOTE).toMatch(/Pending means the network has not timestamped/)
+    expect(BOARD_NOTE).toMatch(/Spent means the escrow was spent/)
     expect(readme.slice(0, 500)).not.toMatch(/physical-?\s*AI/i)
     expect(readme.split('\n').slice(0, 8).join('\n')).not.toMatch(/\bagents?\b/i)
   })

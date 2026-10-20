@@ -431,8 +431,10 @@ export function decodeOverlayBeef(beef: number[] | undefined, txidHint?: string,
   if (!beef || beef.length === 0) return { items: [], spentOutpoints: [] }
   try {
     const tx = txFromWalletBeef(beef)
-    const txid = txidHint || tx.id('hex')
+    const txid = tx.id('hex').trim().toLowerCase()
+    const hinted = txidHint?.trim().toLowerCase()
     const inputs = inputOutpoints(tx)
+    if (hinted && hinted !== txid) return { items: [], spentOutpoints: inputs }
     const outputs: ChainOutput[] = tx.outputs.map((output) => ({
       satoshis: Number(output.satoshis ?? 0),
       lockingScript: output.lockingScript.toHex()
