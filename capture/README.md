@@ -4,9 +4,11 @@ A requester posts a capture of one specific place. The reward is locked before a
 
 Raw footage stays with the contributor. Only the hash and the receipt go on chain.
 
-What the script enforces: the escrow output is a PushDrop lock on a real UTXO. The key id is `escrow-<requestId>` and the counterparty is `anyone`, so any reader re-derives the locking key from the requester's public identity key alone and checks it. The request record carries that root identity as `requesterIdentity`. Only the requester wallet can spend the derived key. An accept is one later transaction: it spends that escrow outpoint and pays three outputs — the contributor receives the reward minus the fees, the desk receives 10% of the reward, and the desk receives the fixed processing fee. The same transaction carries the signed accept record. The script does not read the deadline.
+What the script enforces: the escrow output is a PushDrop lock on a real UTXO. The key id is `escrow-<requestId>` and the counterparty is `anyone`, so any reader re-derives the locking key from the requester's public identity key alone and checks it. The request record carries that root identity as `requesterIdentity`. The reward is locked to the requester's key. Only that wallet can spend the derived key. The script does not read the deadline, and it does not check who is paid. OP_PUSH_TX is v1.
 
-What is desk-recorded: the deadline refund. v0 does not enforce it with nLockTime or OP_CHECKLOCKTIMEVERIFY. The same requester key can spend the escrow before the deadline. The app refuses to build a refund until the deadline has passed and no accept is on the book. A refund record counts only when that derived key signed it, the refund time is not before the deadline, and the amount is the full reward. Readers drop a refund that fails those checks.
+What readers check: an accept spends that escrow outpoint and its outputs are exactly three payments plus the accept record. The contributor P2PKH, taken from the signed submission, receives reward minus the desk fee minus the processing fee. The derived `capture-fee` key receives `floor(reward × 1000 / 10000)`. The same desk key receives the processing fee. Readers drop an accept whose amounts or payee do not match. The script does not enforce that split.
+
+What times a refund or a submission: the block header for the BEEF merkle proof. The proof yields a block height and a merkle root. A header counts only when its height and merkle root match that proof. Header time after the deadline is a refund. Header time at or before the deadline is an on-time capture. Signer fields (`refundedAt`, `capturedAt`, `acceptedAt`), nLockTime, and host clocks are not that time. v0 does not enforce the deadline with nLockTime or OP_CHECKLOCKTIMEVERIFY. With no matching header, the refund stays pending and the submission stays pending, and a pending submission cannot be accepted. `capturedAt` is display, and it is a tie-break only inside one contributor key when the header position is the same. A host-supplied overlay time (`blockTime`, `admittedAt`) is labeled host-asserted.
 
 The request id is `sha256` of the requester identity concatenated with the nonce stored on the request (`sha256(requesterIdentity || nonce)`). Readers recompute that id and drop any request whose id does not match its requester, and they drop that request's submissions, accept, and refund. The canonical request is the one named by `?tx=` when that param is present. Otherwise it is the oldest valid request from the same key, and only from the key pinned by `?p=` when that param is present. Oldest `postedAt` is only a tie-break among records from that key. It is not an order across keys.
 
@@ -100,7 +102,8 @@ Encode/decode, fee floor math, refund only after the deadline, forged copied-key
 | Desk fee output | BRC-29 `[2, "3241645161d8"]`, key id `capture-fee`, counterparty `anyone`, manual sweep (`forSelf`) |
 | Contributor payout | BRC-29, key id `capture-pay`, counterparty `anyone`, manual sweep (`forSelf`) |
 | Requester refund | BRC-29, key id `capture-refund`, counterparty `anyone`, manual sweep (`forSelf`) |
-| Deadline | desk-recorded. Not nLockTime. Not OP_CHECKLOCKTIMEVERIFY |
+| Deadline | header time from the BEEF merkle proof. Not nLockTime. Not OP_CHECKLOCKTIMEVERIFY. No header: pending |
+| Accept split | checked by readers. Not enforced by script. OP_PUSH_TX is v1 |
 | Fund | broadcast on Fund. Accept and refund spend that outpoint later |
 | Canonical request | `?tx=` if present, otherwise the oldest request from that key |
 

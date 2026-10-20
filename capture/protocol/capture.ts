@@ -20,10 +20,14 @@
  * key id `capture` and counterparty `anyone`. Readers verify every
  * signature and drop unsigned or forged rows and duplicate requests.
  *
- * An accept names the submission's receipt hash. The payout identity is
- * the contributor on that signed submission. The deadline refund is
- * desk-recorded: the app refuses a refund before the deadline, and readers
- * drop a refund dated before it. v0 does not put the deadline in the lock.
+ * An accept names the submission's receipt hash. Readers check the accept
+ * transaction's outputs: contributor, desk fee, and processing fee. The
+ * locking script does not enforce that split (OP_PUSH_TX is v1). The
+ * reward is locked to the requester's key.
+ *
+ * Deadline checks use the block header time for the BEEF merkle proof.
+ * Signer clocks, nLockTime, and host-asserted overlay times do not count.
+ * With no matching header, a refund and a submission stay pending.
  *
  * Raw footage is never a field. Only the hash and the receipt are.
  *
@@ -32,7 +36,7 @@
  * Not Trace (provenance of a record).
  */
 
-import { BigNumber, ECDSA, Hash, KeyDeriver, PublicKey, Signature, Utils } from '@bsv/sdk'
+import { BigNumber, ECDSA, Hash, KeyDeriver, MerklePath, P2PKH, PublicKey, Signature, Utils } from '@bsv/sdk'
 import { sha256Hex } from './sha256'
 
 export const PROTOCOL_ID: [0, string] = [0, 'capture']
@@ -76,13 +80,13 @@ export const CONTRIBUTOR_PAY_KEY_ID = 'capture-pay'
 /** Refund child of the requester identity. The requester sweeps it with forSelf. */
 export const REQUESTER_REFUND_KEY_ID = 'capture-refund'
 
-/** v0 checks the deadline in the desk, not in the locking script. */
-export const DEADLINE_ENFORCEMENT = 'desk-recorded' as const
+/** The locking script does not read the deadline. Readers use header time. */
+export const DEADLINE_ENFORCEMENT = 'header-time' as const
 
 export const KINDS = ['request', 'submit', 'accept', 'refund'] as const
 export type CaptureKind = (typeof KINDS)[number]
 
-export const STATUSES = ['open', 'accepted', 'refunded'] as const
+export const STATUSES = ['open', 'accepted', 'refunded', 'pending'] as const
 export type CaptureStatus = (typeof STATUSES)[number]
 
 const REQUEST_ID = /^[0-9a-f]{64}$/
@@ -227,6 +231,8 @@ export interface CaptureSubmit {
   geohash: string
   submittedAt: string
   signature: string
+  /** Display only. A host-asserted overlay time. Not signed and not a clock. */
+  hostAssertedAt?: string
 }
 
 export interface CaptureAccept {
@@ -255,25 +261,60 @@ export interface CaptureRefund {
 
 export type CapturePayload = CaptureRequest | CaptureSubmit | CaptureAccept | CaptureRefund
 
+export interface ChainOutput {
+  satoshis: number
+  lockingScript: string
+}
+
+/** A block header. Its time counts only when its merkle root matches the BEEF proof. */
+export interface BlockHeaderTime {
+  height: number
+  /** Unix seconds from the block header. */
+  time: number
+  merkleRoot: string
+}
+
 export interface ChainRecord {
   txid: string
   vout: number
   inputs: string[]
   lockingPublicKey: string
   payload: CapturePayload
+  outputs?: ChainOutput[]
+  /** Block height from the BEEF merkle proof. Not a clock by itself. */
+  blockHeight?: number
+  /** Merkle root computed from that proof. */
+  merkleRoot?: string
+  /** Leaf index from that proof. Orders rows inside one block. */
+  blockIndex?: number
+  /** Host-supplied overlay time. Display only. */
+  hostAssertedAt?: string
+  /** Ignored. nLockTime is not the time a refund or a submission happened. */
+  lockTime?: number
 }
 
 export interface ReadOptions {
   requestId?: string
   hintTxid?: string | null
   pinIdentity?: string | null
+  headers?: BlockHeaderTime[]
 }
 
 export interface DeskState {
   request: CaptureRequest | null
+  /** Submissions whose header time is at or before the deadline. */
   submissions: CaptureSubmit[]
+  /** Signed submissions with no header time. Not acceptable. */
+  pendingSubmissions: CaptureSubmit[]
+  /** Signed submissions whose header time is after the deadline. */
+  lateSubmissions: CaptureSubmit[]
   accept: CaptureAccept | null
+  /** A refund whose header time is after the deadline. */
   refund: CaptureRefund | null
+  /** A signed refund with no header time. */
+  pendingRefund: CaptureRefund | null
+  /** A spend whose header time is not after the deadline. */
+  earlyRefund: CaptureRefund | null
   rejection: string | null
   notice: string | null
 }
@@ -309,16 +350,24 @@ export interface ListedRequest {
   requestId: string
   request: CaptureRequest
   submissions: CaptureSubmit[]
+  pendingSubmissions: CaptureSubmit[]
+  lateSubmissions: CaptureSubmit[]
   accept: CaptureAccept | null
   refund: CaptureRefund | null
+  pendingRefund: CaptureRefund | null
+  earlyRefund: CaptureRefund | null
   txid: string
   status: CaptureStatus
+  /** Header time of the fund and the accept. Signer clocks are not used. */
+  trustedPostedAt?: string | null
+  trustedAcceptAt?: string | null
 }
 
 export interface BoardStats {
   open: number
   accepted: number
   refunded: number
+  pending: number
   acceptRate: number | null
   medianAcceptMs: number | null
 }
@@ -331,8 +380,12 @@ export function emptyDesk(): DeskState {
   return {
     request: null,
     submissions: [],
+    pendingSubmissions: [],
+    lateSubmissions: [],
     accept: null,
     refund: null,
+    pendingRefund: null,
+    earlyRefund: null,
     rejection: null,
     notice: null
   }
@@ -437,7 +490,7 @@ export function bindRequest(request: CaptureRequest, requesterIdentity: string):
 export function submitCapture(desk: DeskState, input: SubmitInput): DeskState {
   if (!desk.request) throw new Error('Fund a request first.')
   if (desk.accept) throw new Error('This request was already accepted.')
-  if (desk.refund) throw new Error('This request was already refunded.')
+  if (desk.refund || desk.pendingRefund || desk.earlyRefund) throw new Error('This request was already refunded.')
   const contributorIdentity = input.contributorIdentity.trim().toLowerCase()
   if (!isIdentityKey(contributorIdentity)) throw new Error('Contributor key is invalid.')
   const receiptHash = input.receiptHash.trim().toLowerCase()
@@ -448,7 +501,8 @@ export function submitCapture(desk: DeskState, input: SubmitInput): DeskState {
   const submittedAt = (input.submittedAt ?? nowIso()).trim()
   if (!isIsoDateTime(capturedAt)) throw new Error('Capture time is missing.')
   if (!isIsoDateTime(submittedAt)) throw new Error('Submitted time is missing.')
-  if (desk.submissions.some((row) => sameKey(row.contributorIdentity, contributorIdentity) && row.receiptHash === receiptHash)) {
+  const already = [...desk.submissions, ...desk.pendingSubmissions, ...desk.lateSubmissions]
+  if (already.some((row) => sameKey(row.contributorIdentity, contributorIdentity) && row.receiptHash === receiptHash)) {
     throw new Error('That capture is already submitted.')
   }
   const submission: CaptureSubmit = {
@@ -467,9 +521,9 @@ export function submitCapture(desk: DeskState, input: SubmitInput): DeskState {
   if (invalid) throw new Error(invalid)
   return {
     ...desk,
-    submissions: [...desk.submissions, submission],
+    pendingSubmissions: [...desk.pendingSubmissions, submission],
     rejection: null,
-    notice: 'Capture submitted in this browser. Send the watermarked preview over Message Box. The raw file stays with you.'
+    notice: 'Capture submitted in this browser. Send the watermarked preview over Message Box. The raw file stays with you. It stays pending until a block header times it.'
   }
 }
 
@@ -483,9 +537,10 @@ export function assertPayout(submission: CaptureSubmit, payoutKey: string): void
 export function acceptCapture(desk: DeskState, receiptHash: string, at = nowIso()): DeskState {
   if (!desk.request) throw new Error('Fund a request first.')
   if (desk.accept) throw new Error('This request was already accepted.')
-  if (desk.refund) throw new Error('This request was already refunded.')
+  if (desk.refund || desk.pendingRefund || desk.earlyRefund) throw new Error('This request was already refunded.')
   const hash = receiptHash.trim().toLowerCase()
   const submission = desk.submissions.find((row) => row.receiptHash === hash)
+    ?? desk.pendingSubmissions.find((row) => row.receiptHash === hash)
   if (!submission) throw new Error('Accept a capture that was submitted.')
   if (!isIsoDateTime(at)) throw new Error('Accepted time is missing.')
   const lines = payoutLines(desk.request.rewardSats, desk.request.processingFeeSats)
@@ -509,10 +564,11 @@ export function acceptCapture(desk: DeskState, receiptHash: string, at = nowIso(
     ...desk,
     accept,
     rejection: null,
-    notice: 'Accepted in this browser. One spend pays the contributor, the desk fee, and the processing fee.'
+    notice: 'Accepted in this browser. Readers check the three payments. The script only locks the reward to the requester\'s key.'
   }
 }
 
+/** Local draft guard. Readers do not use this clock. */
 export function refundAllowed(request: CaptureRequest, at: string): boolean {
   if (!isIsoDateTime(at) || !isIsoDateTime(request.deadline)) return false
   return Date.parse(at) >= Date.parse(request.deadline)
@@ -521,7 +577,7 @@ export function refundAllowed(request: CaptureRequest, at: string): boolean {
 export function refundCapture(desk: DeskState, at = nowIso()): DeskState {
   if (!desk.request) throw new Error('Fund a request first.')
   if (desk.accept) throw new Error('This request was already accepted.')
-  if (desk.refund) throw new Error('This request was already refunded.')
+  if (desk.refund || desk.pendingRefund || desk.earlyRefund) throw new Error('This request was already refunded.')
   if (!isIsoDateTime(at)) throw new Error('Refund time is missing.')
   if (!refundAllowed(desk.request, at)) throw new Error('The deadline has not passed.')
   const refund: CaptureRefund = {
@@ -537,9 +593,9 @@ export function refundCapture(desk: DeskState, at = nowIso()): DeskState {
   if (invalid) throw new Error(invalid)
   return {
     ...desk,
-    refund,
+    pendingRefund: refund,
     rejection: null,
-    notice: 'Refund drafted. The full reward goes back. The deadline check is a desk record.'
+    notice: 'Refund drafted. It stays pending until a block header times the spend after the deadline.'
   }
 }
 
@@ -715,7 +771,6 @@ export function validateRefund(
     return error instanceof Error ? error.message : 'Refund is invalid.'
   }
   if (request && refund.refundSats !== request.rewardSats) return 'A refund returns the full reward.'
-  if (request && !refundAllowed(request, refund.refundedAt)) return 'The deadline has not passed.'
   if (!options.allowUnsigned && !refund.signature) return 'Refund signature is missing.'
   if (refund.signature && !/^[0-9a-fA-F]+$/.test(refund.signature)) return 'Refund signature is invalid.'
   return null
@@ -918,67 +973,205 @@ function oldestRequest(funds: CaptureRequest[]): CaptureRequest | null {
   return ranked[0]?.row ?? null
 }
 
-function submissionMatches(accept: CaptureAccept, submissions: CaptureSubmit[]): boolean {
-  return submissions.some((row) =>
-    row.receiptHash === accept.receiptHash && sameKey(row.contributorIdentity, accept.contributorIdentity)
-  )
+/** P2PKH of a derived public key. Readers match accept outputs against this script. */
+export function p2pkhLockingScript(publicKey: string): string {
+  return new P2PKH().lock(PublicKey.fromString(publicKey).toHash()).toHex()
 }
 
-function keptSubmissions(rows: CaptureSubmit[], request: CaptureRequest): CaptureSubmit[] {
-  const signed = rows.filter((row) =>
-    row.requestId === request.requestId
-    && signedByContributor(row.contributorIdentity, submitMessage(row), row.signature)
-  )
-  const ranked = byIndex(signed)
-  ranked.sort((left, right) => {
-    const a = left.row.contributorIdentity
-    const b = right.row.contributorIdentity
-    if (a !== b) return a < b ? -1 : 1
-    if (left.row.capturedAt < right.row.capturedAt) return -1
-    if (left.row.capturedAt > right.row.capturedAt) return 1
-    return left.index - right.index
+/**
+ * Block height, merkle root, and leaf index from a BEEF merkle proof.
+ * The header time is applied later, and only when that root matches.
+ */
+export function proofInclusion(txid: string, proof: MerklePath): { blockHeight: number, merkleRoot: string, blockIndex: number } | null {
+  try {
+    const merkleRoot = proof.computeRoot(txid).trim().toLowerCase()
+    const blockIndex = proof.indexOf(txid)
+    if (!merkleRoot || !Number.isInteger(proof.blockHeight) || proof.blockHeight < 0) return null
+    if (!Number.isInteger(blockIndex) || blockIndex < 0) return null
+    return { blockHeight: proof.blockHeight, merkleRoot, blockIndex }
+  } catch {
+    return null
+  }
+}
+
+/** Header time for a proof. Signer fields, nLockTime, and host-asserted times are not read. */
+export function trustedAt(record: ChainRecord, headers: BlockHeaderTime[] = []): string | null {
+  if (record.blockHeight == null || !record.merkleRoot) return null
+  const root = record.merkleRoot.trim().toLowerCase()
+  const header = headers.find((row) => row.height === record.blockHeight && row.merkleRoot.trim().toLowerCase() === root)
+  if (!header || !Number.isFinite(header.time)) return null
+  const ms = header.time > 1e12 ? header.time : header.time * 1000
+  const when = new Date(ms)
+  if (Number.isNaN(when.getTime())) return null
+  return when.toISOString()
+}
+
+function trustedPosition(record: ChainRecord, headers: BlockHeaderTime[]): { height: number, index: number } | null {
+  if (!trustedAt(record, headers)) return null
+  return { height: record.blockHeight ?? 0, index: record.blockIndex ?? 0 }
+}
+
+function submissionMatches(accept: CaptureAccept, submissions: CaptureSubmit[]): CaptureSubmit | null {
+  return submissions.find((row) =>
+    row.receiptHash === accept.receiptHash && sameKey(row.contributorIdentity, accept.contributorIdentity)
+  ) ?? null
+}
+
+function withHostTime(row: CaptureSubmit, record: ChainRecord): CaptureSubmit {
+  if (!record.hostAssertedAt) return row
+  return { ...row, hostAssertedAt: record.hostAssertedAt }
+}
+
+function compareChainRecords(left: ChainRecord, right: ChainRecord, headers: BlockHeaderTime[]): number {
+  const a = trustedPosition(left, headers)
+  const b = trustedPosition(right, headers)
+  if (a && b) {
+    if (a.height !== b.height) return a.height - b.height
+    if (a.index !== b.index) return a.index - b.index
+    if (left.payload.kind === 'submit' && right.payload.kind === 'submit') {
+      const leftRow = left.payload
+      const rightRow = right.payload
+      if (sameKey(leftRow.contributorIdentity, rightRow.contributorIdentity) && leftRow.capturedAt !== rightRow.capturedAt) {
+        return leftRow.capturedAt < rightRow.capturedAt ? -1 : 1
+      }
+    }
+  } else if (a && !b) {
+    return -1
+  } else if (!a && b) {
+    return 1
+  }
+  const tx = left.txid.trim().toLowerCase().localeCompare(right.txid.trim().toLowerCase())
+  if (tx !== 0) return tx
+  return left.vout - right.vout
+}
+
+interface ClassifiedSubmissions {
+  onTime: CaptureSubmit[]
+  pending: CaptureSubmit[]
+  late: CaptureSubmit[]
+}
+
+function classifySubmissions(records: ChainRecord[], request: CaptureRequest, headers: BlockHeaderTime[]): ClassifiedSubmissions {
+  const signed = records.filter((record) => {
+    const row = record.payload
+    return row.kind === 'submit'
+      && row.requestId === request.requestId
+      && signedByContributor(row.contributorIdentity, submitMessage(row), row.signature)
   })
+  const ranked = [...signed].sort((left, right) => compareChainRecords(left, right, headers))
   const seen = new Set<string>()
-  const kept: CaptureSubmit[] = []
-  for (const item of ranked) {
-    const key = `${item.row.contributorIdentity}|${item.row.receiptHash}`
+  const onTime: CaptureSubmit[] = []
+  const pending: CaptureSubmit[] = []
+  const late: CaptureSubmit[] = []
+  const deadline = Date.parse(request.deadline)
+  for (const record of ranked) {
+    const row = record.payload
+    if (row.kind !== 'submit') continue
+    const key = `${row.contributorIdentity}|${row.receiptHash}`
     if (seen.has(key)) continue
     seen.add(key)
-    kept.push(item.row)
+    const view = withHostTime(row, record)
+    const when = trustedAt(record, headers)
+    if (!when) {
+      pending.push(view)
+      continue
+    }
+    if (Date.parse(when) <= deadline) onTime.push(view)
+    else late.push(view)
   }
-  return kept
+  return { onTime, pending, late }
 }
 
-function keptAccept(rows: CaptureAccept[], request: CaptureRequest, submissions: CaptureSubmit[]): CaptureAccept | null {
-  const valid = rows.filter((row) => {
-    if (row.requestId !== request.requestId) return false
+/** Readers require these three payment outputs. The script does not. */
+export function acceptPaysSplit(record: ChainRecord, request: CaptureRequest, submission: CaptureSubmit): boolean {
+  if (!record.outputs || record.outputs.length === 0) return false
+  let lines: PayoutLines
+  try {
+    lines = payoutLines(request.rewardSats, request.processingFeeSats)
+  } catch {
+    return false
+  }
+  const payments = record.outputs
+    .filter((_, index) => index !== record.vout)
+    .map((output) => ({
+      satoshis: output.satoshis,
+      lockingScript: output.lockingScript.trim().toLowerCase()
+    }))
+  const contributor = p2pkhLockingScript(contributorPayoutKey(submission.contributorIdentity)).toLowerCase()
+  const desk = p2pkhLockingScript(deskFeeLockingKey()).toLowerCase()
+  const take = (script: string, sats: number) => {
+    const index = payments.findIndex((output) => output.lockingScript === script && output.satoshis === sats)
+    if (index < 0) return false
+    payments.splice(index, 1)
+    return true
+  }
+  return take(contributor, lines.contributorSats)
+    && take(desk, lines.deskFeeSats)
+    && take(desk, lines.processingFeeSats)
+    && payments.length === 0
+}
+
+function keptAccept(records: ChainRecord[], request: CaptureRequest, submissions: CaptureSubmit[], headers: BlockHeaderTime[]): CaptureAccept | null {
+  const valid = records.filter((record) => {
+    const row = record.payload
+    if (row.kind !== 'accept' || row.requestId !== request.requestId) return false
     if (!signedByEscrow(request.requesterIdentity, request.requestId, acceptMessage(row), row.signature)) return false
     if (validateAccept(row, request)) return false
-    return submissionMatches(row, submissions)
+    const submission = submissionMatches(row, submissions)
+    if (!submission) return false
+    return acceptPaysSplit(record, request, submission)
   })
-  const ranked = byIndex(valid)
-  ranked.sort((left, right) => {
-    if (left.row.acceptedAt < right.row.acceptedAt) return -1
-    if (left.row.acceptedAt > right.row.acceptedAt) return 1
-    return left.index - right.index
-  })
-  return ranked[0]?.row ?? null
+  valid.sort((left, right) => compareChainRecords(left, right, headers))
+  const first = valid[0]?.payload
+  return first && first.kind === 'accept' ? first : null
 }
 
-function keptRefund(rows: CaptureRefund[], request: CaptureRequest, accept: CaptureAccept | null): CaptureRefund | null {
-  if (accept) return null
-  const valid = rows.filter((row) => {
-    if (row.requestId !== request.requestId) return false
+interface ClassifiedRefund {
+  refund: CaptureRefund | null
+  pending: CaptureRefund | null
+  early: CaptureRefund | null
+}
+
+function classifyRefunds(
+  records: ChainRecord[],
+  request: CaptureRequest,
+  accept: CaptureAccept | null,
+  headers: BlockHeaderTime[]
+): ClassifiedRefund {
+  const empty = { refund: null, pending: null, early: null }
+  if (accept) return empty
+  const valid = records.filter((record) => {
+    const row = record.payload
+    if (row.kind !== 'refund' || row.requestId !== request.requestId) return false
     if (!signedByEscrow(request.requesterIdentity, request.requestId, refundMessage(row), row.signature)) return false
     return !validateRefund(row, request)
   })
-  const ranked = byIndex(valid)
-  ranked.sort((left, right) => {
-    if (left.row.refundedAt < right.row.refundedAt) return -1
-    if (left.row.refundedAt > right.row.refundedAt) return 1
-    return left.index - right.index
-  })
-  return ranked[0]?.row ?? null
+  valid.sort((left, right) => compareChainRecords(left, right, headers))
+  const deadline = Date.parse(request.deadline)
+  let pending: CaptureRefund | null = null
+  let early: CaptureRefund | null = null
+  for (const record of valid) {
+    const row = record.payload
+    if (row.kind !== 'refund') continue
+    const when = trustedAt(record, headers)
+    if (!when) {
+      pending ??= row
+      continue
+    }
+    if (Date.parse(when) > deadline) return { refund: row, pending: null, early: null }
+    early ??= row
+  }
+  return { refund: null, pending, early }
+}
+
+function payloadRecords(rows: CapturePayload[]): ChainRecord[] {
+  return rows.map((payload, index) => ({
+    txid: index.toString(16).padStart(64, '0'),
+    vout: 0,
+    inputs: [],
+    lockingPublicKey: '',
+    payload
+  }))
 }
 
 export function deskFromRecords(rows: CapturePayload[], requestId?: string): DeskState | null {
@@ -987,17 +1180,7 @@ export function deskFromRecords(rows: CapturePayload[], requestId?: string): Des
     row.kind === 'request' && requestIdMatches(row) && signedByEscrow(row.requesterIdentity, row.requestId, requestMessage(row), row.signature)
   ))
   if (!request) return null
-  const submissions = keptSubmissions(scoped.filter((row): row is CaptureSubmit => row.kind === 'submit'), request)
-  const accept = keptAccept(scoped.filter((row): row is CaptureAccept => row.kind === 'accept'), request, submissions)
-  const refund = keptRefund(scoped.filter((row): row is CaptureRefund => row.kind === 'refund'), request, accept)
-  return {
-    request,
-    submissions,
-    accept,
-    refund,
-    rejection: null,
-    notice: null
-  }
+  return foldDesk(request, payloadRecords(scoped), null, [])
 }
 
 function outpointOf(record: ChainRecord): string {
@@ -1038,37 +1221,42 @@ function spends(record: ChainRecord, outpoint: string): boolean {
   return record.inputs.map((input) => input.trim().toLowerCase()).includes(outpoint)
 }
 
+function foldDesk(request: CaptureRequest, scoped: ChainRecord[], fund: ChainRecord | null, headers: BlockHeaderTime[]): DeskState {
+  const head = fund ? outpointOf(fund) : null
+  const submissions = classifySubmissions(scoped, request, headers)
+  const acceptRows = head
+    ? scoped.filter((row) => row.payload.kind === 'accept' && spends(row, head))
+    : []
+  const accept = keptAccept(acceptRows, request, submissions.onTime, headers)
+  const refundRows = head
+    ? scoped.filter((row) => row.payload.kind === 'refund' && spends(row, head))
+    : scoped.filter((row) => row.payload.kind === 'refund')
+  const refunds = classifyRefunds(refundRows, request, accept, headers)
+  return {
+    ...emptyDesk(),
+    request,
+    submissions: submissions.onTime,
+    pendingSubmissions: submissions.pending,
+    lateSubmissions: submissions.late,
+    accept,
+    refund: refunds.refund,
+    pendingRefund: refunds.pending,
+    earlyRefund: refunds.early
+  }
+}
+
 export function deskFromChain(records: ChainRecord[], options: ReadOptions = {}): DeskState | null {
   const chosen = canonicalRequestRecord(records, options)
   if (!chosen || chosen.payload.kind !== 'request') return null
   const request = chosen.payload
-  const head = outpointOf(chosen)
   const scoped = records.filter((row) => row.payload.requestId === request.requestId)
-  const submissions = keptSubmissions(
-    scoped.map((row) => row.payload).filter((row): row is CaptureSubmit => row.kind === 'submit'),
-    request
-  )
-  const acceptRows = scoped.filter((row) =>
-    row.payload.kind === 'accept' && spends(row, head)
-  ).map((row) => row.payload).filter((row): row is CaptureAccept => row.kind === 'accept')
-  const accept = keptAccept(acceptRows, request, submissions)
-  const refundRows = scoped.filter((row) =>
-    row.payload.kind === 'refund' && spends(row, head)
-  ).map((row) => row.payload).filter((row): row is CaptureRefund => row.kind === 'refund')
-  const refund = keptRefund(refundRows, request, accept)
-  return {
-    request,
-    submissions,
-    accept,
-    refund,
-    rejection: null,
-    notice: null
-  }
+  return foldDesk(request, scoped, chosen, options.headers ?? [])
 }
 
-export function statusOf(row: { accept: CaptureAccept | null, refund: CaptureRefund | null }): CaptureStatus {
+export function statusOf(row: { accept: CaptureAccept | null, refund: CaptureRefund | null, pendingRefund?: CaptureRefund | null, earlyRefund?: CaptureRefund | null }): CaptureStatus {
   if (row.accept) return 'accepted'
   if (row.refund) return 'refunded'
+  if (row.pendingRefund || row.earlyRefund) return 'pending'
   return 'open'
 }
 
@@ -1085,7 +1273,25 @@ export function sortBoard<T extends ListedRequest>(rows: T[]): T[] {
   })
 }
 
-export function bookFromChain(records: ChainRecord[], pinIdentity?: string | null): ListedRequest[] {
+function listedFromDesk(requestId: string, desk: DeskState, txid: string, fund: ChainRecord | null, headers: BlockHeaderTime[]): ListedRequest {
+  return {
+    requestId,
+    request: desk.request!,
+    submissions: desk.submissions,
+    pendingSubmissions: desk.pendingSubmissions,
+    lateSubmissions: desk.lateSubmissions,
+    accept: desk.accept,
+    refund: desk.refund,
+    pendingRefund: desk.pendingRefund,
+    earlyRefund: desk.earlyRefund,
+    txid,
+    status: statusOf(desk),
+    trustedPostedAt: fund ? trustedAt(fund, headers) : null,
+    trustedAcceptAt: null
+  }
+}
+
+export function bookFromChain(records: ChainRecord[], pinIdentity?: string | null, headers: BlockHeaderTime[] = []): ListedRequest[] {
   const ids: string[] = []
   for (const row of records) {
     if (row.payload.kind !== 'request') continue
@@ -1093,18 +1299,17 @@ export function bookFromChain(records: ChainRecord[], pinIdentity?: string | nul
   }
   const book: ListedRequest[] = []
   for (const requestId of ids) {
-    const chosen = canonicalRequestRecord(records, { requestId, pinIdentity })
+    const chosen = canonicalRequestRecord(records, { requestId, pinIdentity, headers })
     if (!chosen || chosen.payload.kind !== 'request') continue
-    const desk = deskFromChain(records, { requestId, pinIdentity, hintTxid: chosen.txid })
+    const desk = deskFromChain(records, { requestId, pinIdentity, hintTxid: chosen.txid, headers })
     if (!desk?.request) continue
+    const head = outpointOf(chosen)
+    const acceptRecord = records.find((row) =>
+      row.payload.kind === 'accept' && row.payload.requestId === requestId && spends(row, head) && desk.accept && row.payload.signature === desk.accept.signature
+    ) ?? null
     book.push({
-      requestId,
-      request: desk.request,
-      submissions: desk.submissions,
-      accept: desk.accept,
-      refund: desk.refund,
-      txid: chosen.txid,
-      status: statusOf(desk)
+      ...listedFromDesk(requestId, desk, chosen.txid, chosen, headers),
+      trustedAcceptAt: acceptRecord ? trustedAt(acceptRecord, headers) : null
     })
   }
   return sortBoard(book)
@@ -1120,15 +1325,7 @@ export function bookFromRecords(rows: CapturePayload[]): ListedRequest[] {
   for (const requestId of ids) {
     const desk = deskFromRecords(rows, requestId)
     if (!desk?.request) continue
-    book.push({
-      requestId,
-      request: desk.request,
-      submissions: desk.submissions,
-      accept: desk.accept,
-      refund: desk.refund,
-      txid: '',
-      status: statusOf(desk)
-    })
+    book.push(listedFromDesk(requestId, desk, '', null, []))
   }
   return sortBoard(book)
 }
@@ -1144,28 +1341,34 @@ export function median(values: number[]): number | null {
   return Math.round((left + right) / 2)
 }
 
-/** Open, accepted, refunded, accept rate, and median time to accept. Desk records only. */
+/** Open, accepted, refunded, accept rate, and median time to accept. Header times only. */
 export function boardStats(rows: ListedRequest[]): BoardStats {
   let open = 0
   let accepted = 0
   let refunded = 0
+  let pending = 0
   const durations: number[] = []
   for (const row of rows) {
-    if (row.status === 'accepted' && row.accept) {
+    if (row.status === 'accepted') {
       accepted += 1
-      const delta = Date.parse(row.accept.acceptedAt) - Date.parse(row.request.postedAt)
-      if (Number.isFinite(delta)) durations.push(delta)
+      if (row.trustedAcceptAt && row.trustedPostedAt) {
+        const delta = Date.parse(row.trustedAcceptAt) - Date.parse(row.trustedPostedAt)
+        if (Number.isFinite(delta)) durations.push(delta)
+      }
     } else if (row.status === 'refunded') {
       refunded += 1
+    } else if (row.status === 'pending') {
+      pending += 1
     } else {
       open += 1
     }
   }
-  const total = open + accepted + refunded
+  const total = open + accepted + refunded + pending
   return {
     open,
     accepted,
     refunded,
+    pending,
     acceptRate: total === 0 ? null : Math.round((accepted / total) * 100),
     medianAcceptMs: median(durations)
   }

@@ -1,4 +1,4 @@
-import { PrivateKey, ProtoWallet, PushDrop, Utils } from '@bsv/sdk'
+import { MerklePath, PrivateKey, ProtoWallet, PushDrop, Utils } from '@bsv/sdk'
 import { describe, expect, it } from 'vitest'
 import {
   BRC29_PROTOCOL,
@@ -12,6 +12,7 @@ import {
   PROTOCOL_ID,
   acceptCapture,
   acceptMessage,
+  acceptPaysSplit,
   assertPayout,
   bindRequest,
   boardStats,
@@ -34,8 +35,11 @@ import {
   hashCapture,
   keepMagic,
   parseCaptureFields,
+  p2pkhLockingScript,
   payoutLines,
   postRequest,
+  proofInclusion,
+  trustedAt,
   refundCapture,
   refundMessage,
   requestLockedToRequester,
@@ -43,10 +47,12 @@ import {
   sortBoard,
   submitCapture,
   submitMessage,
+  type BlockHeaderTime,
   type CaptureAccept,
   type CaptureRefund,
   type CaptureRequest,
   type CaptureSubmit,
+  type ChainOutput,
   type ChainRecord,
   type ListedRequest
 } from './capture'
@@ -123,6 +129,22 @@ function chainRequest(request: CaptureRequest, txid: string, vout = 0): ChainRec
   }
 }
 
+const ROOT = 'ab'.repeat(32)
+
+function withProof(record: ChainRecord, height: number, index = 0, root = ROOT): ChainRecord {
+  return { ...record, blockHeight: height, blockIndex: index, merkleRoot: root }
+}
+
+function splitOutputs(contributor: string, reward = 100_000, processing = 1_000, contributorSats?: number, payee = contributorPayoutKey(contributor)): ChainOutput[] {
+  const lines = payoutLines(reward, processing)
+  return [
+    { satoshis: contributorSats ?? lines.contributorSats, lockingScript: p2pkhLockingScript(payee) },
+    { satoshis: lines.deskFeeSats, lockingScript: p2pkhLockingScript(deskFeeLockingKey()) },
+    { satoshis: lines.processingFeeSats, lockingScript: p2pkhLockingScript(deskFeeLockingKey()) },
+    { satoshis: 1, lockingScript: '51' }
+  ]
+}
+
 describe('encode and decode', () => {
   it('round-trips request, submission, accept, and refund without the raw file', async () => {
     const requester = await signer()
@@ -136,7 +158,7 @@ describe('encode and decode', () => {
     })
     const accepted = acceptCapture(desk, hashCapture(FILE), '2026-10-20T18:00:00Z')
     const request = await signedRequest(accepted.request!, requester.sign)
-    const submission = await signedSubmit(accepted.submissions[0]!, contributor.signAsContributor)
+    const submission = await signedSubmit(accepted.pendingSubmissions[0]!, contributor.signAsContributor)
     const accept = accepted.accept!
     accept.signature = await requester.sign(acceptMessage(accept))
     const parsedRequest = parseCaptureFields(encodeRequestFields(request))
@@ -200,11 +222,12 @@ describe('refund deadline', () => {
     expect(() => refundCapture(desk, BEFORE)).toThrow(/deadline has not passed/)
     expect(() => refundCapture(desk, WHEN)).toThrow(/deadline has not passed/)
     const refunded = refundCapture(desk, AFTER)
-    expect(refunded.refund).toMatchObject({ refundSats: 100_000, refundedAt: AFTER })
-    expect(refunded.refund?.refundSats).toBe(desk.request?.rewardSats)
+    expect(refunded.pendingRefund).toMatchObject({ refundSats: 100_000, refundedAt: AFTER })
+    expect(refunded.refund).toBeNull()
+    expect(refunded.pendingRefund?.refundSats).toBe(desk.request?.rewardSats)
     const onTime = refundCapture(desk, DEADLINE)
-    expect(onTime.refund?.refundSats).toBe(100_000)
-    expect(DEADLINE_ENFORCEMENT).toBe('desk-recorded')
+    expect(onTime.pendingRefund?.refundSats).toBe(100_000)
+    expect(DEADLINE_ENFORCEMENT).toBe('header-time')
   })
 })
 
@@ -326,7 +349,7 @@ describe('readers trust the requester key', () => {
       geohash: 'u4pru',
       submittedAt: WHEN
     })
-    const submission = await signedSubmit(desk.submissions[0]!, contributor.signAsContributor)
+    const submission = await signedSubmit(desk.pendingSubmissions[0]!, contributor.signAsContributor)
     const accepted = acceptCapture({ ...desk, submissions: [submission] }, hashCapture(FILE), '2026-10-20T18:00:00Z')
     const honest: CaptureAccept = {
       ...accepted.accept!,
@@ -340,8 +363,8 @@ describe('readers trust the requester key', () => {
     forged.signature = await other.sign(acceptMessage(forged))
     expect(deskFromRecords([request, submission, forged, { ...honest, signature: '' }])?.accept).toBeNull()
     const kept = deskFromRecords([request, submission, forged, honest])
-    expect(kept?.accept?.contributorIdentity).toBe(contributor.publicKey)
-    expect(kept?.accept?.signature).toBe(honest.signature)
+    expect(kept?.accept).toBeNull()
+    expect(kept?.pendingSubmissions.map((row) => row.receiptHash)).toContain(submission.receiptHash)
     const wrong: CaptureAccept = {
       ...honest,
       contributorIdentity: other.publicKey,
@@ -358,35 +381,64 @@ describe('readers trust the requester key', () => {
     const fundTx = 'aa'.repeat(32)
     const acceptTx = 'bb'.repeat(32)
     const forgedTx = 'cc'.repeat(32)
+    const submitTx = 'dd'.repeat(32)
     const spent = `${fundTx}.0`
+    const headers: BlockHeaderTime[] = [{ height: 800, time: Date.parse(WHEN) / 1000, merkleRoot: ROOT }]
+    const onTimeSubmit = withProof({
+      txid: submitTx,
+      vout: 0,
+      inputs: [],
+      lockingPublicKey: contributorSigningKey(contributor.publicKey),
+      payload: submission
+    }, 800, 1)
+    const honestSpend: ChainRecord = {
+      txid: acceptTx,
+      vout: 3,
+      inputs: [spent],
+      lockingPublicKey: requester.lockingKey,
+      payload: honest,
+      outputs: splitOutputs(contributor.publicKey)
+    }
+    expect(acceptPaysSplit(honestSpend, request, submission)).toBe(true)
     const folded = deskFromChain([
       chainRequest(request, fundTx),
       {
         txid: forgedTx,
-        vout: 1,
+        vout: 3,
         inputs: [spent],
         lockingPublicKey: requester.lockingKey,
-        payload: forged
+        payload: forged,
+        outputs: splitOutputs(contributor.publicKey)
       },
-      {
-        txid: acceptTx,
-        vout: 1,
-        inputs: [spent],
-        lockingPublicKey: requester.lockingKey,
-        payload: honest
-      },
-      {
-        txid: acceptTx,
-        vout: 2,
-        inputs: [],
-        lockingPublicKey: contributorSigningKey(contributor.publicKey),
-        payload: submission
-      }
-    ])
+      honestSpend,
+      onTimeSubmit
+    ], { headers })
     expect(folded?.accept?.signature).toBe(honest.signature)
     expect(deskFromChain([
       chainRequest(request, fundTx),
-      { txid: forgedTx, vout: 1, inputs: [`${'ff'.repeat(32)}.0`], lockingPublicKey: requester.lockingKey, payload: honest }
+      { txid: forgedTx, vout: 3, inputs: [`${'ff'.repeat(32)}.0`], lockingPublicKey: requester.lockingKey, payload: honest, outputs: splitOutputs(contributor.publicKey) },
+      onTimeSubmit
+    ], { headers })?.accept).toBeNull()
+    const wrongAmount: ChainRecord = { ...honestSpend, txid: 'ee'.repeat(32), outputs: splitOutputs(contributor.publicKey, 100_000, 1_000, 80_000) }
+    expect(deskFromChain([
+      chainRequest(request, fundTx),
+      onTimeSubmit,
+      wrongAmount
+    ], { headers })?.accept).toBeNull()
+    const wrongPayee: ChainRecord = {
+      ...honestSpend,
+      txid: 'ab'.repeat(32),
+      outputs: splitOutputs(contributor.publicKey, 100_000, 1_000, undefined, contributorPayoutKey(other.publicKey))
+    }
+    expect(deskFromChain([
+      chainRequest(request, fundTx),
+      onTimeSubmit,
+      wrongPayee
+    ], { headers })?.accept).toBeNull()
+    expect(deskFromChain([
+      chainRequest(request, fundTx),
+      onTimeSubmit,
+      honestSpend
     ])?.accept).toBeNull()
   })
 
@@ -394,30 +446,137 @@ describe('readers trust the requester key', () => {
     const requester = await signer()
     const request = await signedRequest(drafted(requester.publicKey).request!, requester.sign)
     const earlyDesk = refundCapture({ ...drafted(requester.publicKey), request }, AFTER)
-    const early: CaptureRefund = { ...earlyDesk.refund!, refundedAt: BEFORE, signature: '' }
+    const early: CaptureRefund = { ...earlyDesk.pendingRefund!, refundedAt: BEFORE, signature: '' }
     early.signature = await requester.sign(refundMessage(early))
-    expect(deskFromRecords([request, early])?.refund).toBeNull()
+    const unsigned = deskFromRecords([request, early])
+    expect(unsigned?.refund).toBeNull()
+    expect(unsigned?.pendingRefund?.refundedAt).toBe(BEFORE)
     const honest: CaptureRefund = { ...early, refundedAt: AFTER, refundSats: request.rewardSats, signature: '' }
     honest.signature = await requester.sign(refundMessage(honest))
     const kept = deskFromRecords([request, early, honest])
-    expect(kept?.refund?.refundSats).toBe(request.rewardSats)
-    expect(kept?.refund?.refundedAt).toBe(AFTER)
+    expect(kept?.refund).toBeNull()
+    expect(kept?.pendingRefund).not.toBeNull()
     const short: CaptureRefund = { ...honest, refundSats: request.rewardSats - 1, signature: '' }
     short.signature = await requester.sign(refundMessage(short))
     expect(deskFromRecords([request, short])?.refund).toBeNull()
+    expect(deskFromRecords([request, short])?.pendingRefund).toBeNull()
     const fundTx = 'aa'.repeat(32)
     const refundTx = 'bb'.repeat(32)
+    const spend: ChainRecord = {
+      txid: refundTx,
+      vout: 0,
+      inputs: [`${fundTx}.0`],
+      lockingPublicKey: requester.lockingKey,
+      payload: honest,
+      lockTime: 4_000_000_000,
+      hostAssertedAt: AFTER
+    }
+    const empty = deskFromChain([chainRequest(request, fundTx), spend])
+    expect(empty?.refund).toBeNull()
+    expect(empty?.pendingRefund?.refundSats).toBe(100_000)
+    const afterHeader: BlockHeaderTime[] = [{ height: 900, time: Date.parse(AFTER) / 1000, merkleRoot: ROOT }]
+    const beforeHeader: BlockHeaderTime[] = [{ height: 900, time: Date.parse(BEFORE) / 1000, merkleRoot: ROOT }]
     expect(deskFromChain([
       chainRequest(request, fundTx),
-      {
-        txid: refundTx,
-        vout: 0,
-        inputs: [`${fundTx}.0`],
-        lockingPublicKey: requester.lockingKey,
-        payload: honest
-      }
-    ])?.refund?.refundSats).toBe(100_000)
+      withProof(spend, 900)
+    ], { headers: afterHeader })?.refund?.refundSats).toBe(100_000)
+    const earlyChain = deskFromChain([
+      chainRequest(request, fundTx),
+      withProof(spend, 900)
+    ], { headers: beforeHeader })
+    expect(earlyChain?.refund).toBeNull()
+    expect(earlyChain?.pendingRefund).toBeNull()
+    expect(earlyChain?.earlyRefund?.refundSats).toBe(100_000)
+    expect(trustedAt(withProof(spend, 900), [{ height: 900, time: Date.parse(AFTER) / 1000, merkleRoot: 'cd'.repeat(32) }])).toBeNull()
     expect(encodeRefundFields(honest)[2] && new TextDecoder().decode(Uint8Array.from(encodeRefundFields(honest)[2]!))).toBe('refund')
+  })
+
+  it('leaves an empty context pending and ignores a backdated capturedAt', async () => {
+    const requester = await signer()
+    const contributor = await signer()
+    const request = await signedRequest(drafted(requester.publicKey).request!, requester.sign)
+    const backdated = await signedSubmit(submitCapture({ ...drafted(requester.publicKey), request }, {
+      contributorIdentity: contributor.publicKey,
+      receiptHash: hashCapture('backdated-file'),
+      capturedAt: '2020-01-01T00:00:00Z',
+      geohash: 'u4pru',
+      submittedAt: '2020-01-01T00:00:00Z'
+    }).pendingSubmissions[0]!, contributor.signAsContributor)
+    const later = await signedSubmit(submitCapture({ ...drafted(requester.publicKey), request }, {
+      contributorIdentity: contributor.publicKey,
+      receiptHash: hashCapture('later-file'),
+      capturedAt: '2026-10-22T00:00:00Z',
+      geohash: 'u4pru',
+      submittedAt: '2026-10-22T00:00:00Z'
+    }).pendingSubmissions[0]!, contributor.signAsContributor)
+    const fundTx = 'aa'.repeat(32)
+    const desk = deskFromChain([
+      chainRequest(request, fundTx),
+      {
+        txid: 'ff'.repeat(32),
+        vout: 0,
+        inputs: [],
+        lockingPublicKey: contributorSigningKey(contributor.publicKey),
+        payload: backdated,
+        hostAssertedAt: WHEN,
+        lockTime: 1
+      },
+      {
+        txid: '11'.repeat(32),
+        vout: 0,
+        inputs: [],
+        lockingPublicKey: contributorSigningKey(contributor.publicKey),
+        payload: later
+      }
+    ])
+    expect(desk?.submissions).toEqual([])
+    expect(desk?.lateSubmissions).toEqual([])
+    expect(desk?.pendingSubmissions.map((row) => row.receiptHash)).toEqual([
+      later.receiptHash,
+      backdated.receiptHash
+    ])
+    expect(desk?.pendingSubmissions[1]?.hostAssertedAt).toBe(WHEN)
+    expect(desk?.accept).toBeNull()
+    const proof = MerklePath.fromCoinbaseTxidAndHeight('11'.repeat(32), 800000)
+    const inclusion = proofInclusion('11'.repeat(32), proof)
+    expect(inclusion?.blockHeight).toBe(800000)
+    expect(inclusion?.merkleRoot).toBe('11'.repeat(32))
+    const proved = deskFromChain([
+      chainRequest(request, fundTx),
+      {
+        txid: '11'.repeat(32),
+        vout: 0,
+        inputs: [],
+        lockingPublicKey: contributorSigningKey(contributor.publicKey),
+        payload: later,
+        blockHeight: inclusion?.blockHeight,
+        merkleRoot: inclusion?.merkleRoot,
+        blockIndex: inclusion?.blockIndex
+      }
+    ], { headers: [{ height: 800000, time: Date.parse('2026-10-22T00:00:00Z') / 1000, merkleRoot: inclusion?.merkleRoot ?? '' }] })
+    expect(proved?.submissions).toEqual([])
+    expect(proved?.lateSubmissions.map((row) => row.receiptHash)).toEqual([later.receiptHash])
+    const tied = deskFromChain([
+      chainRequest(request, fundTx),
+      withProof({
+        txid: 'ff'.repeat(32),
+        vout: 0,
+        inputs: [],
+        lockingPublicKey: contributorSigningKey(contributor.publicKey),
+        payload: backdated
+      }, 800, 0),
+      withProof({
+        txid: '11'.repeat(32),
+        vout: 0,
+        inputs: [],
+        lockingPublicKey: contributorSigningKey(contributor.publicKey),
+        payload: later
+      }, 800, 0)
+    ], { headers: [{ height: 800, time: Date.parse(WHEN) / 1000, merkleRoot: ROOT }] })
+    expect(tied?.submissions.map((row) => row.receiptHash)).toEqual([
+      backdated.receiptHash,
+      later.receiptHash
+    ])
   })
 })
 
@@ -457,6 +616,8 @@ describe('board order', () => {
     const acceptedRow: ListedRequest = {
       ...rows[0]!,
       status: 'accepted',
+      trustedPostedAt: '2026-10-20T12:00:00Z',
+      trustedAcceptAt: '2026-10-20T18:00:00Z',
       accept: {
         magic: 'capture',
         version: '1',
@@ -467,14 +628,15 @@ describe('board order', () => {
         contributorSats: 1,
         deskFeeSats: 1,
         processingFeeSats: 1,
-        acceptedAt: '2026-10-20T18:00:00Z',
+        acceptedAt: '2020-01-01T00:00:00Z',
         signature: 'abcd'
       }
     }
     const withAccept = boardStats([acceptedRow])
     expect(withAccept.accepted).toBe(1)
     expect(withAccept.acceptRate).toBe(100)
-    expect(withAccept.medianAcceptMs).toBe(Date.parse('2026-10-20T18:00:00Z') - Date.parse(acceptedRow.request.postedAt))
+    expect(withAccept.medianAcceptMs).toBe(Date.parse('2026-10-20T18:00:00Z') - Date.parse('2026-10-20T12:00:00Z'))
+    expect(boardStats([{ ...acceptedRow, trustedAcceptAt: null, trustedPostedAt: null }]).medianAcceptMs).toBeNull()
     expect(bindRequest(drafted().request!, first.publicKey).requestId).toBe(boundRequestId(first.publicKey, NONCE))
   })
 })

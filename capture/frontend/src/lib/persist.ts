@@ -23,8 +23,12 @@ export function loadDesk(requestId: string): DeskState | null {
       ...emptyDesk(),
       ...desk,
       submissions: desk.submissions ?? [],
+      pendingSubmissions: desk.pendingSubmissions ?? [],
+      lateSubmissions: desk.lateSubmissions ?? [],
       accept: desk.accept ?? null,
-      refund: desk.refund ?? null
+      refund: desk.refund ?? null,
+      pendingRefund: desk.pendingRefund ?? null,
+      earlyRefund: desk.earlyRefund ?? null
     }
   } catch {
     return null

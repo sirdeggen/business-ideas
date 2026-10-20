@@ -360,8 +360,9 @@ export async function submitCaptureOnChain(
   }
   const next: DeskState = {
     ...desk,
+    pendingSubmissions: desk.pendingSubmissions.map((row) => row === submission ? signed : row),
     submissions: desk.submissions.map((row) => row === submission ? signed : row),
-    notice: 'Receipt posted. The watermarked preview went over Message Box. The raw file stayed here.'
+    notice: 'Receipt posted. It stays pending until a block header times it. The raw file stayed here.'
   }
   return overlayWrap(overlayUrl, posted.tx, signed.requestId, posted.txid, next)
 }
@@ -388,7 +389,7 @@ export async function acceptOnChain(
   if (!sameKey(root, desk.request.requesterIdentity)) throw new Error('Only the requester can accept.')
   const drafted = acceptCapture(desk, receiptHash)
   const accept = drafted.accept as CaptureAccept
-  const submission = drafted.submissions.find((row) => row.receiptHash === accept.receiptHash)
+  const submission = [...drafted.submissions, ...drafted.pendingSubmissions].find((row) => row.receiptHash === accept.receiptHash)
   if (!submission) throw new Error('Accept a capture that was submitted.')
   const payee = payeeForAccept(submission, accept.contributorIdentity)
   const keyID = await assertEscrowKey(wallet, root, accept.requestId)
@@ -434,7 +435,7 @@ export async function refundOnChain(
   const root = identityKey.trim().toLowerCase()
   if (!sameKey(root, desk.request.requesterIdentity)) throw new Error('Only the requester can refund.')
   const drafted = refundCapture(desk, at)
-  const refund = drafted.refund as CaptureRefund
+  const refund = drafted.pendingRefund as CaptureRefund
   const keyID = await assertEscrowKey(wallet, root, refund.requestId)
   const signed: CaptureRefund = { ...refund, signature: await signBytes(wallet, keyID, refundMessage(refund)) }
   const outputs: CreateActionOutput[] = [
@@ -460,7 +461,7 @@ export async function refundOnChain(
     )
   ]
   const spent = await spendEscrow(wallet, held, outputs, clip(`Refund ${desk.request.location}`))
-  const next: DeskState = { ...drafted, refund: signed, notice: 'Refunded. The full reward went back. The deadline check is a desk record.' }
+  const next: DeskState = { ...drafted, pendingRefund: signed, notice: 'Refund spent. It stays pending until a block header times it after the deadline.' }
   return overlayWrap(overlayUrl, spent.tx, signed.requestId, spent.txid, next)
 }
 

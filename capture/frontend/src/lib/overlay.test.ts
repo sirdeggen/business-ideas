@@ -42,7 +42,7 @@ describe('client MAGIC filter', () => {
     } as unknown as OverlayItem
     const items: OverlayItem[] = [
       { payload: desk.request!, txid: 'aa'.repeat(32), outputIndex: 0 },
-      { payload: desk.submissions[0]!, txid: 'aa'.repeat(32), outputIndex: 1 },
+      { payload: desk.pendingSubmissions[0]!, txid: 'aa'.repeat(32), outputIndex: 1 },
       foreign
     ]
     expect(items[0]?.payload.magic).toBe(MAGIC)

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   boardStats,
+  emptyDesk,
   escrowKeyId,
   isGeohash,
   nowIso,
@@ -54,6 +55,8 @@ import {
   FUNDING_BUTTON,
   GEOHASH_LABEL,
   HASH_NOTE,
+  HOST_ASSERTED_LABEL,
+  LATE_CAPTURE,
   LEDE,
   LINE_CONTRIBUTOR,
   LINE_DESK,
@@ -61,6 +64,7 @@ import {
   LINE_REWARD,
   LOCAL_NOTE,
   LOCATION_LABEL,
+  PENDING_CAPTURE,
   PREVIEW_LABEL,
   PROCESSING_LABEL,
   REFRESH_BUTTON,
@@ -98,7 +102,7 @@ function Shell() {
   const { wallet, identityKey, connecting, error: walletError, walletMissing, connect } = useWallet()
   const initial = useMemo(() => readCaptureFromLocation(), [])
 
-  const [desk, setDesk] = useState<DeskState>({ request: null, submissions: [], accept: null, refund: null, rejection: null, notice: null })
+  const [desk, setDesk] = useState<DeskState>(emptyDesk())
   const [readonly, setReadonly] = useState(false)
   const [hintTxid, setHintTxid] = useState(initial.hintTxid ?? '')
   const [pinIdentity, setPinIdentity] = useState(initial.pinIdentity ?? '')
@@ -214,12 +218,15 @@ function Shell() {
       setReadonly(false)
     } else {
       setDesk({
+        ...emptyDesk(),
         request: row.request,
         submissions: row.submissions,
+        pendingSubmissions: row.pendingSubmissions,
+        lateSubmissions: row.lateSubmissions,
         accept: row.accept,
         refund: row.refund,
-        rejection: null,
-        notice: null
+        pendingRefund: row.pendingRefund,
+        earlyRefund: row.earlyRefund
       })
       setReadonly(true)
     }
@@ -292,7 +299,7 @@ function Shell() {
         geohash,
         submittedAt: nowIso()
       })
-      const submission = drafted.submissions[drafted.submissions.length - 1]
+      const submission = drafted.pendingSubmissions[drafted.pendingSubmissions.length - 1]
       if (!submission) throw new Error('Capture receipt is missing.')
       const result = await submitCaptureOnChain(
         session.wallet,
@@ -386,7 +393,7 @@ function Shell() {
 
   const startOver = (): void => {
     if (request) clearDesk(request.requestId)
-    setDesk({ request: null, submissions: [], accept: null, refund: null, rejection: null, notice: null })
+    setDesk(emptyDesk())
     setReadonly(false)
     setHintTxid('')
     setPreview('')
@@ -408,7 +415,7 @@ function Shell() {
 
   const combinedError = actionError || walletError
   const lines = request ? payoutLines(request.rewardSats, request.processingFeeSats) : draftSplit
-  const openRequest = Boolean(request && !desk.accept && !desk.refund)
+  const openRequest = Boolean(request && !desk.accept && !desk.refund && !desk.pendingRefund && !desk.earlyRefund)
 
   return (
     <div className="table-scene">
@@ -482,7 +489,7 @@ function Shell() {
             <section className="block" id="capture-request">
               <div className="show-hero">
                 <span className={`stamp ${desk.accept ? 'released' : desk.refund ? 'flagged' : ''}`}>
-                  {desk.accept ? 'Accepted' : desk.refund ? 'Refunded' : 'Open'}
+                  {desk.accept ? 'Accepted' : desk.refund ? 'Refunded' : desk.earlyRefund ? 'Early spend' : desk.pendingRefund ? 'Pending' : 'Open'}
                 </span>
               </div>
               <h2>{request.location}</h2>
@@ -527,6 +534,26 @@ function Shell() {
                   {busy === 'submit' ? SUBMITTING_BUTTON : SUBMIT_BUTTON}
                 </button>
               </div>
+            </section>
+          )}
+
+          {openRequest && desk.pendingSubmissions.length > 0 && (
+            <section className="slip" id="capture-pending">
+              <p className="job">{PENDING_CAPTURE}</p>
+              <ul className="receipts">
+                {desk.pendingSubmissions.map((row) => (
+                  <li key={`${row.contributorIdentity}-${row.receiptHash}`}>
+                    <span>{row.geohash} · {formatWhen(row.capturedAt)} · <code>{row.receiptHash.slice(0, 12)}</code></span>
+                    {row.hostAssertedAt && <span> · {HOST_ASSERTED_LABEL} {formatWhen(row.hostAssertedAt)}</span>}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {openRequest && desk.lateSubmissions.length > 0 && (
+            <section className="slip" id="capture-late">
+              <p className="job">{LATE_CAPTURE}</p>
             </section>
           )}
 
@@ -578,6 +605,7 @@ function Shell() {
               <div><dt>Open</dt><dd>{stats.open}</dd></div>
               <div><dt>Accepted</dt><dd>{stats.accepted}</dd></div>
               <div><dt>Refunded</dt><dd>{stats.refunded}</dd></div>
+              <div><dt>Pending</dt><dd>{stats.pending}</dd></div>
               <div><dt>Accept rate</dt><dd>{formatRate(stats.acceptRate)}</dd></div>
               <div><dt>Median time to accept</dt><dd>{formatMedian(stats.medianAcceptMs)}</dd></div>
             </dl>

@@ -27,7 +27,7 @@ describe('accept payout', () => {
       geohash: 'u4pru',
       submittedAt: '2026-10-20T12:00:00Z'
     })
-    const submission = desk.submissions[0]!
+    const submission = desk.pendingSubmissions[0]!
     expect(payeeForAccept(submission, contributor)).toBe(contributorPayoutKey(contributor))
     expect(() => payeeForAccept(submission, other)).toThrow(/contributor who signed/)
     const source = readFileSync(join(here, 'actions.ts'), 'utf8')

@@ -15,9 +15,11 @@ import {
   contributorSigningKey,
   deskFromChain,
   parseCaptureFields,
+  proofInclusion,
   requestLockedToRequester,
   sameKey,
   type CapturePayload,
+  type ChainOutput,
   type ChainRecord,
   type DeskState,
   type ListedRequest,
@@ -31,6 +33,11 @@ export interface OverlayItem {
   outputIndex: number
   inputs?: string[]
   lockingPublicKey?: string
+  outputs?: ChainOutput[]
+  blockHeight?: number
+  merkleRoot?: string
+  blockIndex?: number
+  hostAssertedAt?: string
 }
 
 export interface SubmitResult {
@@ -153,8 +160,32 @@ function toChain(item: OverlayItem): ChainRecord {
     vout: item.outputIndex,
     inputs: (item.inputs ?? []).map((input) => input.trim().toLowerCase()),
     lockingPublicKey: item.lockingPublicKey ?? '',
-    payload: item.payload
+    payload: item.payload,
+    outputs: item.outputs,
+    blockHeight: item.blockHeight,
+    merkleRoot: item.merkleRoot,
+    blockIndex: item.blockIndex,
+    hostAssertedAt: item.hostAssertedAt
   }
+}
+
+/** Overlay context times are host-asserted. They are not the deadline clock. */
+export function hostAssertedAt(context?: number[]): string | undefined {
+  if (!context || context.length === 0) return undefined
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(Uint8Array.from(context))) as { blockTime?: unknown, admittedAt?: unknown }
+    const raw = parsed.blockTime ?? parsed.admittedAt
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      const ms = raw > 1e12 ? raw : raw * 1000
+      const when = new Date(ms)
+      if (Number.isNaN(when.getTime())) return undefined
+      return when.toISOString()
+    }
+    if (typeof raw === 'string' && raw.trim()) return raw.trim()
+  } catch {
+    // Context that is not JSON has no host-asserted time.
+  }
+  return undefined
 }
 
 function overlayErrorText(error: unknown): string {
@@ -305,12 +336,18 @@ async function queryAnytx(host: string, service: string, query: CaptureQuery): P
   return answers
 }
 
-function itemsFromBeef(beef: number[] | undefined, txidHint?: string): OverlayItem[] {
+function itemsFromBeef(beef: number[] | undefined, txidHint?: string, context?: number[]): OverlayItem[] {
   if (!beef || beef.length === 0) return []
   try {
     const tx = txFromWalletBeef(beef)
     const txid = txidHint || tx.id('hex')
     const inputs = inputOutpoints(tx)
+    const outputs: ChainOutput[] = tx.outputs.map((output) => ({
+      satoshis: Number(output.satoshis ?? 0),
+      lockingScript: output.lockingScript.toHex()
+    }))
+    const inclusion = tx.merklePath ? proofInclusion(txid, tx.merklePath) : null
+    const hostAsserted = hostAssertedAt(context)
     const rows: OverlayItem[] = []
     for (const [outputIndex, output] of tx.outputs.entries()) {
       const parsed = parseScript(output.lockingScript)
@@ -320,7 +357,12 @@ function itemsFromBeef(beef: number[] | undefined, txidHint?: string): OverlayIt
         txid,
         outputIndex,
         inputs,
-        lockingPublicKey: parsed.lockingPublicKey
+        lockingPublicKey: parsed.lockingPublicKey,
+        outputs,
+        blockHeight: inclusion?.blockHeight,
+        merkleRoot: inclusion?.merkleRoot,
+        blockIndex: inclusion?.blockIndex,
+        hostAssertedAt: hostAsserted
       })
     }
     return rows
@@ -334,7 +376,7 @@ function itemsFromAnswer(answer: LookupAnswer): OverlayItem[] {
   const seen = new Set<string>()
   const rows: OverlayItem[] = []
   for (const output of answer.outputs) {
-    const decoded = itemsFromBeef(output.beef, output.txid)
+    const decoded = itemsFromBeef(output.beef, output.txid, output.context)
     for (const item of decoded) {
       const key = `${item.txid}.${item.outputIndex}`
       if (seen.has(key)) continue
