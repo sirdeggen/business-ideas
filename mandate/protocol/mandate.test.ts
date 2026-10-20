@@ -365,4 +365,77 @@ describe('mandate protocol', () => {
     expect(positionOf(honest!, during)?.balanceSats).toBe(975_000)
     expect(positionOf(honest!, during)?.terms.managerKey).toBe(oldKey)
   })
+
+  it('keeps a backdated change pending when no txTime is injected', async () => {
+    const owner = walletOf()
+    const ownerKey = await identityOf(owner.wallet)
+    const publishedAt = '2026-10-20T12:00:00Z'
+    const proposedAt = '2026-09-01T12:00:00Z'
+    let desk = fundMandate(openMandate({
+      orgName: 'Harbor HOA Reserve',
+      managerKey: SAMPLE_MANAGER,
+      whitelist: [SAMPLE_DESTINATION],
+      periodCapSats: DEFAULT_CAP_SATS,
+      periodDays: DEFAULT_PERIOD_DAYS,
+      feeBps: DEFAULT_FEE_BPS,
+      noticeDays: DEFAULT_NOTICE_DAYS,
+      ownerKey
+    }, publishedAt, NONCE), 1_000_000, publishedAt)
+    desk = proposeChange(desk, 'cap', '1000', proposedAt)
+    expect(desk.changes[0]?.effectiveAt).toBe(addDays(proposedAt, DEFAULT_NOTICE_DAYS))
+    expect(desk.changes[0]?.effectiveAt < publishedAt).toBe(true)
+    desk = await signOwnerRecords(owner.wallet, desk)
+    expect(desk.mandate?.txTime).toBeUndefined()
+    expect(desk.changes[0]?.txTime).toBeUndefined()
+    const restored = deskFromRecords([
+      desk.mandate!,
+      desk.funds[0],
+      desk.changes[0]
+    ], desk.mandate!.mandateId)
+    expect(restored?.source).toBe('public')
+    expect(restored?.changes).toHaveLength(1)
+    expect(positionOf(restored!, addDays(proposedAt, DEFAULT_NOTICE_DAYS))?.terms.periodCapSats).toBe(DEFAULT_CAP_SATS)
+    expect(positionOf(restored!, '2027-01-01T00:00:00Z')?.terms.periodCapSats).toBe(DEFAULT_CAP_SATS)
+    expect(pendingChanges(restored!, '2027-01-01T00:00:00Z')).toHaveLength(1)
+  })
+
+  it('rejects a backdated send from a replaced manager when the send has no txTime', async () => {
+    const owner = walletOf()
+    const oldManager = walletOf()
+    const nextManager = walletOf()
+    const ownerKey = await identityOf(owner.wallet)
+    const oldKey = await identityOf(oldManager.wallet)
+    const nextKey = await identityOf(nextManager.wallet)
+    const openedAt = '2026-01-01T00:00:00Z'
+    const replacedAt = '2026-01-02T00:00:00Z'
+    const during = '2026-01-03T00:00:00Z'
+    const after = '2026-02-01T00:00:00Z'
+    let desk = openMandate({
+      orgName: 'Harbor HOA Reserve',
+      managerKey: oldKey,
+      whitelist: [SAMPLE_DESTINATION],
+      periodCapSats: DEFAULT_CAP_SATS,
+      periodDays: DEFAULT_PERIOD_DAYS,
+      feeBps: DEFAULT_FEE_BPS,
+      noticeDays: DEFAULT_NOTICE_DAYS,
+      ownerKey
+    }, openedAt, NONCE)
+    desk = fundMandate(desk, 1_000_000, openedAt)
+    desk = proposeChange(desk, 'manager', nextKey, replacedAt)
+    desk = await signOwnerRecords(owner.wallet, desk)
+    const local = await signManagerSends(oldManager.wallet, sendMandate(desk, SAMPLE_DESTINATION, 25_000, during))
+    expect(local.sends[0]?.txTime).toBeUndefined()
+    expect(local.sends[0]?.managerSig.length).toBeGreaterThan(16)
+    const backdated = deskFromRecords([
+      { ...desk.mandate!, txTime: openedAt, txClock: 'header' },
+      { ...desk.funds[0], txTime: openedAt, txClock: 'header' },
+      { ...desk.changes[0], txTime: replacedAt, txClock: 'header' },
+      local.sends[0]
+    ], desk.mandate!.mandateId)
+    expect(backdated?.changes).toHaveLength(1)
+    expect(backdated?.sends).toHaveLength(0)
+    expect(positionOf(backdated!, after)?.terms.managerKey).toBe(nextKey)
+    expect(positionOf(backdated!, after)?.balanceSats).toBe(1_000_000)
+    expect(positionOf(backdated!, during)?.spentThisPeriod).toBe(0)
+  })
 })

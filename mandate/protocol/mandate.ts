@@ -22,6 +22,12 @@
  * The performance fee is floor(periodGain × feeBps / 10000), in the 5–10%
  * band. v0 records the number. It does not pay it out.
  *
+ * The public book orders notice and manager replacement by a trusted clock.
+ * A BEEF merkle proof that matches a block header supplies that header's
+ * time. A time the overlay host supplies is host-asserted. Signer-chosen
+ * nLockTime is never a clock. With neither a header time nor a host-asserted
+ * time, a change stays pending and a send counts only from the current manager.
+ *
  * Not Treasury (a 2-of-3 board vault). Not Spend Policy (a spender following
  * a payee list). Not Credit (a draw against an invoice).
  */
@@ -35,8 +41,12 @@ export const SIGNING_KEY_ID = 'mandate'
 /** BRC-42 key id for the owner-lock output. Same counterparty, different child. */
 export const LOCK_KEY_ID = 'mandate-lock'
 export const SIGNING_COUNTERPARTY = 'anyone' as const
-/** BIP-113: a lockTime at or above this is a unix timestamp, not a block height. */
+/** BIP-113: a lockTime at or above this is a unix timestamp, not a block height. Not a mandate clock. */
 export const UNIX_LOCKTIME_MIN = 500_000_000
+/** Public-book change with no header time and no host-asserted time. It does not apply. */
+export const PUBLIC_PENDING_AT = '9999-12-31T00:00:00Z'
+export type TxClock = 'header' | 'host'
+export type DeskSource = 'walkthrough' | 'public'
 export const BASKET = 'mandate'
 export const MAGIC = 'mandate'
 export const SCHEMA_VERSION = '1'
@@ -104,8 +114,10 @@ export interface OpenRecord {
   lockHex: string
   /** DER hex. Empty until Record. */
   ownerSig: string
-  /** Block or broadcast time of the tx that published this record. Not signed. */
+  /** Header time, or a host-asserted time. Not nLockTime. Not signed. */
   txTime?: string
+  /** `header` when a BEEF merkle proof matches a block header. `host` when the overlay host asserted the time. */
+  txClock?: TxClock
 }
 
 export interface FundRecord {
@@ -116,8 +128,10 @@ export interface FundRecord {
   amountSats: number
   fundedAt: string
   ownerSig: string
-  /** Block or broadcast time of the tx that published this record. Not signed. */
+  /** Header time, or a host-asserted time. Not nLockTime. Not signed. */
   txTime?: string
+  /** `header` when a BEEF merkle proof matches a block header. `host` when the overlay host asserted the time. */
+  txClock?: TxClock
 }
 
 export interface GainRecord {
@@ -128,8 +142,10 @@ export interface GainRecord {
   gainSats: number
   markedAt: string
   ownerSig: string
-  /** Block or broadcast time of the tx that published this record. Not signed. */
+  /** Header time, or a host-asserted time. Not nLockTime. Not signed. */
   txTime?: string
+  /** `header` when a BEEF merkle proof matches a block header. `host` when the overlay host asserted the time. */
+  txClock?: TxClock
 }
 
 export interface SendRecord {
@@ -142,8 +158,10 @@ export interface SendRecord {
   sentAt: string
   /** DER hex of the manager signature. Empty until the manager records. */
   managerSig: string
-  /** Block or broadcast time of the tx that published this record. Not signed. */
+  /** Header time, or a host-asserted time. Not nLockTime. Not signed. */
   txTime?: string
+  /** `header` when a BEEF merkle proof matches a block header. `host` when the overlay host asserted the time. */
+  txClock?: TxClock
 }
 
 export interface RecallRecord {
@@ -154,8 +172,10 @@ export interface RecallRecord {
   amountSats: number
   recalledAt: string
   ownerSig: string
-  /** Block or broadcast time of the tx that published this record. Not signed. */
+  /** Header time, or a host-asserted time. Not nLockTime. Not signed. */
   txTime?: string
+  /** `header` when a BEEF merkle proof matches a block header. `host` when the overlay host asserted the time. */
+  txClock?: TxClock
 }
 
 export interface ChangeRecord {
@@ -170,8 +190,10 @@ export interface ChangeRecord {
   proposedAt: string
   effectiveAt: string
   ownerSig: string
-  /** Block or broadcast time of the tx that published this record. Not signed. */
+  /** Header time, or a host-asserted time. Not nLockTime. Not signed. */
   txTime?: string
+  /** `header` when a BEEF merkle proof matches a block header. `host` when the overlay host asserted the time. */
+  txClock?: TxClock
 }
 
 export type MandatePayload = OpenRecord | FundRecord | GainRecord | SendRecord | RecallRecord | ChangeRecord
@@ -185,6 +207,8 @@ export interface DeskState {
   changes: ChangeRecord[]
   rejection: string | null
   notice: string | null
+  /** Walkthrough uses stated times. The public book does not. */
+  source: DeskSource
 }
 
 export interface OpenInput {
@@ -334,14 +358,17 @@ export function mandateLock(ownerKey: string): string {
   return `21${child.toString().toLowerCase()}ac`
 }
 
-/** Unix lockTime for a publish instant, so the tx carries its own clock. */
+/** Unix nLockTime for a publish instant. Readers do not use this as the mandate clock. */
 export function lockTimeFromIso(iso: string): number {
   const seconds = Math.floor(Date.parse(iso) / 1000)
   if (!Number.isSafeInteger(seconds) || seconds < UNIX_LOCKTIME_MIN) throw new Error('Time is missing.')
   return seconds
 }
 
-/** ISO time when lockTime is a unix timestamp. Block heights return null. */
+/**
+ * ISO time when lockTime is a unix timestamp. Block heights return null.
+ * Not a mandate clock: the signer chooses nLockTime, including a past value.
+ */
 export function txTimeFromLockTime(lockTime: number): string | null {
   if (!Number.isInteger(lockTime) || lockTime < UNIX_LOCKTIME_MIN || lockTime > 0xffff_ffff) return null
   return nowIso(new Date(lockTime * 1000))
@@ -362,9 +389,14 @@ export function statedTime(row: MandatePayload): string {
   return row.proposedAt
 }
 
-/** Chain clock when the overlay or the tx supplied one. Otherwise the stated time. */
+/** Trusted clock when the record has one. Otherwise the stated time. */
 export function occurredAt(row: MandatePayload): string {
   return chainTime(row) ?? statedTime(row)
+}
+
+export function usesHostClock(state: DeskState): boolean {
+  const rows = [state.mandate, ...state.funds, ...state.gains, ...state.sends, ...state.recalls, ...state.changes]
+  return rows.some((row) => row?.txClock === 'host')
 }
 
 /** A payload must not claim it happened before the tx that published it. */
@@ -375,12 +407,13 @@ export function statedBeforeTx(row: MandatePayload): boolean {
 }
 
 /**
- * When the change carries a tx time, it cannot take effect before that tx
- * plus the notice the owner signed. A later signed effectiveAt still waits.
+ * When the change carries a trusted tx time, it cannot take effect before
+ * that time plus the notice the owner signed. A later signed effectiveAt
+ * still waits. On the public book, a change with no trusted time stays pending.
  */
-export function changeAppliesAt(change: ChangeRecord): string {
+export function changeAppliesAt(change: ChangeRecord, source: DeskSource = 'walkthrough'): string {
   const txTime = chainTime(change)
-  if (!txTime) return change.effectiveAt
+  if (!txTime) return source === 'public' ? PUBLIC_PENDING_AT : change.effectiveAt
   const earliest = addDays(txTime, change.noticeDays)
   return change.effectiveAt > earliest ? change.effectiveAt : earliest
 }
@@ -394,7 +427,8 @@ export function emptyDesk(): DeskState {
     recalls: [],
     changes: [],
     rejection: null,
-    notice: null
+    notice: null,
+    source: 'walkthrough'
   }
 }
 
@@ -526,10 +560,12 @@ type ReplayEvent =
   | { at: string, rank: number, index: number, kind: 'send', send: SendRecord }
   | { at: string, rank: number, index: number, kind: 'recall', recall: RecallRecord }
 
-export function positionOf(state: DeskState, at = nowIso()): Position | null {
+export function positionOf(state: DeskState, at?: string): Position | null {
   const mandate = state.mandate
   if (!mandate) return null
-  const until = assertTime(at)
+  const source = state.source ?? 'walkthrough'
+  const live = nowIso()
+  const until = at === undefined ? live : assertTime(at)
   const opened = occurredAt(mandate)
   let terms = termsFrom(mandate)
   let balanceSats = 0
@@ -537,7 +573,7 @@ export function positionOf(state: DeskState, at = nowIso()): Position | null {
   const counted: Array<{ amountSats: number, at: string }> = []
   const events: ReplayEvent[] = []
   state.changes.forEach((change, index) => {
-    const applies = changeAppliesAt(change)
+    const applies = changeAppliesAt(change, source)
     if (applies <= until) events.push({ at: applies, rank: 0, index, kind: 'change', change })
   })
   state.funds.forEach((fund, index) => {
@@ -549,7 +585,12 @@ export function positionOf(state: DeskState, at = nowIso()): Position | null {
     if (when <= until) events.push({ at: when, rank: 2, index, kind: 'gain', gain })
   })
   state.sends.forEach((send, index) => {
-    const when = occurredAt(send)
+    const tx = chainTime(send)
+    if (source === 'public' && !tx) {
+      if (Date.parse(until) >= Date.parse(live) - 120_000) events.push({ at: live, rank: 3, index, kind: 'send', send })
+      return
+    }
+    const when = tx ?? statedTime(send)
     if (when <= until) events.push({ at: when, rank: 3, index, kind: 'send', send })
   })
   state.recalls.forEach((recall, index) => {
@@ -764,7 +805,8 @@ function currentValue(terms: Terms, field: ChangeField): string {
 
 export function pendingChanges(state: DeskState, at = nowIso()): ChangeRecord[] {
   const until = isIsoDateTime(at) ? at : nowIso()
-  return state.changes.filter((change) => change.effectiveAt > until)
+  const source = state.source ?? 'walkthrough'
+  return state.changes.filter((change) => changeAppliesAt(change, source) > until)
 }
 
 export function validateOpen(mandate: OpenRecord): string | null {
@@ -1280,9 +1322,11 @@ export async function signRecordedDesk(wallet: RecordSigner, desk: DeskState): P
   return signManagerSends(wallet, owned)
 }
 
-function sendAcceptable(desk: DeskState, send: SendRecord): boolean {
+function sendAcceptable(desk: DeskState, send: SendRecord, readAt: string): boolean {
   if (statedBeforeTx(send)) return false
-  const position = positionOf(desk, occurredAt(send))
+  const source = desk.source ?? 'walkthrough'
+  const when = chainTime(send) ?? (source === 'public' ? readAt : statedTime(send))
+  const position = positionOf(desk, when)
   if (!position) return false
   if (!signatureOk(position.terms.managerKey, sendMessage(send), send.managerSig)) return false
   if (!position.terms.whitelist.includes(send.destinationKey)) return false
@@ -1323,7 +1367,9 @@ function acceptanceOrder(records: MandatePayload[]): MandatePayload[] {
 /**
  * Public book. Drops a mandate whose id is not sha256(ownerKey || nonce),
  * drops a record the owner or manager did not sign, and drops a send the
- * recorded whitelist or cap would refuse. Empty signatures do not count.
+ * recorded whitelist or cap would block. A change with no trusted time stays
+ * pending. A send with no trusted time counts only from the manager in force
+ * at the read, not from a backdated sentAt. Empty signatures do not count.
  */
 export function deskFromRecords(records: MandatePayload[], mandateId?: string): DeskState | null {
   const rows = keepMagic(records)
@@ -1335,15 +1381,18 @@ export function deskFromRecords(records: MandatePayload[], mandateId?: string): 
   }).sort((left, right) => (occurredAt(left) < occurredAt(right) ? -1 : occurredAt(left) > occurredAt(right) ? 1 : 0))
   const mandate = opens[0]
   if (!mandate) return null
-  let desk: DeskState = { ...emptyDesk(), mandate }
-  for (const row of acceptanceOrder(rows.filter((item) => item.kind !== 'open' && item.mandateId === mandate.mandateId))) {
+  let desk: DeskState = { ...emptyDesk(), mandate, source: 'public' }
+  const scoped = rows.filter((item) => item.kind !== 'open' && item.mandateId === mandate.mandateId)
+  const untimedSends = scoped.filter((row): row is SendRecord => row.kind === 'send' && !chainTime(row))
+  const ordered = acceptanceOrder(scoped.filter((row) => !(row.kind === 'send' && !chainTime(row))))
+  for (const row of ordered) {
     if (row.kind === 'fund' && signatureOk(mandate.ownerKey, fundMessage(row), row.ownerSig)) {
       desk = { ...desk, funds: [...desk.funds, row] }
     } else if (row.kind === 'gain' && signatureOk(mandate.ownerKey, gainMessage(row), row.ownerSig)) {
       desk = { ...desk, gains: [...desk.gains, row] }
     } else if (row.kind === 'change' && changeAcceptable(desk, row)) {
       desk = { ...desk, changes: [...desk.changes, row] }
-    } else if (row.kind === 'send' && sendAcceptable(desk, row)) {
+    } else if (row.kind === 'send' && sendAcceptable(desk, row, occurredAt(row))) {
       desk = { ...desk, sends: [...desk.sends, row] }
     } else if (row.kind === 'recall' && !statedBeforeTx(row)) {
       const position = positionOf(desk, occurredAt(row))
@@ -1351,6 +1400,10 @@ export function deskFromRecords(records: MandatePayload[], mandateId?: string): 
         desk = { ...desk, recalls: [...desk.recalls, row] }
       }
     }
+  }
+  const readAt = nowIso()
+  for (const send of untimedSends) {
+    if (sendAcceptable(desk, send, readAt)) desk = { ...desk, sends: [...desk.sends, send] }
   }
   return desk
 }

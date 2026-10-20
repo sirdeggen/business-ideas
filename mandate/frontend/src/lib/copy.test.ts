@@ -13,6 +13,7 @@ import {
   BUSINESS_CASE_TITLE,
   BUSINESS_CASE_WHO,
   BUSINESS_CASE_WHY,
+  CLOCK_NOTE,
   DESK_NOTE,
   EYEBROW,
   FOOTER,
@@ -219,8 +220,19 @@ describe('first-paint copy', () => {
     expect(RECEIPT_NOTE).toMatch(/does not pay the fee out/)
     expect(RECEIPT_NOTE).toMatch(/recall spends/)
     expect(RECEIPT_NOTE).not.toMatch(/does not move the org balance/)
+    expect(DESK_NOTE).toMatch(/the desk flags and blocks it/)
     expect(DESK_NOTE).toMatch(/before the wallet opens/)
     expect(DESK_NOTE).toMatch(/not in the script/)
+    expect(DESK_NOTE).not.toMatch(/refused/)
+    expect(CLOCK_NOTE).toMatch(/host-asserted/)
+    expect(CLOCK_NOTE).toMatch(/nLockTime/)
+    expect(CLOCK_NOTE).toMatch(/stays pending/)
+    expect(CLOCK_NOTE).not.toMatch(/lockTime/)
+    expect(face).toContain('{CLOCK_NOTE}')
+    expect(app).toContain('id="clock-note"')
+    expect(app).toContain('id="host-clock"')
+    expect(readme).toMatch(/host-asserted/)
+    expect(readme).not.toMatch(/unix lockTime/)
     expect(LOCAL_NOTE).toMatch(/desk rules/)
     expect(LOCAL_NOTE).toMatch(/locks the funded sats/)
     expect(LOCAL_NOTE).toMatch(/does not spend the lock/)
@@ -266,6 +278,7 @@ describe('Business case page copy is locked', () => {
     expect(BUSINESS_CASE_MARKET).not.toMatch(/\$448,341/)
     expect(BUSINESS_CASE_WHO).toMatch(/endowment/)
     expect(BUSINESS_CASE_WHO).toMatch(/does not hand over its keys/)
+    expect(BUSINESS_CASE_WHO).toMatch(/The desk takes a share of the manager's fee and charges managers to list in the mandate directory\./)
     expect(BUSINESS_CASE_PROOF_CHAIN).toMatch(/Sentora Curator/)
     expect(BUSINESS_CASE_PROOF_CHAIN).toMatch(/\$742,612/)
     expect(BUSINESS_CASE_PROOF_CHAIN).toMatch(/Steakhouse Financial/)
@@ -282,6 +295,8 @@ describe('Business case page copy is locked', () => {
       'https://defillama.com/protocol/steakhouse-financial'
     ])
     expect(BUSINESS_CASE_DEMO).toMatch(/whitelist/)
+    expect(BUSINESS_CASE_DEMO).toMatch(/the desk flags and blocks it/)
+    expect(BUSINESS_CASE_DEMO).not.toMatch(/refused/)
     expect(BUSINESS_CASE_DEMO).toMatch(/performance fee/)
     expect(BUSINESS_CASE_WHY).toMatch(/outside manager/)
   })

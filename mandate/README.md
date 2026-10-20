@@ -6,7 +6,7 @@ The owner lock is the owner's BRC-42 signing key (counterparty `anyone`, key id 
 
 The manager may send only to whitelisted destinations, and only inside a per-period cap. The manager’s fee accrues by formula: `floor(period gain × fee basis points / 10000)`, in the 5–10% band (500–1,000; default 800). Any change to the mandate needs the owner’s signature and waits out a notice period. v0 computes and records the whitelist, the cap, the fee, and the notice. The locking script does not read them. A recorded send does not spend the lock. `OP_PUSH_TX` enforcement of destinations, caps, and the fee output is v1.
 
-The public book also writes a 1-sat receipt for each record. It does not pay the fee out. A send counts on the public book only when the manager key signed it with BRC-100 `createSignature`, counterparty `anyone`, and only when its stated time is not before the tx that published it. The tx clock is the overlay block or broadcast time when the lookup record has one, otherwise the tx’s unix lockTime. Notice and manager replacement follow that order, not a backdated `proposedAt` or `sentAt`. Owner records (open, fund, gain, recall, change) are signed the same way, so a reader can verify them. The mandate id is `sha256(ownerKey || nonce)`.
+The public book also writes a 1-sat receipt for each record. It does not pay the fee out. A send counts on the public book only when the manager key signed it with BRC-100 `createSignature`, counterparty `anyone`, and only when its stated time is not before the tx that published it. Notice and manager replacement follow a block header time when the BEEF merkle proof matches that header. A time the overlay host supplies is labeled host-asserted. The desk never orders by nLockTime. With no header time and no host-asserted time, a change stays pending and a send from anyone but the current manager does not count. Owner records (open, fund, gain, recall, change) are signed the same way, so a reader can verify them. The mandate id is `sha256(ownerKey || nonce)`.
 
 This is not Treasury (a 2-of-3 board vault). This is not Spend Policy (a spender following a payee list and a daily cap). This is not Credit (a draw against an invoice). One owner lock, a hired manager, and a fee that accrues by formula.
 
@@ -41,7 +41,7 @@ Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access 
 2. Leave the org as Harbor HOA Reserve, the sample manager key, the sample whitelist destination, the cap at 100,000 sats, the period at 30 days, the fee at 800 basis points, and the notice at 14 days. Click **Open the mandate**. No wallet.
 3. Leave the fund at 1,000,000 sats and click **Record a fund**. The balance is recorded. The sats move into the owner lock when you record.
 4. Leave the gain at 50,000 sats and click **Mark the period gain**. The fee line shows 4,000 sats. That number is recorded. It is not paid out.
-5. Leave the destination on the whitelist and the amount at 25,000. Click **Send under the mandate**. Try a destination that is not listed, or an amount over the remaining cap. The page shows a sentence and does not open the wallet.
+5. Leave the destination on the whitelist and the amount at 25,000. Click **Send under the mandate**. Try a destination that is not listed, or an amount over the remaining cap. The desk flags and blocks it, and the page does not open the wallet.
 6. Click **Pull everything back**. Recording spends the owner-lock output and returns those sats to the owner.
 7. Set the new cap to 50,000 and click **Propose the change**. The page shows the date the change applies. Until then the current cap stays. The script does not read that clock.
 8. **Record on the public book** asks for the wallet and writes the owner-signed mandate to `tm_anytx`. A send is counted there only after the manager key signs it. Install Desktop appears only if the wallet is missing.
@@ -70,7 +70,7 @@ npm test
 npm run build
 ```
 
-Encode/decode, fee floor math in the 5–10% band, whitelist and cap refusal, full recall, notice period, owner `OP_CHECKSIG` lock, BRC-100 `createSignature` with counterparty `anyone`, MAGIC `mandate` filter, overlay topic is `tm_anytx` even on localhost, first-paint copy (no wallet gate, no Install Desktop until a wallet failure). Deep links use `?m=` not `/m/`. Catalog stays Server / View. StreamPay and Grant stay Live.
+Encode/decode, fee floor math in the 5–10% band, the desk flags and blocks a send outside the whitelist or over the cap, full recall, notice period, a backdated change with no trusted time stays pending, a backdated send from a replaced manager with no trusted time is dropped, owner `OP_CHECKSIG` lock, BRC-100 `createSignature` with counterparty `anyone`, MAGIC `mandate` filter, overlay topic is `tm_anytx` even on localhost, first-paint copy (no wallet gate, no Install Desktop until a wallet failure). Deep links use `?m=` not `/m/`. Catalog stays Server / View. StreamPay and Grant stay Live.
 
 ## Protocol constants
 

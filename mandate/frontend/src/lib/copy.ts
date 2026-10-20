@@ -19,7 +19,8 @@ export const RECALL_JOB = 'The owner spends the owner-lock output and pulls thos
 export const CHANGE_JOB = 'A change needs the owner’s signature and waits out the notice period. Until then the current rules stay.'
 export const RECORD_JOB = 'The walkthrough is done here. A wallet only writes the public record.'
 export const RECEIPT_NOTE = 'The script enforces one thing: the fund output locks to the owner signing key and OP_CHECKSIG, so only the owner can spend it, and a recall spends that output to pull the sats back. This page computes and records the whitelist, the per-period cap, the performance fee, and the notice period. The locking script does not read them. OP_PUSH_TX enforcement is v1. A recorded send does not spend the lock, and the record does not pay the fee out.'
-export const DESK_NOTE = 'A send outside the whitelist or over the remaining cap is refused before the wallet opens. That refusal is a desk check. It is not in the script.'
+export const DESK_NOTE = 'A send outside the whitelist or over the remaining cap: the desk flags and blocks it before the wallet opens. That block is a desk check. It is not in the script.'
+export const CLOCK_NOTE = 'Notice and manager replacement follow a block header time when the BEEF merkle proof matches that header. A time the overlay host supplies is labeled host-asserted. The desk never orders by nLockTime. With no header time and no host-asserted time, a change stays pending and a send from anyone but the current manager does not count.'
 export const FEE_HELPER = 'Performance fee is a percent of the marked gain, from 5% to 10%. 800 basis points is 8%. 50,000 sats of gain at 800 accrues 4,000 sats. v0 records that number.'
 export const LOCAL_NOTE = 'The walkthrough keeps the mandate in this browser until you record. Whitelist, cap, fee, and notice are desk rules until a later version puts them in the script. Record locks the funded sats to the owner. Recall spends that output. A recorded send does not spend the lock and does not pay the accrued fee. A manager send counts on the public book only when the manager key signed it.'
 export const STRANGER_LINE = 'Anyone with this link can read the mandate, the cap still left, and the accrued fee. No wallet to look.'
@@ -52,7 +53,7 @@ export const BUSINESS_CASE_WHY =
   'An endowment, an HOA reserve, or a club treasury hires an outside manager without handing over its keys. The manager can move funds only inside rules the org set. The org can always take the funds back.'
 
 export const BUSINESS_CASE_WHO =
-  'The org pays to run the mandate: an endowment, an HOA, or a club. The manager is paid the performance fee the formula records, in the 5% to 10% band. The org does not hand over its keys.'
+  'The org pays to run the mandate: an endowment, an HOA, or a club. The manager is paid the performance fee the formula records, in the 5% to 10% band. The org does not hand over its keys. The desk takes a share of the manager\'s fee and charges managers to list in the mandate directory.'
 
 export const BUSINESS_CASE_MARKET =
   'Institutions already hire an outside chief investment officer and keep the pool. Chief Investment Officer, citing Chestnut Advisory’s 2025 Global OCIO study, reported the U.S. outsourced-CIO market at $2.5 trillion of assets in 2025, up 16% on the year, about 75% of global OCIO assets. What an endowment, HOA, or club would pay for this mandate is unknown.'
@@ -66,7 +67,7 @@ export const BUSINESS_CASE_PROOF_FIAT =
 export const BUSINESS_CASE_PROOF = `${BUSINESS_CASE_PROOF_CHAIN} ${BUSINESS_CASE_PROOF_FIAT}`
 
 export const BUSINESS_CASE_DEMO =
-  'An org names an outside manager, a whitelist, a per-period cap, and a performance fee. A send outside the whitelist or over the cap is refused. The fee line shows the formula. The owner pulls the balance back. A change waits out the notice period.'
+  'An org names an outside manager, a whitelist, a per-period cap, and a performance fee. A send outside the whitelist or over the cap: the desk flags and blocks it. The fee line shows the formula. The owner pulls the balance back. A change waits out the notice period.'
 
 export const BUSINESS_CASE_CITATIONS = [
   { href: 'https://www.ai-cio.com/news/us-ocio-market-reached-2-5t-in-2025/', label: 'Chief Investment Officer 2025' },

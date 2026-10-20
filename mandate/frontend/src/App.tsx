@@ -15,6 +15,7 @@ import {
   openMandate,
   pendingChanges,
   positionOf,
+  usesHostClock,
   proposeChange,
   recallMandate,
   sendMandate,
@@ -41,6 +42,7 @@ import {
   CHANGE_FIELD_LABEL,
   CHANGE_JOB,
   CHANGE_VALUE_LABEL,
+  CLOCK_NOTE,
   DESK_NOTE,
   DESTINATION_LABEL,
   EYEBROW,
@@ -332,7 +334,8 @@ function Shell() {
         recalls: row.recalls,
         changes: row.changes,
         rejection: null,
-        notice: null
+        notice: null,
+        source: 'public'
       })
       setReadonly(true)
     }
@@ -372,6 +375,7 @@ function Shell() {
 
           <BusinessCase />
           <p className="receipt-note">{RECEIPT_NOTE}</p>
+          <p className="helper" id="clock-note">{CLOCK_NOTE}</p>
 
           {!mandate && (
             <section className="block">
@@ -449,6 +453,7 @@ function Shell() {
                 </div>
               </dl>
               <p className="helper">{DESK_NOTE}</p>
+              {usesHostClock(desk) && <p id="host-clock">A time on this mandate is host-asserted.</p>}
               <p className="helper">{STRANGER_LINE}</p>
               <div className="actions">
                 <button type="button" className="btn" onClick={() => void copyLink()}>
@@ -467,7 +472,9 @@ function Shell() {
           )}
           {waiting.length > 0 && (
             <p id="notice-line">
-              Change to {waiting.at(-1)?.field} applies {formatWhen(waiting.at(-1)?.effectiveAt ?? '')}. The current rules stay until then. The notice clock is recorded. The script does not read it.
+              {desk.source === 'public' && !waiting.at(-1)?.txTime
+                ? `Change to ${waiting.at(-1)?.field} stays pending. There is no block header time and no host-asserted time, so the notice has not started. The current rules stay.`
+                : `Change to ${waiting.at(-1)?.field} applies ${formatWhen(waiting.at(-1)?.effectiveAt ?? '')}. The current rules stay until then. ${waiting.at(-1)?.txClock === 'host' ? 'The publish time is host-asserted.' : 'The notice clock is recorded. The script does not read it.'}`}
             </p>
           )}
 

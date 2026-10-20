@@ -13,13 +13,15 @@ import {
   MAGIC,
   bookFromRecords,
   deskFromRecords,
+  UNIX_LOCKTIME_MIN,
   isIsoDateTime,
   keepMagic,
+  nowIso,
   parseMandateFields,
-  txTimeFromLockTime,
   type BookMandate,
   type DeskState,
-  type MandatePayload
+  type MandatePayload,
+  type TxClock
 } from '../../../protocol/mandate'
 import { PUBLIC_LOOKUP, PUBLIC_TOPIC } from './config'
 
@@ -27,8 +29,10 @@ export interface OverlayItem {
   payload: MandatePayload
   txid: string
   outputIndex: number
-  /** Block time, overlay broadcast time, or the tx unix lockTime. */
+  /** Header time, or a host-asserted time. Never nLockTime. */
   txTime?: string
+  /** `header` when a merkle proof matches a block header. `host` when the overlay host asserted the time. */
+  txClock?: TxClock
 }
 
 export interface SubmitResult {
@@ -259,7 +263,7 @@ export interface ListedMandate extends BookMandate {
 
 function withChainTime(item: OverlayItem): MandatePayload {
   if (!item.txTime) return item.payload
-  return { ...item.payload, txTime: item.txTime }
+  return { ...item.payload, txTime: item.txTime, ...(item.txClock ? { txClock: item.txClock } : {}) }
 }
 
 export function bookFromItems(items: OverlayItem[]): ListedMandate[] {
@@ -283,13 +287,17 @@ function isoClock(value: unknown): string | null {
   return isIsoDateTime(trimmed) ? trimmed : null
 }
 
-/** Overlay block or broadcast time, when the lookup output carries one. */
+/**
+ * Host-asserted overlay time. The host states it. A merkle proof does not check it.
+ * Prefer {@link headerTimeFromTx} when a block header is present.
+ */
 export function chainTimeFromOutput(output: {
   blockTime?: unknown
   broadcastTime?: unknown
   createdAt?: unknown
   admittedAt?: unknown
   context?: number[]
+  blockHeader?: unknown
 }): string | null {
   for (const key of OVERLAY_TIME_KEYS) {
     const found = isoClock(output[key])
@@ -327,17 +335,113 @@ async function queryAnytx(host: string, service: string, query: MandateQuery): P
   return answers
 }
 
-function itemsFromBeef(beef: number[] | undefined, txidHint?: string, overlayTime?: string | null): OverlayItem[] {
+function hexToBytes(hex: string): Uint8Array | null {
+  const clean = hex.trim().toLowerCase()
+  if (!/^[0-9a-f]*$/.test(clean) || clean.length % 2 !== 0) return null
+  const out = new Uint8Array(clean.length / 2)
+  for (let i = 0; i < out.length; i++) out[i] = Number.parseInt(clean.slice(i * 2, i * 2 + 2), 16)
+  return out
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function headerBytes(value: unknown): Uint8Array | null {
+  if (value instanceof Uint8Array && value.length === 80) return new Uint8Array(value)
+  if (Array.isArray(value) && value.length === 80 && value.every((byte) => typeof byte === 'number')) {
+    return Uint8Array.from(value)
+  }
+  if (typeof value !== 'string') return null
+  const bytes = hexToBytes(value)
+  return bytes?.length === 80 ? bytes : null
+}
+
+/** 80-byte header whose merkle root is `merkleRootHex` (display order) and whose time is `timestampSeconds`. */
+export function blockHeaderForRoot(merkleRootHex: string, timestampSeconds: number): string {
+  const root = hexToBytes(merkleRootHex)
+  if (!root || root.length !== 32) throw new Error('Merkle root is missing.')
+  if (!Number.isInteger(timestampSeconds) || timestampSeconds < UNIX_LOCKTIME_MIN) throw new Error('Header time is missing.')
+  const header = new Uint8Array(80)
+  const view = new DataView(header.buffer)
+  view.setUint32(0, 1, true)
+  header.set(root.slice().reverse(), 36)
+  view.setUint32(68, timestampSeconds >>> 0, true)
+  view.setUint32(72, 0x1d00ffff, true)
+  return bytesToHex(header)
+}
+
+/**
+ * Block header time when the tx's BEEF merkle proof computes the header's merkle root.
+ * A proof without a header, or a header that does not match, is not a clock.
+ */
+export function headerTimeFromTx(tx: Transaction, blockHeader: unknown): string | null {
+  const header = headerBytes(blockHeader)
+  if (!header || !tx.merklePath) return null
+  let root = ''
+  try {
+    root = tx.merklePath.computeRoot(tx.id('hex')).toLowerCase()
+  } catch {
+    return null
+  }
+  const embedded = bytesToHex(header.slice(36, 68).reverse())
+  if (embedded !== root) return null
+  const seconds = new DataView(header.buffer, header.byteOffset, header.byteLength).getUint32(68, true)
+  if (!Number.isInteger(seconds) || seconds < UNIX_LOCKTIME_MIN) return null
+  return nowIso(new Date(seconds * 1000))
+}
+
+/** Header time wins. Otherwise a host-asserted time. nLockTime is not read. */
+export function publicationClock(
+  tx: Transaction,
+  hostTime: string | null,
+  blockHeader?: unknown
+): { txTime?: string, txClock?: TxClock } {
+  const headerTime = headerTimeFromTx(tx, blockHeader)
+  if (headerTime) return { txTime: headerTime, txClock: 'header' }
+  const host = hostTime?.trim().replace(/\.\d{3}Z$/, 'Z') ?? ''
+  if (isIsoDateTime(host)) return { txTime: host, txClock: 'host' }
+  return {}
+}
+
+function blockHeaderValue(output: { blockHeader?: unknown, context?: number[] }): unknown {
+  if (output.blockHeader) return output.blockHeader
+  if (!output.context || output.context.length === 0) return null
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(Uint8Array.from(output.context))) as { blockHeader?: unknown }
+    return parsed.blockHeader ?? null
+  } catch {
+    return null
+  }
+}
+
+export interface LookupOutput {
+  beef?: number[]
+  txid?: string
+  blockHeader?: unknown
+  blockTime?: unknown
+  broadcastTime?: unknown
+  createdAt?: unknown
+  admittedAt?: unknown
+  context?: number[]
+}
+
+function itemsFromBeef(
+  beef: number[] | undefined,
+  txidHint?: string,
+  hostTime?: string | null,
+  blockHeader?: unknown
+): OverlayItem[] {
   if (!beef || beef.length === 0) return []
   try {
     const tx = txFromWalletBeef(beef)
     const txid = txidHint || tx.id('hex')
-    const txTime = overlayTime ?? txTimeFromLockTime(tx.lockTime) ?? undefined
+    const clock = publicationClock(tx, hostTime ?? null, blockHeader)
     const rows: OverlayItem[] = []
     for (const [outputIndex, output] of tx.outputs.entries()) {
       const payload = parseScript(output.lockingScript)
       if (!payload) continue
-      rows.push({ payload, txid, outputIndex, txTime })
+      rows.push({ payload, txid, outputIndex, ...clock })
     }
     return rows
   } catch {
@@ -345,19 +449,18 @@ function itemsFromBeef(beef: number[] | undefined, txidHint?: string, overlayTim
   }
 }
 
+/** Read mandate rows from one lookup output. Does not use nLockTime. */
+export function itemsFromLookupOutput(output: LookupOutput): OverlayItem[] {
+  const hostTime = chainTimeFromOutput(output)
+  return itemsFromBeef(output.beef, output.txid, hostTime, blockHeaderValue(output))
+}
+
 function itemsFromAnswer(answer: LookupAnswer): OverlayItem[] {
   if (answer.type !== 'output-list' || !Array.isArray(answer.outputs)) return []
   const seen = new Set<string>()
   const rows: OverlayItem[] = []
   for (const output of answer.outputs) {
-    const overlayTime = chainTimeFromOutput(output as {
-      blockTime?: unknown
-      broadcastTime?: unknown
-      createdAt?: unknown
-      admittedAt?: unknown
-      context?: number[]
-    })
-    const decoded = itemsFromBeef(output.beef, output.txid, overlayTime)
+    const decoded = itemsFromLookupOutput(output as LookupOutput)
     for (const item of decoded) {
       const key = `${item.txid}.${item.outputIndex}`
       if (seen.has(key)) continue
