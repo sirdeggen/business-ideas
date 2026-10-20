@@ -167,6 +167,58 @@ h2 {
 .business-case dd ul { margin: 0; padding-left: 1.15em; }
 .business-case dd li + li { margin-top: 6px; }
 
+.business-case .cite-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.business-case .cite-chip {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  border: 1px solid rgba(217, 70, 239, 0.55);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: rgba(217, 70, 239, 0.14);
+}
+
+.business-case .cite-chip:hover,
+.business-case .cite-chip:focus-visible {
+  background: rgba(217, 70, 239, 0.24);
+}
+
+.business-case .sources {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hair);
+}
+
+.business-case .sources h3 {
+  margin: 0 0 8px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.business-case .sources ul {
+  margin: 0;
+  padding-left: 1.15em;
+}
+
+.business-case .sources li + li { margin-top: 4px; }
+
+.business-case .sources a {
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .receipt-note {
   margin: -8px 2px 22px;
   font-size: 13px;

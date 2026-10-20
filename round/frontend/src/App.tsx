@@ -524,8 +524,9 @@ function Shell() {
                   ))}
                 </ul>
               )}
-              {preview?.outcome === 'open' && !desk.close && <p className="helper">Still under the minimum. It stays open until the deadline, then every backer is refunded.</p>}
-              {desk.close?.outcome === 'refund' && <p className="status ok">Under the minimum. Every backer is refunded.</p>}
+              {preview?.outcome === 'open' && !desk.close && <p className="helper">Still under the minimum. It stays open until the deadline, then a refund is computed for every backer.</p>}
+              {preview?.outcome === 'pending' && !desk.close && <p className="helper">Pending. The public book has no overlay time yet, so this raise is not a refund.</p>}
+              {desk.close?.outcome === 'refund' && <p className="status ok">Under the minimum. The refund is computed for every backer. v0 does not spend it.</p>}
               {desk.close?.outcome === 'settled' && <p className="status ok">Settled at {formatAmount(desk.close.clearingPriceSats)} sats per unit.</p>}
               {!desk.close && !readonly && (
                 <div className="actions">

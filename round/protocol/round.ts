@@ -177,7 +177,7 @@ export interface CloseRecord {
 export type RoundPayload = RoundTerms | EligibilityRecord | CommitRecord | CloseRecord
 
 export interface Allocation {
-  outcome: 'open' | 'refund' | 'settled'
+  outcome: 'open' | 'refund' | 'settled' | 'pending'
   qualifiedSats: number
   acceptedSats: number
   clearingPriceSats: number
@@ -252,15 +252,18 @@ export function provenInstant(stamp: TxStamp | undefined): string | null {
   return txEvidenceAt(stamp) ?? lockTimeBound(stamp?.lockTime)
 }
 
+/** Host context or a lock time at/after the deadline. No context is unproven, not a refund. */
+function chainTiming(deadline: string, stamp: TxStamp | undefined): 'early' | 'late' | 'unproven' {
+  const txAt = txEvidenceAt(stamp)
+  if (txAt) return Date.parse(txAt) < Date.parse(deadline) ? 'early' : 'late'
+  const bound = lockTimeBound(stamp?.lockTime)
+  if (bound && Date.parse(bound) >= Date.parse(deadline)) return 'late'
+  return 'unproven'
+}
+
 function onTime(stated: string, deadline: string, stamp: TxStamp | undefined, fromChain: boolean): boolean {
   if (!fromChain) return isIsoDateTime(stated) && Date.parse(stated) < Date.parse(deadline)
-  const txAt = txEvidenceAt(stamp)
-  if (txAt) return Date.parse(txAt) < Date.parse(deadline)
-  const bound = lockTimeBound(stamp?.lockTime)
-  if (!bound) return false
-  if (Date.parse(bound) >= Date.parse(deadline)) return false
-  if (isIsoDateTime(stated) && Date.parse(stated) < Date.parse(bound)) return false
-  return false
+  return chainTiming(deadline, stamp) === 'early'
 }
 
 function orderAt(stated: string, stamp: TxStamp | undefined, fromChain: boolean, tie: string): string {
@@ -278,7 +281,7 @@ export interface ListedRound {
   roundId: string
   txid: string | null
   terms: RoundTerms
-  outcome: 'open' | 'refund' | 'settled'
+  outcome: 'open' | 'refund' | 'settled' | 'pending'
   qualifiedSats: number
 }
 
@@ -776,6 +779,9 @@ export function allocateRound(
     }
   })
   const qualifiedSats = lines.reduce((sum, line) => sum + (line.qualified ? line.committedSats : 0), 0)
+  if (fromChain && unique.some((row) => chainTiming(terms.deadline, options.commitStamps?.get(row.commitId)) === 'unproven')) {
+    return { outcome: 'pending', qualifiedSats: 0, acceptedSats: 0, clearingPriceSats: 0, lines }
+  }
   const deadlinePassed = fromChain
     ? (() => {
       const instant = provenInstant(options.closeStamp)
@@ -895,7 +901,7 @@ function sortLines(lines: SettlementLine[]): SettlementLine[] {
 }
 
 export function settlementMatches(close: CloseRecord, allocation: Allocation): boolean {
-  if (allocation.outcome === 'open' || close.outcome !== allocation.outcome) return false
+  if (allocation.outcome === 'open' || allocation.outcome === 'pending' || close.outcome !== allocation.outcome) return false
   if (close.qualifiedSats !== allocation.qualifiedSats) return false
   if (close.acceptedSats !== allocation.acceptedSats) return false
   if (close.clearingPriceSats !== allocation.clearingPriceSats) return false
@@ -910,7 +916,7 @@ export function closeRound(desk: DeskState, at: string): DeskState {
   if (!isIsoDateTime(at)) return reject(desk, 'Close time is missing.')
   if (desk.commits.length < 1) return reject(desk, NEEDS_COMMIT_REJECTION)
   const allocation = allocateRound(desk.terms, desk.commits, desk.eligibilities, at)
-  if (allocation.outcome === 'open') return reject(desk, OPEN_REJECTION)
+  if (allocation.outcome === 'open' || allocation.outcome === 'pending') return reject(desk, OPEN_REJECTION)
   const close: CloseRecord = {
     magic: MAGIC,
     version: SCHEMA_VERSION,

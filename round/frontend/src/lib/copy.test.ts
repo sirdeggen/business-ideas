@@ -3,10 +3,13 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
+  BUSINESS_CASE_CITATIONS,
   BUSINESS_CASE_DEMO,
   BUSINESS_CASE_FIELDS,
   BUSINESS_CASE_MARKET,
   BUSINESS_CASE_PROOF,
+  BUSINESS_CASE_PROOF_CHAIN,
+  BUSINESS_CASE_PROOF_FIAT,
   BUSINESS_CASE_TITLE,
   BUSINESS_CASE_WHO,
   BUSINESS_CASE_WHY,
@@ -53,7 +56,8 @@ describe('first-paint copy', () => {
     expect(TITLE).toBe('Round Desk')
     expect(PRODUCT).toBe('Round Desk')
     expect(LEDE).toMatch(/minimum/)
-    expect(LEDE).toMatch(/refunded/)
+    expect(LEDE).toMatch(/issuer/)
+    expect(LEDE).toMatch(/computed/)
     expect(OPEN_BUTTON).toBe('Open the raise')
     expect(RECORD_BUTTON).toBe('Record on the public book')
     expect(app).toContain('{LEDE}')
@@ -93,9 +97,13 @@ describe('first-paint copy', () => {
   it('is a compliance-first raise, with the script and the computed record named apart', () => {
     expect(FOOTER).toMatch(/No token market/)
     expect(FOOTER).toMatch(/no secondary trading/)
-    expect(SCRIPT_NOTE).toMatch(/funds each commitment/)
+    expect(SCRIPT_NOTE).toMatch(/issuer custody/)
     expect(SCRIPT_NOTE).toMatch(/does not read the minimum/)
-    expect(DESK_NOTE).toMatch(/transaction time/)
+    expect(SCRIPT_NOTE).toMatch(/no on-chain refund/)
+    expect(DESK_NOTE).toMatch(/overlay host/)
+    expect(DESK_NOTE).toMatch(/pending/)
+    expect(DESK_NOTE).toMatch(/nLockTime/)
+    expect(DESK_NOTE).toMatch(/issuer/)
     expect(readme).toMatch(/createAction/)
     expect(readme).toMatch(/does not treat any other script/)
     expect(DESK_NOTE).toMatch(/OP_PUSH_TX/)
@@ -205,22 +213,29 @@ describe('first-paint copy', () => {
     expect(app).toContain('id="public-book"')
     expect(BUSINESS_CASE_WHY).not.toMatch(/\bBSV\b/)
     expect(LEDE).not.toMatch(/\bBSV\b/)
-    expect(BUSINESS_CASE_MARKET).toMatch(/TAM/)
-    expect(BUSINESS_CASE_MARKET).toMatch(/\$375 million/)
-    expect(BUSINESS_CASE_MARKET).toMatch(/Echo/)
-    expect(BUSINESS_CASE_MARKET).toMatch(/Sonar/)
-    expect(BUSINESS_CASE_MARKET).toMatch(/Reuters/)
-    expect(BUSINESS_CASE_MARKET).toMatch(/21 October 2025/)
-    expect(BUSINESS_CASE_MARKET).not.toMatch(/\$8\.4 million/)
-    expect(BUSINESS_CASE_WHO).toMatch(/co-op/)
-    expect(BUSINESS_CASE_PROOF).toMatch(/\$8\.4 million/)
-    expect(BUSINESS_CASE_PROOF).toMatch(/7 September 2026/)
-    expect(BUSINESS_CASE_PROOF).toMatch(/Ethos/)
-    expect(BUSINESS_CASE_PROOF).toMatch(/Gate News/)
-    expect(BUSINESS_CASE_PROOF).not.toMatch(/\$375 million/)
-    const once = [BUSINESS_CASE_WHY, BUSINESS_CASE_WHO, BUSINESS_CASE_MARKET, BUSINESS_CASE_PROOF, BUSINESS_CASE_DEMO].join(' ')
-    expect(once.match(/\$375 million/g)).toHaveLength(1)
-    expect(once.match(/\$8\.4 million/g)).toHaveLength(1)
+    expect(BUSINESS_CASE_MARKET).toBe('Echo raised $200M+ across ~300 deals by Oct 2025, and Coinbase bought it for ~$375M (Reuters, 21 Oct 2025). DefiLlama shows ~$325k fee revenue over the past year, and it arrives in lumps. Share of community raises this desk can take is unknown.')
+    expect(BUSINESS_CASE_MARKET).not.toMatch(/TAM signal/)
+    expect(BUSINESS_CASE_WHO).toBe('The business running the raise pays a percentage of a successful raise; backers pay a small fee per eligibility check. v0 shows the fee but does not charge it.')
+    expect(BUSINESS_CASE_PROOF_CHAIN).toBe('Other-chain analog: Ethos\'s token sale on Sonar drew $8.4M in bids (Gate News, 7 Sep 2026).')
+    expect(BUSINESS_CASE_PROOF_CHAIN.startsWith('Other-chain analog:')).toBe(true)
+    expect(BUSINESS_CASE_PROOF_CHAIN).not.toMatch(/token market/)
+    expect(BUSINESS_CASE_PROOF_FIAT).toBe('Regulated crowdfunding portals and co-op member-share offerings, where issuers already pay a percentage of the money raised.')
+    expect(BUSINESS_CASE_PROOF_FIAT).not.toMatch(/\$/)
+    const prose = [BUSINESS_CASE_WHY, BUSINESS_CASE_WHO, BUSINESS_CASE_MARKET, BUSINESS_CASE_PROOF, BUSINESS_CASE_DEMO].join(' ')
+    expect(prose).not.toMatch(/https?:\/\//)
+    expect(prose.match(/\$200M\+/g)).toHaveLength(1)
+    expect(prose.match(/~\$375M/g)).toHaveLength(1)
+    expect(prose.match(/~\$325k/g)).toHaveLength(1)
+    expect(prose.match(/\$8\.4M/g)).toHaveLength(1)
+    expect(BUSINESS_CASE_CITATIONS.map((cite) => cite.label)).toEqual([
+      'Coinbase, 21 Oct 2025',
+      'Reuters, 21 Oct 2025',
+      'DefiLlama Echo',
+      'Gate News, 7 Sep 2026'
+    ])
+    expect(BUSINESS_CASE_CITATIONS.every((cite) => cite.href.startsWith('https://'))).toBe(true)
+    expect(businessCase).toContain('className="cite-chip"')
+    expect(businessCase).toContain('<h3>Sources</h3>')
     expect(BUSINESS_CASE_DEMO).toMatch(/no secondary trading/i)
     const how = app.slice(app.indexOf('<summary>How it works</summary>'), app.indexOf('<summary>Advanced</summary>'))
     expect(how).toContain('{LOCAL_NOTE}')

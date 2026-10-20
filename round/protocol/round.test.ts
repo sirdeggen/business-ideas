@@ -25,6 +25,7 @@ import {
   V1_NOTE,
   allocateRound,
   canonicalDisclosure,
+  bookFromChain,
   closeRound,
   commitIdFor,
   commitToRound,
@@ -419,8 +420,36 @@ describe('signed records', () => {
       eligibilityStamps: new Map([[eligibilityStampKey(desk.eligibilities[0]!), { txAt: LATER }]]),
       closeStamp: { lockTime: earlyLock }
     })
-    expect(unproven.outcome).toBe('open')
+    expect(unproven.outcome).toBe('pending')
     expect(unproven.lines[0]?.qualified).toBe(false)
+  })
+
+  it('stays pending when the overlay host sent no time, instead of reading a refund', async () => {
+    const { wallet, identity } = walletOf()
+    const issuer = (await identity).toLowerCase()
+    let desk = opened({ priceSats: 1_000, minSats: 3_000, maxSats: 10_000 }, issuer)
+    desk = withBacker(desk, SAMPLE_BACKER, 5_000, LATER, COMMIT_NONCE)
+    const trusted = closeRound(desk, PAST)
+    expect(trusted.close?.outcome).toBe('settled')
+    const signed = await signRecordedDesk(wallet, trusted)
+    const lock = escrowLockingKey(issuer, signed.terms!.roundId)
+    const txid = 'dd'.repeat(32)
+    const rows = [
+      { txid, vout: 0, lockingPublicKey: lock, payload: signed.terms! },
+      { txid, vout: 1, lockingPublicKey: lock, payload: signed.eligibilities[0]! },
+      { txid, vout: 2, lockingPublicKey: lock, payload: signed.commits[0]! },
+      { txid, vout: 3, lockingPublicKey: lock, payload: signed.close! }
+    ]
+    expect(deskFromChain(rows)?.close).toBeNull()
+    expect(bookFromChain(rows)[0]?.outcome).toBe('pending')
+    const noContext = allocateRound(signed.terms!, signed.commits, signed.eligibilities, PAST, {
+      fromChain: true,
+      commitStamps: new Map([[signed.commits[0]!.commitId, {}]]),
+      eligibilityStamps: new Map([[eligibilityStampKey(signed.eligibilities[0]!), {}]]),
+      closeStamp: {}
+    })
+    expect(noContext.outcome).toBe('pending')
+    expect(noContext.outcome).not.toBe('refund')
   })
 })
 

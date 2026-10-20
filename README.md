@@ -8,7 +8,7 @@ The catalog lists newest ideas first. Prepend the next Server demo at the top of
 
 ## Round Desk
 
-Run a raise with a minimum, a maximum, and a deadline. Backers commit. Under the minimum, everyone is refunded.
+Run a raise with a minimum, a maximum, and a deadline. Backers commit. v0 holds the escrow in the issuer's custody, and a refund is only computed.
 
 - Pages UI: https://sirdeggen.github.io/business-ideas/round/
 - How to run: [round/README.md](./round/README.md)
