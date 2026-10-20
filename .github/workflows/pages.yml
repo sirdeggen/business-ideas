@@ -69,6 +69,8 @@ jobs:
             keepsake/frontend/package-lock.json
             # bounty-desk
             bounty/frontend/package-lock.json
+            # capture-desk
+            capture/frontend/package-lock.json
       - name: Install and build tickets
         working-directory: event-tickets/frontend
         env:
@@ -338,6 +340,16 @@ jobs:
           npm ci
           npm run build
           cp dist/index.html dist/404.html
+      # capture-desk
+      - name: Install and build capture
+        working-directory: capture/frontend
+        env:
+          VITE_BASE: /business-ideas/capture/
+          VITE_OVERLAY_URL: https://overlay-us-1.bsvb.tech
+        run: |
+          npm ci
+          npm run build
+          cp dist/index.html dist/404.html
       # scrip-desk
       - name: Install and build scrip
         working-directory: scrip/frontend
@@ -370,7 +382,7 @@ jobs:
           cp dist/index.html dist/404.html
       - name: Compose Pages site
         run: |
-          mkdir -p site/tickets site/receivables site/invoices site/treasury site/streampay site/grants site/records site/raffle site/spend-policy site/session site/datasets site/memberships site/names site/titles site/trace site/job-escrow site/vault-claim site/kya site/vouch site/handoff site/credit site/registry site/scenes site/feed site/inference site/cover site/closing site/private-pay site/boost site/scrip site/check site/keepsake site/bounty
+          mkdir -p site/tickets site/receivables site/invoices site/treasury site/streampay site/grants site/records site/raffle site/spend-policy site/session site/datasets site/memberships site/names site/titles site/trace site/job-escrow site/vault-claim site/kya site/vouch site/handoff site/credit site/registry site/scenes site/feed site/inference site/cover site/closing site/private-pay site/boost site/scrip site/check site/keepsake site/bounty site/capture
           cp pages/index.html pages/styles.css site/
           cp -r pages/scenes/. site/scenes/
           cp -r event-tickets/frontend/dist/. site/tickets/
@@ -410,6 +422,8 @@ jobs:
           cp -r boost/frontend/dist/. site/boost/
           # bounty-desk
           cp -r bounty/frontend/dist/. site/bounty/
+          # capture-desk
+          cp -r capture/frontend/dist/. site/capture/
           # scrip-desk
           cp -r scrip/frontend/dist/. site/scrip/
           # check-desk
