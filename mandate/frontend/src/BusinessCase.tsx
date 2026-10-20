@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import {
-  BUSINESS_CASE_BUYER,
+  BUSINESS_CASE_CITATIONS,
   BUSINESS_CASE_DEMO,
+  BUSINESS_CASE_MARKET,
   BUSINESS_CASE_PROOF_CHAIN,
   BUSINESS_CASE_PROOF_FIAT,
-  BUSINESS_CASE_TAM,
   BUSINESS_CASE_TITLE,
+  BUSINESS_CASE_WHO,
   BUSINESS_CASE_WHY
 } from './lib/copy'
 
@@ -24,17 +25,24 @@ export function BusinessCase() {
           <dd>{BUSINESS_CASE_WHY}</dd>
         </div>
         <div>
-          <dt>TAM</dt>
+          <dt>Who pays</dt>
+          <dd>{BUSINESS_CASE_WHO}</dd>
+        </div>
+        <div>
+          <dt>Market signal</dt>
           <dd>
-            <p>{BUSINESS_CASE_TAM}</p>
+            <p>{BUSINESS_CASE_MARKET}</p>
+            <p className="cite-chips">
+              {BUSINESS_CASE_CITATIONS.map((cite) => (
+                <a key={cite.href} className="cite-chip" href={cite.href} target="_blank" rel="noreferrer">
+                  {cite.label}
+                </a>
+              ))}
+            </p>
           </dd>
         </div>
         <div>
-          <dt>Buyer</dt>
-          <dd>{BUSINESS_CASE_BUYER}</dd>
-        </div>
-        <div>
-          <dt>Analog proof</dt>
+          <dt>Proof people pay</dt>
           <dd>
             <ul>
               <li>{BUSINESS_CASE_PROOF_CHAIN}</li>

@@ -13,8 +13,10 @@ import {
   MAGIC,
   bookFromRecords,
   deskFromRecords,
+  isIsoDateTime,
   keepMagic,
   parseMandateFields,
+  txTimeFromLockTime,
   type BookMandate,
   type DeskState,
   type MandatePayload
@@ -25,6 +27,8 @@ export interface OverlayItem {
   payload: MandatePayload
   txid: string
   outputIndex: number
+  /** Block time, overlay broadcast time, or the tx unix lockTime. */
+  txTime?: string
 }
 
 export interface SubmitResult {
@@ -253,9 +257,14 @@ export interface ListedMandate extends BookMandate {
   txid: string | null
 }
 
+function withChainTime(item: OverlayItem): MandatePayload {
+  if (!item.txTime) return item.payload
+  return { ...item.payload, txTime: item.txTime }
+}
+
 export function bookFromItems(items: OverlayItem[]): ListedMandate[] {
   const kept = keepMandate(items)
-  return bookFromRecords(kept.map((item) => item.payload)).map((brand) => ({
+  return bookFromRecords(kept.map(withChainTime)).map((brand) => ({
     ...brand,
     txid: kept.find((item) => item.payload.kind === 'open' && item.payload.mandateId === brand.mandateId)?.txid ?? null
   }))
@@ -263,7 +272,40 @@ export function bookFromItems(items: OverlayItem[]): ListedMandate[] {
 
 export function viewFromItems(items: OverlayItem[], mandateId?: string): DeskState | null {
   const scoped = keepMandate(items).filter((item) => !mandateId || item.payload.mandateId === mandateId)
-  return deskFromRecords(scoped.map((item) => item.payload), mandateId)
+  return deskFromRecords(scoped.map(withChainTime), mandateId)
+}
+
+const OVERLAY_TIME_KEYS = ['blockTime', 'broadcastTime', 'createdAt', 'admittedAt'] as const
+
+function isoClock(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim().replace(/\.\d{3}Z$/, 'Z')
+  return isIsoDateTime(trimmed) ? trimmed : null
+}
+
+/** Overlay block or broadcast time, when the lookup output carries one. */
+export function chainTimeFromOutput(output: {
+  blockTime?: unknown
+  broadcastTime?: unknown
+  createdAt?: unknown
+  admittedAt?: unknown
+  context?: number[]
+}): string | null {
+  for (const key of OVERLAY_TIME_KEYS) {
+    const found = isoClock(output[key])
+    if (found) return found
+  }
+  if (!output.context || output.context.length === 0) return null
+  try {
+    const parsed = JSON.parse(new TextDecoder().decode(Uint8Array.from(output.context))) as Record<string, unknown>
+    for (const key of OVERLAY_TIME_KEYS) {
+      const found = isoClock(parsed[key])
+      if (found) return found
+    }
+  } catch {
+    return null
+  }
+  return null
 }
 
 async function queryAnytx(host: string, service: string, query: MandateQuery): Promise<LookupAnswer[]> {
@@ -285,16 +327,17 @@ async function queryAnytx(host: string, service: string, query: MandateQuery): P
   return answers
 }
 
-function itemsFromBeef(beef: number[] | undefined, txidHint?: string): OverlayItem[] {
+function itemsFromBeef(beef: number[] | undefined, txidHint?: string, overlayTime?: string | null): OverlayItem[] {
   if (!beef || beef.length === 0) return []
   try {
     const tx = txFromWalletBeef(beef)
     const txid = txidHint || tx.id('hex')
+    const txTime = overlayTime ?? txTimeFromLockTime(tx.lockTime) ?? undefined
     const rows: OverlayItem[] = []
     for (const [outputIndex, output] of tx.outputs.entries()) {
       const payload = parseScript(output.lockingScript)
       if (!payload) continue
-      rows.push({ payload, txid, outputIndex })
+      rows.push({ payload, txid, outputIndex, txTime })
     }
     return rows
   } catch {
@@ -307,7 +350,14 @@ function itemsFromAnswer(answer: LookupAnswer): OverlayItem[] {
   const seen = new Set<string>()
   const rows: OverlayItem[] = []
   for (const output of answer.outputs) {
-    const decoded = itemsFromBeef(output.beef, output.txid)
+    const overlayTime = chainTimeFromOutput(output as {
+      blockTime?: unknown
+      broadcastTime?: unknown
+      createdAt?: unknown
+      admittedAt?: unknown
+      context?: number[]
+    })
+    const decoded = itemsFromBeef(output.beef, output.txid, overlayTime)
     for (const item of decoded) {
       const key = `${item.txid}.${item.outputIndex}`
       if (seen.has(key)) continue

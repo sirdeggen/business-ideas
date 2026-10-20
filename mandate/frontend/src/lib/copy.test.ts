@@ -3,14 +3,15 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import {
-  BUSINESS_CASE_BUYER,
+  BUSINESS_CASE_CITATIONS,
   BUSINESS_CASE_DEMO,
   BUSINESS_CASE_FIELDS,
+  BUSINESS_CASE_MARKET,
   BUSINESS_CASE_PROOF,
   BUSINESS_CASE_PROOF_CHAIN,
   BUSINESS_CASE_PROOF_FIAT,
-  BUSINESS_CASE_TAM,
   BUSINESS_CASE_TITLE,
+  BUSINESS_CASE_WHO,
   BUSINESS_CASE_WHY,
   DESK_NOTE,
   EYEBROW,
@@ -156,13 +157,13 @@ describe('first-paint copy', () => {
     }
   })
 
-  it('uses a teal chip and adds the mandate desk to Pages without dropping the others', () => {
-    expect(css).toContain('--seal: #0f766e')
+  it('uses a sky chip and adds the mandate desk to Pages without dropping the others', () => {
+    expect(css).toContain('--seal: #38bdf8')
     expect(css).toContain('Fraunces')
     expect(catalogCss).toContain('.demo-mandate')
-    expect(catalogCss).toMatch(/\.demo-mandate \{[^}]*--chip: #0f766e;/)
-    expect(catalogCss).toMatch(/\.demo-mandate \{[^}]*--title: #134e4a;/)
-    expect(catalogCss.match(/#0f766e/g)).toHaveLength(1)
+    expect(catalogCss).toMatch(/\.demo-mandate \{[^}]*--chip: #38bdf8;/)
+    expect(catalogCss).toMatch(/\.demo-mandate \{[^}]*--title: #0369a1;/)
+    expect(catalogCss.match(/#38bdf8/g)).toHaveLength(1)
     expect(catalogCss).toContain('.demo-bounty')
     expect(catalogCss).toContain('.demo-keepsake')
     expect(catalogCss).toContain('.demo-scrip')
@@ -216,10 +217,13 @@ describe('first-paint copy', () => {
     expect(RECEIPT_NOTE).toMatch(/computes and records/)
     expect(RECEIPT_NOTE).toMatch(/OP_PUSH_TX/)
     expect(RECEIPT_NOTE).toMatch(/does not pay the fee out/)
+    expect(RECEIPT_NOTE).toMatch(/recall spends/)
+    expect(RECEIPT_NOTE).not.toMatch(/does not move the org balance/)
     expect(DESK_NOTE).toMatch(/before the wallet opens/)
     expect(DESK_NOTE).toMatch(/not in the script/)
     expect(LOCAL_NOTE).toMatch(/desk rules/)
-    expect(LOCAL_NOTE).toMatch(/does not move the balance/)
+    expect(LOCAL_NOTE).toMatch(/locks the funded sats/)
+    expect(LOCAL_NOTE).toMatch(/does not spend the lock/)
     expect(face).toContain('{RECEIPT_NOTE}')
     expect(face).toContain('{DESK_NOTE}')
     expect(advanced).toContain('{LOCAL_NOTE}')
@@ -234,35 +238,49 @@ describe('first-paint copy', () => {
 })
 
 describe('Business case page copy is locked', () => {
-  it('uses TAM, buyer, analog proof, and demo goal', () => {
+  it('uses who pays, market signal, proof people pay, and demo goal', () => {
     expect(BUSINESS_CASE_TITLE).toBe('Business case')
     expect([...BUSINESS_CASE_FIELDS]).toEqual([
       'Why it exists',
-      'TAM',
-      'Buyer',
-      'Analog proof',
+      'Who pays',
+      'Market signal',
+      'Proof people pay',
       'Demo goal'
     ])
     const why = businessCase.indexOf('<dt>Why it exists</dt>')
-    const tam = businessCase.indexOf('<dt>TAM</dt>')
-    const buyer = businessCase.indexOf('<dt>Buyer</dt>')
-    const proof = businessCase.indexOf('<dt>Analog proof</dt>')
+    const who = businessCase.indexOf('<dt>Who pays</dt>')
+    const market = businessCase.indexOf('<dt>Market signal</dt>')
+    const proof = businessCase.indexOf('<dt>Proof people pay</dt>')
     const demo = businessCase.indexOf('<dt>Demo goal</dt>')
-    expect(tam).toBeGreaterThan(why)
-    expect(buyer).toBeGreaterThan(tam)
-    expect(proof).toBeGreaterThan(buyer)
+    expect(who).toBeGreaterThan(why)
+    expect(market).toBeGreaterThan(who)
+    expect(proof).toBeGreaterThan(market)
     expect(demo).toBeGreaterThan(proof)
-    expect(businessCase).toContain('{BUSINESS_CASE_TAM}')
-    expect(businessCase).toContain('{BUSINESS_CASE_BUYER}')
-    expect(BUSINESS_CASE_TAM).toMatch(/\$742,612/)
-    expect(BUSINESS_CASE_TAM).toMatch(/\$448,341/)
-    expect(BUSINESS_CASE_TAM).toMatch(/DefiLlama/)
-    expect(BUSINESS_CASE_BUYER).toMatch(/endowment/)
-    expect(BUSINESS_CASE_BUYER).toMatch(/does not hand over its keys/)
+    expect(businessCase).toContain('{BUSINESS_CASE_MARKET}')
+    expect(businessCase).toContain('{BUSINESS_CASE_WHO}')
+    expect(businessCase).not.toContain('TAM')
+    expect(businessCase).not.toContain('Analog proof')
+    expect(BUSINESS_CASE_MARKET).toMatch(/\$2\.5 trillion/)
+    expect(BUSINESS_CASE_MARKET).toMatch(/Chestnut Advisory/)
+    expect(BUSINESS_CASE_MARKET).not.toMatch(/\$742,612/)
+    expect(BUSINESS_CASE_MARKET).not.toMatch(/\$448,341/)
+    expect(BUSINESS_CASE_WHO).toMatch(/endowment/)
+    expect(BUSINESS_CASE_WHO).toMatch(/does not hand over its keys/)
     expect(BUSINESS_CASE_PROOF_CHAIN).toMatch(/Sentora Curator/)
+    expect(BUSINESS_CASE_PROOF_CHAIN).toMatch(/\$742,612/)
     expect(BUSINESS_CASE_PROOF_CHAIN).toMatch(/Steakhouse Financial/)
+    expect(BUSINESS_CASE_PROOF_CHAIN).toMatch(/\$448,341/)
+    expect(BUSINESS_CASE_PROOF_CHAIN).not.toMatch(/25%/)
     expect(BUSINESS_CASE_PROOF_FIAT).toMatch(/HOA/)
+    const once = `${BUSINESS_CASE_WHY} ${BUSINESS_CASE_WHO} ${BUSINESS_CASE_MARKET} ${BUSINESS_CASE_PROOF}`
+    expect(once.match(/\$742,612/g)).toHaveLength(1)
+    expect(once.match(/\$448,341/g)).toHaveLength(1)
     expect(`${BUSINESS_CASE_PROOF_CHAIN} ${BUSINESS_CASE_PROOF_FIAT}`).toBe(BUSINESS_CASE_PROOF)
+    expect(BUSINESS_CASE_CITATIONS.map((cite) => cite.href)).toEqual([
+      'https://www.ai-cio.com/news/us-ocio-market-reached-2-5t-in-2025/',
+      'https://defillama.com/protocol/sentora-curator',
+      'https://defillama.com/protocol/steakhouse-financial'
+    ])
     expect(BUSINESS_CASE_DEMO).toMatch(/whitelist/)
     expect(BUSINESS_CASE_DEMO).toMatch(/performance fee/)
     expect(BUSINESS_CASE_WHY).toMatch(/outside manager/)

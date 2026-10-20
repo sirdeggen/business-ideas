@@ -1,4 +1,4 @@
-import { PrivateKey, ProtoWallet } from '@bsv/sdk'
+import { KeyDeriver, LockingScript, MerklePath, PrivateKey, ProtoWallet, PushDrop, Transaction } from '@bsv/sdk'
 import { describe, expect, it } from 'vitest'
 import {
   CHANGE_WAITING,
@@ -7,6 +7,7 @@ import {
   DEFAULT_GAIN_SATS,
   DEFAULT_NOTICE_DAYS,
   DEFAULT_PERIOD_DAYS,
+  LOCK_KEY_ID,
   MAGIC,
   MAX_FEE_BPS,
   MIN_FEE_BPS,
@@ -170,16 +171,41 @@ describe('mandate protocol', () => {
     expect(positionOf(desk, LATER)?.accruedFeeSats).toBe(800)
   })
 
-  it('locks the output to the owner key and OP_CHECKSIG, and leaves the other rules out of the script', () => {
-    const mandate = opened().mandate!
-    const lock = mandateLock(mandate.ownerKey)
-    expect(lock).toBe(`21${mandate.ownerKey}ac`)
+  it('locks the output to the owner signing key and OP_CHECKSIG, and leaves the other rules out of the script', async () => {
+    const owner = PrivateKey.fromRandom()
+    const ownerKey = owner.toPublicKey().toString().toLowerCase()
+    const lock = mandateLock(ownerKey)
+    const child = new KeyDeriver(owner).derivePublicKey(PROTOCOL_ID, LOCK_KEY_ID, 'anyone', true)
+    expect(lock).toBe(`21${child.toString().toLowerCase()}ac`)
+    expect(lock).not.toBe(`21${ownerKey}ac`)
     expect(lock.endsWith(OP_CHECKSIG.toString(16))).toBe(true)
-    expect(lock).not.toContain(SAMPLE_DESTINATION)
-    expect(lock).not.toContain(SAMPLE_MANAGER)
-    expect(lock).not.toContain('7e')
-    expect(mandate.lockHex).toBe(lock)
+    expect(lock.startsWith('21')).toBe(true)
     expect(lock).toHaveLength(70)
+    expect(opened({ ownerKey }).mandate?.lockHex).toBe(lock)
+    const lockingScript = LockingScript.fromHex(lock)
+    const fund = new Transaction()
+    fund.addOutput({ lockingScript, satoshis: 1_000 })
+    const wallet = new ProtoWallet(owner)
+    const spend = new Transaction()
+    spend.addInput({
+      sourceTransaction: fund,
+      sourceOutputIndex: 0,
+      unlockingScriptTemplate: new PushDrop(wallet).unlock(
+        PROTOCOL_ID,
+        LOCK_KEY_ID,
+        'anyone',
+        'all',
+        false,
+        1_000,
+        lockingScript
+      )
+    })
+    spend.addOutput({ lockingScript: LockingScript.fromHex('51'), satoshis: 600 })
+    await spend.sign()
+    fund.merklePath = new MerklePath(800_000, [[{ offset: 0, hash: fund.id('hex'), txid: true }]])
+    const unlocking = spend.inputs[0].unlockingScript?.toHex() ?? ''
+    expect(unlocking.length).toBeGreaterThan(16)
+    expect(await spend.verify('scripts only')).toBe(true)
   })
 
   it('round-trips open, fund, gain, send, recall, and change fields', () => {
@@ -246,5 +272,97 @@ describe('mandate protocol', () => {
       desk.mandate!
     ]).map((row) => row.mandate.orgName)).toEqual(['Harbor HOA Reserve'])
     expect(MAGIC).toBe('mandate')
+  })
+
+  it('rejects a backdated proposal that would skip the notice period', async () => {
+    const owner = walletOf()
+    const ownerKey = await identityOf(owner.wallet)
+    const txTime = '2026-10-20T12:00:00Z'
+    const proposedAt = '2026-09-01T12:00:00Z'
+    const input = {
+      orgName: 'Harbor HOA Reserve',
+      managerKey: SAMPLE_MANAGER,
+      whitelist: [SAMPLE_DESTINATION],
+      periodCapSats: DEFAULT_CAP_SATS,
+      periodDays: DEFAULT_PERIOD_DAYS,
+      feeBps: DEFAULT_FEE_BPS,
+      noticeDays: DEFAULT_NOTICE_DAYS,
+      ownerKey
+    }
+    let desk = fundMandate(openMandate(input, txTime, NONCE), 1_000_000, txTime)
+    desk = proposeChange(desk, 'cap', '1000', proposedAt)
+    expect(desk.changes[0]?.effectiveAt).toBe(addDays(proposedAt, DEFAULT_NOTICE_DAYS))
+    expect(desk.changes[0]?.effectiveAt < txTime).toBe(true)
+    desk = await signOwnerRecords(owner.wallet, desk)
+    const restored = deskFromRecords([
+      { ...desk.mandate!, txTime },
+      { ...desk.funds[0], txTime },
+      { ...desk.changes[0], txTime }
+    ], desk.mandate!.mandateId)
+    expect(restored?.changes).toHaveLength(0)
+    expect(positionOf(restored!, txTime)?.terms.periodCapSats).toBe(DEFAULT_CAP_SATS)
+
+    let honest = fundMandate(openMandate(input, txTime, NONCE), 1_000_000, txTime)
+    honest = proposeChange(honest, 'cap', '1000', txTime)
+    honest = await signOwnerRecords(owner.wallet, honest)
+    const kept = deskFromRecords([
+      { ...honest.mandate!, txTime },
+      { ...honest.funds[0], txTime },
+      { ...honest.changes[0], txTime }
+    ], honest.mandate!.mandateId)
+    expect(kept?.changes).toHaveLength(1)
+    expect(positionOf(kept!, txTime)?.terms.periodCapSats).toBe(DEFAULT_CAP_SATS)
+    expect(positionOf(kept!, addDays(txTime, DEFAULT_NOTICE_DAYS))?.terms.periodCapSats).toBe(1_000)
+  })
+
+  it('rejects a backdated send from a manager who was already replaced', async () => {
+    const owner = walletOf()
+    const oldManager = walletOf()
+    const nextManager = walletOf()
+    const ownerKey = await identityOf(owner.wallet)
+    const oldKey = await identityOf(oldManager.wallet)
+    const nextKey = await identityOf(nextManager.wallet)
+    const openedAt = '2026-01-01T00:00:00Z'
+    const replacedAt = '2026-01-02T00:00:00Z'
+    const during = '2026-01-03T00:00:00Z'
+    const after = '2026-02-01T00:00:00Z'
+    let desk = openMandate({
+      orgName: 'Harbor HOA Reserve',
+      managerKey: oldKey,
+      whitelist: [SAMPLE_DESTINATION],
+      periodCapSats: DEFAULT_CAP_SATS,
+      periodDays: DEFAULT_PERIOD_DAYS,
+      feeBps: DEFAULT_FEE_BPS,
+      noticeDays: DEFAULT_NOTICE_DAYS,
+      ownerKey
+    }, openedAt, NONCE)
+    desk = fundMandate(desk, 1_000_000, openedAt)
+    desk = proposeChange(desk, 'manager', nextKey, replacedAt)
+    desk = await signOwnerRecords(owner.wallet, desk)
+    const local = await signManagerSends(oldManager.wallet, sendMandate(desk, SAMPLE_DESTINATION, 25_000, during))
+    expect(local.sends[0]?.managerSig.length).toBeGreaterThan(16)
+    expect(positionOf(local, during)?.terms.managerKey).toBe(oldKey)
+
+    const backdated = deskFromRecords([
+      { ...desk.mandate!, txTime: openedAt },
+      { ...desk.funds[0], txTime: openedAt },
+      { ...desk.changes[0], txTime: replacedAt },
+      { ...local.sends[0], txTime: after }
+    ], desk.mandate!.mandateId)
+    expect(backdated?.changes).toHaveLength(1)
+    expect(positionOf(backdated!, after)?.terms.managerKey).toBe(nextKey)
+    expect(backdated?.sends).toHaveLength(0)
+    expect(positionOf(backdated!, after)?.balanceSats).toBe(1_000_000)
+    expect(positionOf(backdated!, during)?.spentThisPeriod).toBe(0)
+
+    const honest = deskFromRecords([
+      { ...desk.mandate!, txTime: openedAt },
+      { ...desk.funds[0], txTime: openedAt },
+      { ...desk.changes[0], txTime: replacedAt },
+      { ...local.sends[0], txTime: during }
+    ], desk.mandate!.mandateId)
+    expect(honest?.sends).toHaveLength(1)
+    expect(positionOf(honest!, during)?.balanceSats).toBe(975_000)
+    expect(positionOf(honest!, during)?.terms.managerKey).toBe(oldKey)
   })
 })

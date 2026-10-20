@@ -1,15 +1,16 @@
 /**
  * Mandate Desk protocol (PushDrop fields).
  *
- * An org hires an outside manager without handing over its keys. Funds are
- * described as sitting under an owner lock: the owner compressed key and
- * OP_CHECKSIG. That is the only rule the v0 script enforces. The owner can
- * always spend an output locked that way.
+ * An org hires an outside manager without handing over its keys. Funded sats
+ * sit in an output locked to the owner's BRC-42 signing key and OP_CHECKSIG
+ * (counterparty `anyone`, key id `mandate-lock`). Anyone can recompute that
+ * key from the owner identity. Only the owner wallet can spend it, and a
+ * recall spends that output. That is the only rule the v0 script enforces.
  *
  * The whitelist, the per-period cap, the performance fee, and the notice
  * period are computed and recorded. A reader can check them. The locking
- * script does not. OP_PUSH_TX enforcement of destinations, caps, and the
- * fee output is v1.
+ * script does not. A recorded send does not spend the lock. OP_PUSH_TX
+ * enforcement of destinations, caps, and the fee output is v1.
  *
  * The mandate id is sha256(ownerKey || nonce): the lowercase owner key
  * immediately followed by the lowercase nonce. Every record is signed with
@@ -31,7 +32,11 @@ import { sha256Hex } from './sha256'
 export const PROTOCOL_ID: [0, string] = [0, 'mandate']
 /** BRC-42 key id. createSignature counterparty is `anyone`, so readers can derive the signing key. */
 export const SIGNING_KEY_ID = 'mandate'
+/** BRC-42 key id for the owner-lock output. Same counterparty, different child. */
+export const LOCK_KEY_ID = 'mandate-lock'
 export const SIGNING_COUNTERPARTY = 'anyone' as const
+/** BIP-113: a lockTime at or above this is a unix timestamp, not a block height. */
+export const UNIX_LOCKTIME_MIN = 500_000_000
 export const BASKET = 'mandate'
 export const MAGIC = 'mandate'
 export const SCHEMA_VERSION = '1'
@@ -62,11 +67,11 @@ export const RECORD_SATS = 1
 /** Owner signature check. v0 does not use this opcode to inspect outputs. */
 export const OP_CHECKSIG = 0xac
 
-export const OPENED_NOTE = 'Mandate opened. Only the owner lock is in the script.'
-export const FUNDED_NOTE = 'Balance recorded. The receipt does not move those sats into the lock.'
+export const OPENED_NOTE = 'Mandate opened. The owner lock is the owner signing key and OP_CHECKSIG.'
+export const FUNDED_NOTE = 'Fund recorded. Those sats go under the owner lock when you record.'
 export const GAIN_NOTE = 'Fee accrued by formula. Recorded, not paid out.'
-export const SENT_NOTE = 'Send recorded. The script did not check the destination or the cap.'
-export const RECALLED_NOTE = 'The owner pulls the recorded balance back.'
+export const SENT_NOTE = 'Send recorded. The script did not check the destination or the cap, and this send does not spend the lock.'
+export const RECALLED_NOTE = 'Recall spends the owner lock and pulls those sats back.'
 export const CHANGE_WAITING = 'Change recorded. It applies after the notice period. The current rules stay until then.'
 export const NOT_WHITELISTED = 'That destination is not on the whitelist.'
 export const OVER_CAP = 'That send is over the remaining cap for this period.'
@@ -95,10 +100,12 @@ export interface OpenRecord {
   /** 32 hex chars. The id is sha256(ownerKey || nonce). */
   nonce: string
   openedAt: string
-  /** Owner key and OP_CHECKSIG. The only v0 script rule. */
+  /** Owner signing key and OP_CHECKSIG. The only v0 script rule. */
   lockHex: string
   /** DER hex. Empty until Record. */
   ownerSig: string
+  /** Block or broadcast time of the tx that published this record. Not signed. */
+  txTime?: string
 }
 
 export interface FundRecord {
@@ -109,6 +116,8 @@ export interface FundRecord {
   amountSats: number
   fundedAt: string
   ownerSig: string
+  /** Block or broadcast time of the tx that published this record. Not signed. */
+  txTime?: string
 }
 
 export interface GainRecord {
@@ -119,6 +128,8 @@ export interface GainRecord {
   gainSats: number
   markedAt: string
   ownerSig: string
+  /** Block or broadcast time of the tx that published this record. Not signed. */
+  txTime?: string
 }
 
 export interface SendRecord {
@@ -131,6 +142,8 @@ export interface SendRecord {
   sentAt: string
   /** DER hex of the manager signature. Empty until the manager records. */
   managerSig: string
+  /** Block or broadcast time of the tx that published this record. Not signed. */
+  txTime?: string
 }
 
 export interface RecallRecord {
@@ -141,6 +154,8 @@ export interface RecallRecord {
   amountSats: number
   recalledAt: string
   ownerSig: string
+  /** Block or broadcast time of the tx that published this record. Not signed. */
+  txTime?: string
 }
 
 export interface ChangeRecord {
@@ -155,6 +170,8 @@ export interface ChangeRecord {
   proposedAt: string
   effectiveAt: string
   ownerSig: string
+  /** Block or broadcast time of the tx that published this record. Not signed. */
+  txTime?: string
 }
 
 export type MandatePayload = OpenRecord | FundRecord | GainRecord | SendRecord | RecallRecord | ChangeRecord
@@ -273,7 +290,7 @@ export function mandateIdMatches(mandate: Pick<OpenRecord, 'mandateId' | 'ownerK
 
 export function identityFor(label: string): string {
   const digest = sha256Hex(`mandate-desk\n${label.trim().toLowerCase()}`)
-  return `02${digest}`
+  return PrivateKey.fromHex(digest).toPublicKey().toString().toLowerCase()
 }
 
 export const SAMPLE_MANAGER = identityFor('outside-manager')
@@ -294,16 +311,78 @@ export function periodIndex(openedAt: string, at: string, periodDays: number): n
   return Math.floor(elapsed / span)
 }
 
+export function lockInvoice(): string {
+  return `${PROTOCOL_ID[0]}-${PROTOCOL_ID[1]}-${LOCK_KEY_ID}`
+}
+
 /**
- * v0 mandate lock: the owner compressed pubkey and OP_CHECKSIG.
- * Only the owner can spend an output locked this way, so the owner can
- * always pull those sats back. The script does not read the whitelist,
- * the cap, the fee, or the notice clock. OP_PUSH_TX output enforcement is v1.
+ * v0 mandate lock: the owner's BRC-42 child (counterparty `anyone`, key id
+ * `mandate-lock`) and OP_CHECKSIG. Readers recompute it from the owner
+ * identity. Only the owner wallet can sign it, so a recall can spend the
+ * output. The script does not read the whitelist, the cap, the fee, or the
+ * notice clock. OP_PUSH_TX output enforcement is v1.
  */
 export function mandateLock(ownerKey: string): string {
   const key = ownerKey.trim().toLowerCase()
   if (!isIdentityKey(key)) throw new Error('Owner key is missing.')
-  return `21${key}ac`
+  let child: PublicKey
+  try {
+    child = PublicKey.fromString(key).deriveChild(new PrivateKey(1), lockInvoice())
+  } catch {
+    throw new Error('Owner key is missing.')
+  }
+  return `21${child.toString().toLowerCase()}ac`
+}
+
+/** Unix lockTime for a publish instant, so the tx carries its own clock. */
+export function lockTimeFromIso(iso: string): number {
+  const seconds = Math.floor(Date.parse(iso) / 1000)
+  if (!Number.isSafeInteger(seconds) || seconds < UNIX_LOCKTIME_MIN) throw new Error('Time is missing.')
+  return seconds
+}
+
+/** ISO time when lockTime is a unix timestamp. Block heights return null. */
+export function txTimeFromLockTime(lockTime: number): string | null {
+  if (!Number.isInteger(lockTime) || lockTime < UNIX_LOCKTIME_MIN || lockTime > 0xffff_ffff) return null
+  return nowIso(new Date(lockTime * 1000))
+}
+
+function chainTime(row: { txTime?: string }): string | null {
+  const txTime = row.txTime?.trim() ?? ''
+  if (!isIsoDateTime(txTime)) return null
+  return txTime.replace(/\.\d{3}Z$/, 'Z')
+}
+
+export function statedTime(row: MandatePayload): string {
+  if (row.kind === 'open') return row.openedAt
+  if (row.kind === 'fund') return row.fundedAt
+  if (row.kind === 'gain') return row.markedAt
+  if (row.kind === 'send') return row.sentAt
+  if (row.kind === 'recall') return row.recalledAt
+  return row.proposedAt
+}
+
+/** Chain clock when the overlay or the tx supplied one. Otherwise the stated time. */
+export function occurredAt(row: MandatePayload): string {
+  return chainTime(row) ?? statedTime(row)
+}
+
+/** A payload must not claim it happened before the tx that published it. */
+export function statedBeforeTx(row: MandatePayload): boolean {
+  const txTime = chainTime(row)
+  if (!txTime) return false
+  return statedTime(row) < txTime
+}
+
+/**
+ * When the change carries a tx time, it cannot take effect before that tx
+ * plus the notice the owner signed. A later signed effectiveAt still waits.
+ */
+export function changeAppliesAt(change: ChangeRecord): string {
+  const txTime = chainTime(change)
+  if (!txTime) return change.effectiveAt
+  const earliest = addDays(txTime, change.noticeDays)
+  return change.effectiveAt > earliest ? change.effectiveAt : earliest
 }
 
 export function emptyDesk(): DeskState {
@@ -451,25 +530,31 @@ export function positionOf(state: DeskState, at = nowIso()): Position | null {
   const mandate = state.mandate
   if (!mandate) return null
   const until = assertTime(at)
+  const opened = occurredAt(mandate)
   let terms = termsFrom(mandate)
   let balanceSats = 0
   let accruedFeeSats = 0
-  const counted: SendRecord[] = []
+  const counted: Array<{ amountSats: number, at: string }> = []
   const events: ReplayEvent[] = []
   state.changes.forEach((change, index) => {
-    if (change.effectiveAt <= until) events.push({ at: change.effectiveAt, rank: 0, index, kind: 'change', change })
+    const applies = changeAppliesAt(change)
+    if (applies <= until) events.push({ at: applies, rank: 0, index, kind: 'change', change })
   })
   state.funds.forEach((fund, index) => {
-    if (fund.fundedAt <= until) events.push({ at: fund.fundedAt, rank: 1, index, kind: 'fund', fund })
+    const when = occurredAt(fund)
+    if (when <= until) events.push({ at: when, rank: 1, index, kind: 'fund', fund })
   })
   state.gains.forEach((gain, index) => {
-    if (gain.markedAt <= until) events.push({ at: gain.markedAt, rank: 2, index, kind: 'gain', gain })
+    const when = occurredAt(gain)
+    if (when <= until) events.push({ at: when, rank: 2, index, kind: 'gain', gain })
   })
   state.sends.forEach((send, index) => {
-    if (send.sentAt <= until) events.push({ at: send.sentAt, rank: 3, index, kind: 'send', send })
+    const when = occurredAt(send)
+    if (when <= until) events.push({ at: when, rank: 3, index, kind: 'send', send })
   })
   state.recalls.forEach((recall, index) => {
-    if (recall.recalledAt <= until) events.push({ at: recall.recalledAt, rank: 4, index, kind: 'recall', recall })
+    const when = occurredAt(recall)
+    if (when <= until) events.push({ at: when, rank: 4, index, kind: 'recall', recall })
   })
   events.sort((left, right) => (
     left.at < right.at ? -1 : left.at > right.at ? 1 : left.rank - right.rank || left.index - right.index
@@ -480,12 +565,12 @@ export function positionOf(state: DeskState, at = nowIso()): Position | null {
     else if (event.kind === 'gain') accruedFeeSats += feeSatsOf(event.gain.gainSats, terms.feeBps)
     else if (event.kind === 'send') {
       balanceSats -= event.send.amountSats
-      counted.push(event.send)
+      counted.push({ amountSats: event.send.amountSats, at: event.at })
     } else balanceSats -= event.recall.amountSats
   }
-  const period = periodIndex(mandate.openedAt, until, mandate.periodDays)
+  const period = periodIndex(opened, until, mandate.periodDays)
   const spentThisPeriod = counted
-    .filter((send) => periodIndex(mandate.openedAt, send.sentAt, mandate.periodDays) === period)
+    .filter((send) => periodIndex(opened, send.at, mandate.periodDays) === period)
     .reduce((sum, send) => sum + send.amountSats, 0)
   return {
     terms,
@@ -493,6 +578,26 @@ export function positionOf(state: DeskState, at = nowIso()): Position | null {
     accruedFeeSats,
     spentThisPeriod,
     remainingCapSats: Math.max(0, terms.periodCapSats - spentThisPeriod)
+  }
+}
+
+/** Rewrite stated times to the publish instant so they are not before the tx. */
+export function stampForPublish(desk: DeskState, at = nowIso()): DeskState {
+  if (!desk.mandate) return desk
+  const publishedAt = assertTime(at)
+  return {
+    ...desk,
+    mandate: { ...desk.mandate, openedAt: publishedAt, ownerSig: '' },
+    funds: desk.funds.map((row) => ({ ...row, fundedAt: publishedAt, ownerSig: '' })),
+    gains: desk.gains.map((row) => ({ ...row, markedAt: publishedAt, ownerSig: '' })),
+    sends: desk.sends.map((row) => ({ ...row, sentAt: publishedAt, managerSig: '' })),
+    recalls: desk.recalls.map((row) => ({ ...row, recalledAt: publishedAt, ownerSig: '' })),
+    changes: desk.changes.map((row) => ({
+      ...row,
+      proposedAt: publishedAt,
+      effectiveAt: addDays(publishedAt, row.noticeDays),
+      ownerSig: ''
+    }))
   }
 }
 
@@ -1176,7 +1281,8 @@ export async function signRecordedDesk(wallet: RecordSigner, desk: DeskState): P
 }
 
 function sendAcceptable(desk: DeskState, send: SendRecord): boolean {
-  const position = positionOf(desk, send.sentAt)
+  if (statedBeforeTx(send)) return false
+  const position = positionOf(desk, occurredAt(send))
   if (!position) return false
   if (!signatureOk(position.terms.managerKey, sendMessage(send), send.managerSig)) return false
   if (!position.terms.whitelist.includes(send.destinationKey)) return false
@@ -1187,11 +1293,14 @@ function sendAcceptable(desk: DeskState, send: SendRecord): boolean {
 function changeAcceptable(desk: DeskState, change: ChangeRecord): boolean {
   const mandate = desk.mandate
   if (!mandate) return false
+  if (statedBeforeTx(change)) return false
   if (!signatureOk(mandate.ownerKey, changeMessage(change), change.ownerSig)) return false
-  const position = positionOf(desk, change.proposedAt)
+  const position = positionOf(desk, occurredAt(change))
   if (!position) return false
   if (change.noticeDays !== position.terms.noticeDays) return false
   if (change.effectiveAt !== addDays(change.proposedAt, change.noticeDays)) return false
+  const txTime = chainTime(change)
+  if (txTime && changeAppliesAt(change) < addDays(txTime, change.noticeDays)) return false
   if (change.field === 'manager' && change.nextValue === mandate.ownerKey) return false
   return true
 }
@@ -1200,14 +1309,7 @@ type AcceptedKind = 'change' | 'fund' | 'gain' | 'send' | 'recall'
 
 function acceptanceOrder(records: MandatePayload[]): MandatePayload[] {
   const rank: Record<AcceptedKind, number> = { change: 0, fund: 1, gain: 2, send: 3, recall: 4 }
-  const atOf = (row: MandatePayload): string => {
-    if (row.kind === 'change') return row.proposedAt
-    if (row.kind === 'fund') return row.fundedAt
-    if (row.kind === 'gain') return row.markedAt
-    if (row.kind === 'send') return row.sentAt
-    if (row.kind === 'recall') return row.recalledAt
-    return row.openedAt
-  }
+  const atOf = (row: MandatePayload): string => occurredAt(row)
   return [...records].sort((left, right) => {
     const leftAt = atOf(left)
     const rightAt = atOf(right)
@@ -1227,9 +1329,10 @@ export function deskFromRecords(records: MandatePayload[], mandateId?: string): 
   const rows = keepMagic(records)
   const opens = rows.filter((row): row is OpenRecord => row.kind === 'open').filter((mandate) => {
     if (mandateId && mandate.mandateId !== mandateId.toLowerCase()) return false
+    if (statedBeforeTx(mandate)) return false
     if (!mandateIdMatches(mandate)) return false
     return signatureOk(mandate.ownerKey, openMessage(mandate), mandate.ownerSig)
-  }).sort((left, right) => (left.openedAt < right.openedAt ? -1 : left.openedAt > right.openedAt ? 1 : 0))
+  }).sort((left, right) => (occurredAt(left) < occurredAt(right) ? -1 : occurredAt(left) > occurredAt(right) ? 1 : 0))
   const mandate = opens[0]
   if (!mandate) return null
   let desk: DeskState = { ...emptyDesk(), mandate }
@@ -1242,8 +1345,8 @@ export function deskFromRecords(records: MandatePayload[], mandateId?: string): 
       desk = { ...desk, changes: [...desk.changes, row] }
     } else if (row.kind === 'send' && sendAcceptable(desk, row)) {
       desk = { ...desk, sends: [...desk.sends, row] }
-    } else if (row.kind === 'recall') {
-      const position = positionOf(desk, row.recalledAt)
+    } else if (row.kind === 'recall' && !statedBeforeTx(row)) {
+      const position = positionOf(desk, occurredAt(row))
       if (position && row.amountSats === position.balanceSats && signatureOk(mandate.ownerKey, recallMessage(row), row.ownerSig)) {
         desk = { ...desk, recalls: [...desk.recalls, row] }
       }

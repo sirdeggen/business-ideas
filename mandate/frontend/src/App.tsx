@@ -445,7 +445,7 @@ function Shell() {
                 </div>
                 <div>
                   <dt>{LINE_LOCK}</dt>
-                  <dd id="owner-lock">Owner key and OP_CHECKSIG</dd>
+                  <dd id="owner-lock">Owner signing key and OP_CHECKSIG</dd>
                 </div>
               </dl>
               <p className="helper">{DESK_NOTE}</p>

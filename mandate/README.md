@@ -1,12 +1,12 @@
 # Mandate Desk (v0)
 
-An org — an endowment, an HOA reserve, a club treasury — hires an outside manager without handing over its keys. The funds are described as sitting under a UTXO script mandate.
+An org — an endowment, an HOA reserve, a club treasury — hires an outside manager without handing over its keys. The funded sats sit under a UTXO script mandate.
 
-The owner lock is the owner compressed key and `OP_CHECKSIG`. That is the only rule the v0 script enforces. Only the owner can spend an output locked that way, so the owner can always pull those sats back.
+The owner lock is the owner's BRC-42 signing key (counterparty `anyone`, key id `mandate-lock`) and `OP_CHECKSIG`. Anyone can recompute that key from the owner identity. Only the owner wallet can spend it. Record creates that output with `createAction` and puts the funded sats in it. Recall spends it and the sats return to the owner. That is the only rule the v0 script enforces.
 
-The manager may send only to whitelisted destinations, and only inside a per-period cap. The manager’s fee accrues by formula: `floor(period gain × fee basis points / 10000)`, in the 5–10% band (500–1,000; default 800). Any change to the mandate needs the owner’s signature and waits out a notice period. v0 computes and records the whitelist, the cap, the fee, and the notice. The locking script does not read them. `OP_PUSH_TX` enforcement of destinations, caps, and the fee output is v1.
+The manager may send only to whitelisted destinations, and only inside a per-period cap. The manager’s fee accrues by formula: `floor(period gain × fee basis points / 10000)`, in the 5–10% band (500–1,000; default 800). Any change to the mandate needs the owner’s signature and waits out a notice period. v0 computes and records the whitelist, the cap, the fee, and the notice. The locking script does not read them. A recorded send does not spend the lock. `OP_PUSH_TX` enforcement of destinations, caps, and the fee output is v1.
 
-The public record is a 1-sat receipt. It does not move the org balance into the lock, and it does not pay the fee out. A send counts on the public book only when the manager key signed it with BRC-100 `createSignature`, counterparty `anyone`. Owner records (open, fund, gain, recall, change) are signed the same way, so a reader can verify them. The mandate id is `sha256(ownerKey || nonce)`.
+The public book also writes a 1-sat receipt for each record. It does not pay the fee out. A send counts on the public book only when the manager key signed it with BRC-100 `createSignature`, counterparty `anyone`, and only when its stated time is not before the tx that published it. The tx clock is the overlay block or broadcast time when the lookup record has one, otherwise the tx’s unix lockTime. Notice and manager replacement follow that order, not a backdated `proposedAt` or `sentAt`. Owner records (open, fund, gain, recall, change) are signed the same way, so a reader can verify them. The mandate id is `sha256(ownerKey || nonce)`.
 
 This is not Treasury (a 2-of-3 board vault). This is not Spend Policy (a spender following a payee list and a daily cap). This is not Credit (a draw against an invoice). One owner lock, a hired manager, and a fee that accrues by formula.
 
@@ -25,7 +25,7 @@ Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access 
 - Wallet interface: BRC-100. The app never keeps keys. It calls `createAction`, `getPublicKey`, and `createSignature` via the visitor’s Desktop, and only when recording.
 - State: the mandate, funds, gains, sends, recalls, and changes are a local walkthrough until you record. Wallet basket `mandate`. Public Pages uses overlay topic `tm_anytx` / lookup `ls_anytx` (client-filtered on MAGIC `mandate`).
 - Encoding: PushDrop fields — open (org, manager, whitelist, cap, period, fee, notice, owner key, nonce, owner lock), fund, gain, send, recall, change.
-- Script: the published lock is the owner key and `OP_CHECKSIG`. v0 does not check the whitelist, the cap, the fee, or the notice in script. `OP_PUSH_TX` output enforcement is v1.
+- Script: the funded output locks to the owner signing key and `OP_CHECKSIG`. Recall spends it. v0 does not check the whitelist, the cap, the fee, or the notice in script. A recorded send does not spend the lock. `OP_PUSH_TX` output enforcement is v1.
 - Fee: performance fee default 800 basis points, from 500 to 1,000. `floor(gain × bps / 10000)`.
 - Frontend: Vite + React. Wallet via `WalletClient('auto', originator)` from `@bsv/sdk`. Overlay via `@bsv/sdk` `TopicBroadcaster` and lookup.
 - Overlay: `https://overlay-us-1.bsvb.tech`.
@@ -39,10 +39,10 @@ Chrome hides BSV Desktop until you Allow “sirdeggen.github.io wants to Access 
 
 1. Open the UI. No wallet prompt on first paint.
 2. Leave the org as Harbor HOA Reserve, the sample manager key, the sample whitelist destination, the cap at 100,000 sats, the period at 30 days, the fee at 800 basis points, and the notice at 14 days. Click **Open the mandate**. No wallet.
-3. Leave the fund at 1,000,000 sats and click **Record a fund**. The balance is recorded. The sats are not moved into the lock.
+3. Leave the fund at 1,000,000 sats and click **Record a fund**. The balance is recorded. The sats move into the owner lock when you record.
 4. Leave the gain at 50,000 sats and click **Mark the period gain**. The fee line shows 4,000 sats. That number is recorded. It is not paid out.
 5. Leave the destination on the whitelist and the amount at 25,000. Click **Send under the mandate**. Try a destination that is not listed, or an amount over the remaining cap. The page shows a sentence and does not open the wallet.
-6. Click **Pull everything back**. The owner takes the whole recorded balance.
+6. Click **Pull everything back**. Recording spends the owner-lock output and returns those sats to the owner.
 7. Set the new cap to 50,000 and click **Propose the change**. The page shows the date the change applies. Until then the current cap stays. The script does not read that clock.
 8. **Record on the public book** asks for the wallet and writes the owner-signed mandate to `tm_anytx`. A send is counted there only after the manager key signs it. Install Desktop appears only if the wallet is missing.
 
@@ -86,7 +86,9 @@ Encode/decode, fee floor math in the 5–10% band, whitelist and cap refusal, fu
 | Period cap | 100,000 sats default |
 | Period | 30 days default |
 | Notice | 14 days default |
-| Record output | 1 sat receipt |
+| Owner lock | BRC-42 `mandate-lock`, counterparty `anyone`, plus `OP_CHECKSIG` |
+| Fund output | the funded sats, under that lock |
+| Record receipt | 1 sat, beside the lock |
 
 ## Layout
 

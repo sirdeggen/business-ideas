@@ -1,14 +1,14 @@
 :root {
   color-scheme: light;
-  --night: #042f2e;
-  --ink: #134e4a;
-  --muted: #3f6f6a;
-  --quiet: #5f7e78;
-  --hair: rgba(15, 118, 110, 0.18);
-  --seal: #0f766e;
-  --paper: #f3fbf9;
-  --slip: #f8fffd;
-  --ok: #0f766e;
+  --night: #082f49;
+  --ink: #0c4a6e;
+  --muted: #075985;
+  --quiet: #0369a1;
+  --hair: rgba(56, 189, 248, 0.28);
+  --seal: #38bdf8;
+  --paper: #f0f9ff;
+  --slip: #f8fbff;
+  --ok: #0369a1;
   --failed: #9a3412;
   --sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
   --display: "Fraunces", "Iowan Old Style", Palatino, serif;
@@ -33,15 +33,15 @@ a { color: var(--ink); }
 .table-scene {
   min-height: 100%;
   background:
-    radial-gradient(900px 420px at 80% -10%, rgba(15, 118, 110, 0.38), transparent 60%),
-    linear-gradient(180deg, #115e59 0%, var(--night) 46%, #021716 100%);
+    radial-gradient(900px 420px at 80% -10%, rgba(56, 189, 248, 0.38), transparent 60%),
+    linear-gradient(180deg, #0369a1 0%, var(--night) 46%, #082f49 100%);
 }
 
 .scene-crop {
   position: relative;
   width: 100%;
   overflow: hidden;
-  background: #042f2e;
+  background: #082f49;
 }
 
 .scene-crop .scene {
@@ -166,6 +166,16 @@ h2 {
 .business-case dd p { margin: 0; }
 .business-case dd ul { margin: 0; padding-left: 1.15em; }
 .business-case dd li + li { margin-top: 6px; }
+.cite-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.cite-chip {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  text-decoration: none;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
 
 .receipt-note {
   margin: -8px 2px 22px;
@@ -206,7 +216,7 @@ input, textarea, select {
   width: 100%;
   background: #fff;
   color: var(--ink);
-  border: 1px solid rgba(15, 118, 110, 0.2);
+  border: 1px solid rgba(56, 189, 248, 0.2);
   border-radius: 12px;
   padding: 9px 12px;
   font-size: 15px;
@@ -217,7 +227,7 @@ input[type="file"] { height: auto; padding: 8px; }
 input[type="checkbox"] { width: auto; height: auto; }
 
 input:focus, textarea:focus, select:focus {
-  outline: 2px solid rgba(15, 118, 110, 0.4);
+  outline: 2px solid rgba(56, 189, 248, 0.4);
   border-color: var(--seal);
 }
 
@@ -252,7 +262,7 @@ input:focus, textarea:focus, select:focus {
   align-items: center;
 }
 
-.btn.primary { background: var(--seal); border-color: var(--seal); color: #f3fbf9; }
+.btn.primary { background: #0369a1; border-color: #0369a1; color: #f8fafc; }
 .btn.danger { border-color: var(--failed); color: var(--failed); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -293,19 +303,19 @@ code {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  background: rgba(15, 118, 110, 0.14);
+  background: rgba(56, 189, 248, 0.14);
   color: var(--seal);
 }
 
-.stamp.released { background: rgba(15, 118, 110, 0.14); color: var(--ok); }
-.stamp.flagged { background: rgba(15, 118, 110, 0.12); color: var(--failed); }
+.stamp.released { background: rgba(56, 189, 248, 0.14); color: var(--ok); }
+.stamp.flagged { background: rgba(56, 189, 248, 0.12); color: var(--failed); }
 .show-hero { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 14px; }
 .payee-flag { margin: 10px 0 0; font-weight: 700; color: var(--failed); }
 
-.advanced { margin-top: 22px; color: #ccfbf1; font-size: 12px; }
+.advanced { margin-top: 22px; color: #e0f2fe; font-size: 12px; }
 .advanced summary { cursor: pointer; letter-spacing: 0.08em; text-transform: uppercase; font-size: 11px; font-weight: 700; }
 .advanced p { font-size: 12px; }
-.advanced label { margin-top: 12px; color: #ccfbf1; }
+.advanced label { margin-top: 12px; color: #e0f2fe; }
 .advanced input { background: rgba(255, 255, 255, 0.08); color: #f3fbf9; border-color: rgba(221, 214, 254, 0.28); }
 
 .install {
@@ -319,7 +329,7 @@ code {
 .install .btn { color: #f3fbf9; border-color: rgba(244, 251, 247, 0.4); }
 .install .btn.primary { background: #f3fbf9; color: var(--ink); }
 
-.fine-print { margin: 18px 4px 0; font-size: 12px; color: #ccfbf1; }
+.fine-print { margin: 18px 4px 0; font-size: 12px; color: #e0f2fe; }
 
 .quiet { color: var(--quiet); font-weight: 500; }
 
@@ -350,7 +360,7 @@ code {
   padding: 16px 16px 14px;
   border-radius: 18px;
   background:
-    radial-gradient(120px 80px at 100% 0%, rgba(15, 118, 110, 0.16), transparent 70%),
+    radial-gradient(120px 80px at 100% 0%, rgba(56, 189, 248, 0.16), transparent 70%),
     #fff;
   border: 1px solid var(--hair);
 }
