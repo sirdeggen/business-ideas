@@ -16,6 +16,7 @@ import {
   assertPayout,
   bindRequest,
   boardStats,
+  bookFromChain,
   bookFromRecords,
   boundRequestId,
   contributorPayoutKey,
@@ -45,6 +46,7 @@ import {
   requestLockedToRequester,
   requestMessage,
   sortBoard,
+  statusOf,
   submitCapture,
   submitMessage,
   type BlockHeaderTime,
@@ -156,9 +158,14 @@ describe('encode and decode', () => {
       geohash: 'u4pru',
       submittedAt: WHEN
     })
-    const accepted = acceptCapture(desk, hashCapture(FILE), '2026-10-20T18:00:00Z')
+    expect(() => acceptCapture(desk, hashCapture(FILE))).toThrow(/still pending/)
+    const accepted = acceptCapture(
+      { ...desk, submissions: desk.pendingSubmissions, pendingSubmissions: [] },
+      hashCapture(FILE),
+      '2026-10-20T18:00:00Z'
+    )
     const request = await signedRequest(accepted.request!, requester.sign)
-    const submission = await signedSubmit(accepted.pendingSubmissions[0]!, contributor.signAsContributor)
+    const submission = await signedSubmit(desk.pendingSubmissions[0]!, contributor.signAsContributor)
     const accept = accepted.accept!
     accept.signature = await requester.sign(acceptMessage(accept))
     const parsedRequest = parseCaptureFields(encodeRequestFields(request))
@@ -577,6 +584,59 @@ describe('readers trust the requester key', () => {
       backdated.receiptHash,
       later.receiptHash
     ])
+  })
+
+  it('rejects a pending submission and shows a spent escrow with no spend record', async () => {
+    const requester = await signer()
+    const contributor = await signer()
+    const request = await signedRequest(drafted(requester.publicKey).request!, requester.sign)
+    const desk = submitCapture({ ...drafted(requester.publicKey), request }, {
+      contributorIdentity: contributor.publicKey,
+      receiptHash: hashCapture(FILE),
+      capturedAt: WHEN,
+      geohash: 'u4pru',
+      submittedAt: WHEN
+    })
+    expect(() => acceptCapture(desk, hashCapture(FILE))).toThrow(/still pending/)
+    const fundTx = 'aa'.repeat(32)
+    const spent = `${fundTx}.0`
+    const open = deskFromChain([chainRequest(request, fundTx)])
+    expect(open?.spent).toBe(false)
+    expect(statusOf(open!)).toBe('open')
+    const unexplained = deskFromChain([chainRequest(request, fundTx)], { spentOutpoints: [spent] })
+    expect(unexplained?.accept).toBeNull()
+    expect(unexplained?.refund).toBeNull()
+    expect(unexplained?.pendingRefund).toBeNull()
+    expect(unexplained?.spent).toBe(true)
+    expect(statusOf(unexplained!)).toBe('spent')
+    const book = bookFromChain([chainRequest(request, fundTx)], null, [], [spent])
+    expect(book[0]?.status).toBe('spent')
+    expect(boardStats(book).open).toBe(0)
+    expect(boardStats(book).spent).toBe(1)
+    const submission = await signedSubmit(desk.pendingSubmissions[0]!, contributor.signAsContributor)
+    const accepted = acceptCapture({ ...desk, submissions: [submission], pendingSubmissions: [] }, hashCapture(FILE), WHEN)
+    const honest = { ...accepted.accept!, signature: await requester.sign(acceptMessage(accepted.accept!)) }
+    const explained = deskFromChain([
+      chainRequest(request, fundTx),
+      withProof({
+        txid: 'dd'.repeat(32),
+        vout: 0,
+        inputs: [],
+        lockingPublicKey: contributorSigningKey(contributor.publicKey),
+        payload: submission
+      }, 800, 1),
+      {
+        txid: 'bb'.repeat(32),
+        vout: 3,
+        inputs: [spent],
+        lockingPublicKey: requester.lockingKey,
+        payload: honest,
+        outputs: splitOutputs(contributor.publicKey)
+      }
+    ], { headers: [{ height: 800, time: Date.parse(WHEN) / 1000, merkleRoot: ROOT }], spentOutpoints: [spent] })
+    expect(explained?.accept?.signature).toBe(honest.signature)
+    expect(explained?.spent).toBe(false)
+    expect(statusOf(explained!)).toBe('accepted')
   })
 })
 

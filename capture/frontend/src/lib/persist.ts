@@ -28,7 +28,8 @@ export function loadDesk(requestId: string): DeskState | null {
       accept: desk.accept ?? null,
       refund: desk.refund ?? null,
       pendingRefund: desk.pendingRefund ?? null,
-      earlyRefund: desk.earlyRefund ?? null
+      earlyRefund: desk.earlyRefund ?? null,
+      spent: desk.spent === true
     }
   } catch {
     return null

@@ -362,7 +362,7 @@ export async function submitCaptureOnChain(
     ...desk,
     pendingSubmissions: desk.pendingSubmissions.map((row) => row === submission ? signed : row),
     submissions: desk.submissions.map((row) => row === submission ? signed : row),
-    notice: 'Receipt posted. It stays pending until a block header times it. The raw file stayed here.'
+    notice: 'Receipt posted. It stays pending until the network timestamps it. The raw file stayed here.'
   }
   return overlayWrap(overlayUrl, posted.tx, signed.requestId, posted.txid, next)
 }
@@ -461,7 +461,7 @@ export async function refundOnChain(
     )
   ]
   const spent = await spendEscrow(wallet, held, outputs, clip(`Refund ${desk.request.location}`))
-  const next: DeskState = { ...drafted, pendingRefund: signed, notice: 'Refund spent. It stays pending until a block header times it after the deadline.' }
+  const next: DeskState = { ...drafted, pendingRefund: signed, notice: 'Refund spent. Refunds count once the network timestamps them after the deadline.' }
   return overlayWrap(overlayUrl, spent.tx, signed.requestId, spent.txid, next)
 }
 

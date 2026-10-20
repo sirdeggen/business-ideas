@@ -4,6 +4,8 @@ import {
   PushDrop,
   TopicBroadcaster,
   Transaction,
+  WhatsOnChain,
+  type ChainTracker,
   type LookupAnswer,
   type OverlayBroadcastFacilitator,
   type STEAK,
@@ -18,6 +20,7 @@ import {
   proofInclusion,
   requestLockedToRequester,
   sameKey,
+  type BlockHeaderTime,
   type CapturePayload,
   type ChainOutput,
   type ChainRecord,
@@ -308,13 +311,31 @@ function matchesQuery(item: OverlayItem, query: CaptureQuery): boolean {
   return true
 }
 
-export function boardFromItems(items: OverlayItem[], pinIdentity?: string | null): ListedRequest[] {
-  return bookFromChain(keepCapture(items).map(toChain), pinIdentity)
+export async function boardFromItems(
+  items: OverlayItem[],
+  pinIdentity?: string | null,
+  spentOutpoints: string[] = [],
+  client?: HeaderClient
+): Promise<ListedRequest[]> {
+  const records = keepCapture(items).map(toChain)
+  const headers = proofsNeedHeaders(records)
+    ? await verifiedHeaders(records, client ?? mainnetHeaderClient())
+    : []
+  return bookFromChain(records, pinIdentity, headers, spentOutpoints)
 }
 
-export function viewFromItems(items: OverlayItem[], requestId?: string, options: ReadOptions = {}): DeskState | null {
+export async function viewFromItems(
+  items: OverlayItem[],
+  requestId?: string,
+  options: ReadOptions = {},
+  client?: HeaderClient
+): Promise<DeskState | null> {
   const scoped = keepCapture(items).filter((item) => !requestId || item.payload.requestId === requestId)
-  return deskFromChain(scoped.map(toChain), { ...options, requestId })
+  const records = scoped.map(toChain)
+  const headers = proofsNeedHeaders(records)
+    ? await verifiedHeaders(records, client ?? mainnetHeaderClient())
+    : []
+  return deskFromChain(records, { ...options, requestId, headers, spentOutpoints: options.spentOutpoints ?? [] })
 }
 
 async function queryAnytx(host: string, service: string, query: CaptureQuery): Promise<LookupAnswer[]> {
@@ -336,8 +357,78 @@ async function queryAnytx(host: string, service: string, query: CaptureQuery): P
   return answers
 }
 
-function itemsFromBeef(beef: number[] | undefined, txidHint?: string, context?: number[]): OverlayItem[] {
-  if (!beef || beef.length === 0) return []
+export interface OverlayRead {
+  items: OverlayItem[]
+  spentOutpoints: string[]
+}
+
+/** Mainnet block header. Time counts only after the merkle root matches the proof. */
+export const MAINNET_HEADER_URL = 'https://api.whatsonchain.com/v1/bsv/main/block'
+
+export type HeaderFetcher = (url: string) => Promise<Pick<Response, 'ok' | 'json'>>
+
+export interface HeaderClient {
+  loadHeader: (height: number) => Promise<BlockHeaderTime | null>
+  tracker: Pick<ChainTracker, 'isValidRootForHeight'>
+}
+
+export async function fetchBlockHeader(height: number, fetcher: HeaderFetcher = fetch): Promise<BlockHeaderTime | null> {
+  if (!Number.isInteger(height) || height < 0) return null
+  const response = await fetcher(`${MAINNET_HEADER_URL}/${height}/header`)
+  if (!response.ok) return null
+  const body = await response.json() as { merkleroot?: unknown, time?: unknown }
+  const merkleRoot = typeof body.merkleroot === 'string' ? body.merkleroot.trim().toLowerCase() : ''
+  const time = typeof body.time === 'number' ? body.time : Number(body.time)
+  if (!/^[0-9a-f]{64}$/.test(merkleRoot) || !Number.isFinite(time)) return null
+  return { height, time, merkleRoot }
+}
+
+let sharedClient: HeaderClient | null = null
+
+export function mainnetHeaderClient(): HeaderClient {
+  if (!sharedClient) {
+    sharedClient = {
+      loadHeader: (height) => fetchBlockHeader(height),
+      tracker: new WhatsOnChain('main')
+    }
+  }
+  return sharedClient
+}
+
+/**
+ * Headers whose merkle root matches the BEEF proof, and whose root the
+ * chain tracker accepts at that height. A host-supplied time is not used.
+ */
+export async function verifiedHeaders(records: ChainRecord[], client: HeaderClient): Promise<BlockHeaderTime[]> {
+  const wanted = new Map<string, { height: number, root: string }>()
+  for (const record of records) {
+    if (record.blockHeight == null || !record.merkleRoot) continue
+    const root = record.merkleRoot.trim().toLowerCase()
+    if (!root) continue
+    wanted.set(`${record.blockHeight}:${root}`, { height: record.blockHeight, root })
+  }
+  const headers: BlockHeaderTime[] = []
+  for (const { height, root } of wanted.values()) {
+    try {
+      const header = await client.loadHeader(height)
+      if (!header || header.height !== height) continue
+      if (header.merkleRoot.trim().toLowerCase() !== root) continue
+      const valid = await client.tracker.isValidRootForHeight(root, height)
+      if (!valid) continue
+      headers.push({ height, time: header.time, merkleRoot: root })
+    } catch {
+      // One failed height leaves that proof pending. The rest of the board still loads.
+    }
+  }
+  return headers
+}
+
+function proofsNeedHeaders(records: ChainRecord[]): boolean {
+  return records.some((record) => record.blockHeight != null && Boolean(record.merkleRoot))
+}
+
+export function decodeOverlayBeef(beef: number[] | undefined, txidHint?: string, context?: number[]): OverlayRead {
+  if (!beef || beef.length === 0) return { items: [], spentOutpoints: [] }
   try {
     const tx = txFromWalletBeef(beef)
     const txid = txidHint || tx.id('hex')
@@ -348,11 +439,11 @@ function itemsFromBeef(beef: number[] | undefined, txidHint?: string, context?: 
     }))
     const inclusion = tx.merklePath ? proofInclusion(txid, tx.merklePath) : null
     const hostAsserted = hostAssertedAt(context)
-    const rows: OverlayItem[] = []
+    const items: OverlayItem[] = []
     for (const [outputIndex, output] of tx.outputs.entries()) {
       const parsed = parseScript(output.lockingScript)
       if (!parsed) continue
-      rows.push({
+      items.push({
         payload: parsed.payload,
         txid,
         outputIndex,
@@ -365,34 +456,52 @@ function itemsFromBeef(beef: number[] | undefined, txidHint?: string, context?: 
         hostAssertedAt: hostAsserted
       })
     }
-    return rows
+    return { items, spentOutpoints: inputs }
   } catch {
-    return []
+    return { items: [], spentOutpoints: [] }
   }
 }
 
-function itemsFromAnswer(answer: LookupAnswer): OverlayItem[] {
-  if (answer.type !== 'output-list' || !Array.isArray(answer.outputs)) return []
+function answerRows(answer: LookupAnswer): OverlayRead {
+  if (answer.type !== 'output-list' || !Array.isArray(answer.outputs)) return { items: [], spentOutpoints: [] }
   const seen = new Set<string>()
-  const rows: OverlayItem[] = []
+  const items: OverlayItem[] = []
+  const spent = new Set<string>()
   for (const output of answer.outputs) {
-    const decoded = itemsFromBeef(output.beef, output.txid, output.context)
-    for (const item of decoded) {
+    const decoded = decodeOverlayBeef(output.beef, output.txid, output.context)
+    for (const outpoint of decoded.spentOutpoints) spent.add(outpoint)
+    for (const item of decoded.items) {
       const key = `${item.txid}.${item.outputIndex}`
       if (seen.has(key)) continue
       seen.add(key)
-      rows.push(item)
+      items.push(item)
     }
   }
-  return rows
+  return { items, spentOutpoints: [...spent] }
 }
 
-export async function lookupCaptureItems(base: string, query: CaptureQuery = {}): Promise<OverlayItem[]> {
+export async function readOverlay(base: string, query: CaptureQuery = {}): Promise<OverlayRead> {
   const host = overlayUrl(base)
   const service = overlayLookupService(host)
   const answers = await queryAnytx(host, service, query)
-  const items = answers.flatMap(itemsFromAnswer)
-  return items.filter((item) => matchesQuery(item, query))
+  const seen = new Set<string>()
+  const items: OverlayItem[] = []
+  const spent = new Set<string>()
+  for (const part of answers.map(answerRows)) {
+    for (const outpoint of part.spentOutpoints) spent.add(outpoint)
+    for (const item of part.items) {
+      if (!matchesQuery(item, query)) continue
+      const key = `${item.txid}.${item.outputIndex}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      items.push(item)
+    }
+  }
+  return { items, spentOutpoints: [...spent] }
+}
+
+export async function lookupCaptureItems(base: string, query: CaptureQuery = {}): Promise<OverlayItem[]> {
+  return (await readOverlay(base, query)).items
 }
 
 export async function lookupCapture(
@@ -401,8 +510,8 @@ export async function lookupCapture(
   txid?: string,
   pinIdentity?: string | null
 ): Promise<DeskState | null> {
-  const items = await lookupCaptureItems(base, { requestId, txid })
-  return viewFromItems(items, requestId, { hintTxid: txid, pinIdentity })
+  const read = await readOverlay(base, { requestId, txid })
+  return viewFromItems(read.items, requestId, { hintTxid: txid, pinIdentity, spentOutpoints: read.spentOutpoints })
 }
 
 function fetchFailure(path: string, error: unknown): string {

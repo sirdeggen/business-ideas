@@ -86,7 +86,7 @@ import {
   formatRate,
   formatWhen
 } from './lib/copy'
-import { boardFromItems, lookupCapture, lookupCaptureItems, type OverlayItem } from './lib/overlay'
+import { boardFromItems, lookupCapture, readOverlay, type OverlayRead } from './lib/overlay'
 import { clearDesk, loadDesk, loadFundTx, saveDesk, saveFundTx } from './lib/persist'
 import { captureHref, capturePublicUrl, goHome, goToCapture, readCaptureFromLocation } from './lib/route'
 import type { ListedRequest } from '../../protocol/capture'
@@ -148,16 +148,20 @@ function Shell() {
     saveDesk(request.requestId, desk)
   }, [desk, request, readonly])
 
-  const applyItems = (items: OverlayItem[], pin = pinIdentity): void => {
-    setBoard(boardFromItems(items, pin || null))
-    setBoardError(null)
+  const applyRead = (read: OverlayRead, pin = pinIdentity): void => {
+    void boardFromItems(read.items, pin || null, read.spentOutpoints)
+      .then((rows) => {
+        setBoard(rows)
+        setBoardError(null)
+      })
+      .catch(() => setBoardError('The board didn’t load.'))
   }
 
   useEffect(() => {
     let cancel = false
-    void lookupCaptureItems(url)
-      .then((items) => {
-        if (!cancel) applyItems(items)
+    void readOverlay(url)
+      .then((read) => {
+        if (!cancel) applyRead(read)
       })
       .catch(() => {
         if (!cancel) setBoardError('The board didn’t load.')
@@ -206,8 +210,8 @@ function Shell() {
   }
 
   const refreshBoard = (): void => {
-    void lookupCaptureItems(url)
-      .then((items) => applyItems(items))
+    void readOverlay(url)
+      .then((read) => applyRead(read))
       .catch(() => setBoardError('The board didn’t load.'))
   }
 
@@ -226,7 +230,8 @@ function Shell() {
         accept: row.accept,
         refund: row.refund,
         pendingRefund: row.pendingRefund,
-        earlyRefund: row.earlyRefund
+        earlyRefund: row.earlyRefund,
+        spent: row.status === 'spent'
       })
       setReadonly(true)
     }
@@ -264,8 +269,8 @@ function Shell() {
       saveFundTx(result.requestId, { txid: result.txid, tx: result.tx, lockingScript: result.lockingScript })
       goToCapture(result.requestId, result.requesterIdentity, result.txid)
       setActionError(result.overlayError ?? null)
-      const items = await lookupCaptureItems(url).catch(() => null)
-      if (items) applyItems(items, result.requesterIdentity)
+      const read = await readOverlay(url).catch(() => null)
+      if (read) applyRead(read, result.requesterIdentity)
     } catch (err) {
       console.error('Fund capture failed', err)
       setActionError(errorMessage(err))
@@ -313,8 +318,8 @@ function Shell() {
       setDesk(result.desk)
       setReceiptHash(hash)
       setActionError(result.overlayError ?? null)
-      const items = await lookupCaptureItems(url).catch(() => null)
-      if (items) applyItems(items)
+      const read = await readOverlay(url).catch(() => null)
+      if (read) applyRead(read)
     } catch (err) {
       console.error('Submit capture failed', err)
       setActionError(errorMessage(err))
@@ -338,7 +343,14 @@ function Shell() {
     setActionNeedsInstall(false)
     try {
       if (!desk.request) throw new Error('Fund a request first.')
-      if (!receiptHash) throw new Error('Choose a capture to accept.')
+      const chosen = receiptHash.trim().toLowerCase()
+      const ready = desk.submissions.some((row) => row.receiptHash === chosen)
+      const waiting = desk.pendingSubmissions.some((row) => row.receiptHash === chosen)
+        || desk.lateSubmissions.some((row) => row.receiptHash === chosen)
+      if (!ready) {
+        if (waiting) throw new Error('This capture is still pending. The network has not timestamped it yet.')
+        throw new Error('Choose a capture to accept.')
+      }
     } catch (err) {
       fail(err)
       return
@@ -351,8 +363,8 @@ function Shell() {
       const result = await acceptOnChain(session.wallet, url, session.identityKey, desk, receiptHash, held)
       setDesk(result.desk)
       setActionError(result.overlayError ?? null)
-      const items = await lookupCaptureItems(url).catch(() => null)
-      if (items) applyItems(items)
+      const read = await readOverlay(url).catch(() => null)
+      if (read) applyRead(read)
     } catch (err) {
       console.error('Accept capture failed', err)
       setActionError(errorMessage(err))
@@ -380,8 +392,8 @@ function Shell() {
       const result = await refundOnChain(session.wallet, url, session.identityKey, desk, at, held)
       setDesk(result.desk)
       setActionError(result.overlayError ?? null)
-      const items = await lookupCaptureItems(url).catch(() => null)
-      if (items) applyItems(items)
+      const read = await readOverlay(url).catch(() => null)
+      if (read) applyRead(read)
     } catch (err) {
       console.error('Refund capture failed', err)
       setActionError(errorMessage(err))
@@ -415,7 +427,18 @@ function Shell() {
 
   const combinedError = actionError || walletError
   const lines = request ? payoutLines(request.rewardSats, request.processingFeeSats) : draftSplit
-  const openRequest = Boolean(request && !desk.accept && !desk.refund && !desk.pendingRefund && !desk.earlyRefund)
+  const openRequest = Boolean(request && !desk.accept && !desk.refund && !desk.pendingRefund && !desk.earlyRefund && !desk.spent)
+  const stamp = desk.accept
+    ? 'Accepted'
+    : desk.refund
+      ? 'Refunded'
+      : desk.earlyRefund
+        ? 'Early spend'
+        : desk.pendingRefund
+          ? 'Pending'
+          : desk.spent
+            ? 'Spent'
+            : 'Open'
 
   return (
     <div className="table-scene">
@@ -488,8 +511,8 @@ function Shell() {
           {request && (
             <section className="block" id="capture-request">
               <div className="show-hero">
-                <span className={`stamp ${desk.accept ? 'released' : desk.refund ? 'flagged' : ''}`}>
-                  {desk.accept ? 'Accepted' : desk.refund ? 'Refunded' : desk.earlyRefund ? 'Early spend' : desk.pendingRefund ? 'Pending' : 'Open'}
+                <span className={`stamp ${desk.accept ? 'released' : desk.refund || desk.spent ? 'flagged' : ''}`}>
+                  {stamp}
                 </span>
               </div>
               <h2>{request.location}</h2>
@@ -548,6 +571,11 @@ function Shell() {
                   </li>
                 ))}
               </ul>
+              <div className="actions">
+                <button type="button" className="btn primary" disabled>
+                  {ACCEPT_BUTTON}
+                </button>
+              </div>
             </section>
           )}
 
@@ -606,6 +634,7 @@ function Shell() {
               <div><dt>Accepted</dt><dd>{stats.accepted}</dd></div>
               <div><dt>Refunded</dt><dd>{stats.refunded}</dd></div>
               <div><dt>Pending</dt><dd>{stats.pending}</dd></div>
+              <div><dt>Spent</dt><dd>{stats.spent}</dd></div>
               <div><dt>Accept rate</dt><dd>{formatRate(stats.acceptRate)}</dd></div>
               <div><dt>Median time to accept</dt><dd>{formatMedian(stats.medianAcceptMs)}</dd></div>
             </dl>

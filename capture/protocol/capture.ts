@@ -22,8 +22,7 @@
  *
  * An accept names the submission's receipt hash. Readers check the accept
  * transaction's outputs: contributor, desk fee, and processing fee. The
- * locking script does not enforce that split (OP_PUSH_TX is v1). The
- * reward is locked to the requester's key.
+ * script does not check that split. The reward is locked to the requester's key.
  *
  * Deadline checks use the block header time for the BEEF merkle proof.
  * Signer clocks, nLockTime, and host-asserted overlay times do not count.
@@ -86,7 +85,7 @@ export const DEADLINE_ENFORCEMENT = 'header-time' as const
 export const KINDS = ['request', 'submit', 'accept', 'refund'] as const
 export type CaptureKind = (typeof KINDS)[number]
 
-export const STATUSES = ['open', 'accepted', 'refunded', 'pending'] as const
+export const STATUSES = ['open', 'accepted', 'refunded', 'pending', 'spent'] as const
 export type CaptureStatus = (typeof STATUSES)[number]
 
 const REQUEST_ID = /^[0-9a-f]{64}$/
@@ -298,6 +297,8 @@ export interface ReadOptions {
   hintTxid?: string | null
   pinIdentity?: string | null
   headers?: BlockHeaderTime[]
+  /** Outpoints seen spent in some transaction, including ones with no capture record. */
+  spentOutpoints?: string[]
 }
 
 export interface DeskState {
@@ -315,6 +316,8 @@ export interface DeskState {
   pendingRefund: CaptureRefund | null
   /** A spend whose header time is not after the deadline. */
   earlyRefund: CaptureRefund | null
+  /** The escrow outpoint is spent, and no accept or refund record explains it. */
+  spent: boolean
   rejection: string | null
   notice: string | null
 }
@@ -368,6 +371,7 @@ export interface BoardStats {
   accepted: number
   refunded: number
   pending: number
+  spent: number
   acceptRate: number | null
   medianAcceptMs: number | null
 }
@@ -386,6 +390,7 @@ export function emptyDesk(): DeskState {
     refund: null,
     pendingRefund: null,
     earlyRefund: null,
+    spent: false,
     rejection: null,
     notice: null
   }
@@ -523,7 +528,7 @@ export function submitCapture(desk: DeskState, input: SubmitInput): DeskState {
     ...desk,
     pendingSubmissions: [...desk.pendingSubmissions, submission],
     rejection: null,
-    notice: 'Capture submitted in this browser. Send the watermarked preview over Message Box. The raw file stays with you. It stays pending until a block header times it.'
+    notice: 'Capture submitted in this browser. Send the watermarked preview over Message Box. The raw file stays with you. It stays pending until the network timestamps it.'
   }
 }
 
@@ -540,8 +545,12 @@ export function acceptCapture(desk: DeskState, receiptHash: string, at = nowIso(
   if (desk.refund || desk.pendingRefund || desk.earlyRefund) throw new Error('This request was already refunded.')
   const hash = receiptHash.trim().toLowerCase()
   const submission = desk.submissions.find((row) => row.receiptHash === hash)
-    ?? desk.pendingSubmissions.find((row) => row.receiptHash === hash)
-  if (!submission) throw new Error('Accept a capture that was submitted.')
+  if (!submission) {
+    const waiting = desk.pendingSubmissions.find((row) => row.receiptHash === hash)
+      ?? desk.lateSubmissions.find((row) => row.receiptHash === hash)
+    if (waiting) throw new Error('This capture is still pending. The network has not timestamped it yet.')
+    throw new Error('Accept a capture that was submitted.')
+  }
   if (!isIsoDateTime(at)) throw new Error('Accepted time is missing.')
   const lines = payoutLines(desk.request.rewardSats, desk.request.processingFeeSats)
   const accept: CaptureAccept = {
@@ -595,7 +604,7 @@ export function refundCapture(desk: DeskState, at = nowIso()): DeskState {
     ...desk,
     pendingRefund: refund,
     rejection: null,
-    notice: 'Refund drafted. It stays pending until a block header times the spend after the deadline.'
+    notice: 'Refund drafted. Refunds count once the network timestamps them after the deadline.'
   }
 }
 
@@ -1221,7 +1230,13 @@ function spends(record: ChainRecord, outpoint: string): boolean {
   return record.inputs.map((input) => input.trim().toLowerCase()).includes(outpoint)
 }
 
-function foldDesk(request: CaptureRequest, scoped: ChainRecord[], fund: ChainRecord | null, headers: BlockHeaderTime[]): DeskState {
+function foldDesk(
+  request: CaptureRequest,
+  scoped: ChainRecord[],
+  fund: ChainRecord | null,
+  headers: BlockHeaderTime[],
+  spentOutpoints: string[] = []
+): DeskState {
   const head = fund ? outpointOf(fund) : null
   const submissions = classifySubmissions(scoped, request, headers)
   const acceptRows = head
@@ -1232,6 +1247,11 @@ function foldDesk(request: CaptureRequest, scoped: ChainRecord[], fund: ChainRec
     ? scoped.filter((row) => row.payload.kind === 'refund' && spends(row, head))
     : scoped.filter((row) => row.payload.kind === 'refund')
   const refunds = classifyRefunds(refundRows, request, accept, headers)
+  const explained = Boolean(accept || refunds.refund || refunds.pending || refunds.early)
+  const spent = Boolean(head) && !explained && (
+    spentOutpoints.some((outpoint) => outpoint.trim().toLowerCase() === head)
+    || scoped.some((row) => spends(row, head!))
+  )
   return {
     ...emptyDesk(),
     request,
@@ -1241,7 +1261,8 @@ function foldDesk(request: CaptureRequest, scoped: ChainRecord[], fund: ChainRec
     accept,
     refund: refunds.refund,
     pendingRefund: refunds.pending,
-    earlyRefund: refunds.early
+    earlyRefund: refunds.early,
+    spent
   }
 }
 
@@ -1250,13 +1271,14 @@ export function deskFromChain(records: ChainRecord[], options: ReadOptions = {})
   if (!chosen || chosen.payload.kind !== 'request') return null
   const request = chosen.payload
   const scoped = records.filter((row) => row.payload.requestId === request.requestId)
-  return foldDesk(request, scoped, chosen, options.headers ?? [])
+  return foldDesk(request, scoped, chosen, options.headers ?? [], options.spentOutpoints ?? [])
 }
 
-export function statusOf(row: { accept: CaptureAccept | null, refund: CaptureRefund | null, pendingRefund?: CaptureRefund | null, earlyRefund?: CaptureRefund | null }): CaptureStatus {
+export function statusOf(row: { accept: CaptureAccept | null, refund: CaptureRefund | null, pendingRefund?: CaptureRefund | null, earlyRefund?: CaptureRefund | null, spent?: boolean }): CaptureStatus {
   if (row.accept) return 'accepted'
   if (row.refund) return 'refunded'
   if (row.pendingRefund || row.earlyRefund) return 'pending'
+  if (row.spent) return 'spent'
   return 'open'
 }
 
@@ -1291,7 +1313,7 @@ function listedFromDesk(requestId: string, desk: DeskState, txid: string, fund: 
   }
 }
 
-export function bookFromChain(records: ChainRecord[], pinIdentity?: string | null, headers: BlockHeaderTime[] = []): ListedRequest[] {
+export function bookFromChain(records: ChainRecord[], pinIdentity?: string | null, headers: BlockHeaderTime[] = [], spentOutpoints: string[] = []): ListedRequest[] {
   const ids: string[] = []
   for (const row of records) {
     if (row.payload.kind !== 'request') continue
@@ -1299,9 +1321,9 @@ export function bookFromChain(records: ChainRecord[], pinIdentity?: string | nul
   }
   const book: ListedRequest[] = []
   for (const requestId of ids) {
-    const chosen = canonicalRequestRecord(records, { requestId, pinIdentity, headers })
+    const chosen = canonicalRequestRecord(records, { requestId, pinIdentity, headers, spentOutpoints })
     if (!chosen || chosen.payload.kind !== 'request') continue
-    const desk = deskFromChain(records, { requestId, pinIdentity, hintTxid: chosen.txid, headers })
+    const desk = deskFromChain(records, { requestId, pinIdentity, hintTxid: chosen.txid, headers, spentOutpoints })
     if (!desk?.request) continue
     const head = outpointOf(chosen)
     const acceptRecord = records.find((row) =>
@@ -1347,6 +1369,7 @@ export function boardStats(rows: ListedRequest[]): BoardStats {
   let accepted = 0
   let refunded = 0
   let pending = 0
+  let spent = 0
   const durations: number[] = []
   for (const row of rows) {
     if (row.status === 'accepted') {
@@ -1359,16 +1382,19 @@ export function boardStats(rows: ListedRequest[]): BoardStats {
       refunded += 1
     } else if (row.status === 'pending') {
       pending += 1
+    } else if (row.status === 'spent') {
+      spent += 1
     } else {
       open += 1
     }
   }
-  const total = open + accepted + refunded + pending
+  const total = open + accepted + refunded + pending + spent
   return {
     open,
     accepted,
     refunded,
     pending,
+    spent,
     acceptRate: total === 0 ? null : Math.round((accepted / total) * 100),
     medianAcceptMs: median(durations)
   }
