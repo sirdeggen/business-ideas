@@ -411,7 +411,7 @@ describe('signed records', () => {
       eligibilityStamps: new Map([[eligibilityStampKey(desk.eligibilities[0]!), { txAt: LATER }]]),
       closeStamp: { lockTime: lateLock }
     })
-    expect(byLock.outcome).toBe('refund')
+    expect(byLock.outcome).toBe('pending')
     expect(byLock.lines[0]?.qualified).toBe(false)
     const earlyLock = Math.floor(Date.parse(LATER) / 1000)
     const unproven = allocateRound(desk.terms!, desk.commits, desk.eligibilities, PAST, {
@@ -484,6 +484,11 @@ describe('signed records', () => {
       { txid: lowTx, vout: 0, lockingPublicKey: lateKey, payload: late.terms!, txAt: NOW, lockTime: lateLock }
     ])
     expect(sameHostTime?.terms?.name).toBe('Late Lock')
+    const timedBeforeUntimed = deskFromChain([
+      { txid: lowTx, vout: 0, lockingPublicKey: lateKey, payload: late.terms! },
+      { txid: highTx, vout: 0, lockingPublicKey: earlyKey, payload: early.terms!, txAt: NOW }
+    ])
+    expect(timedBeforeUntimed?.terms?.name).toBe('Early Lock')
   })
 
   it('orders commits by txid when the host time ties, not by nLockTime', async () => {
@@ -543,6 +548,37 @@ describe('signed records', () => {
     })
     expect(allocation.outcome).toBe('pending')
     expect(allocation.outcome).not.toBe('refund')
+  })
+
+  it('stays pending when the close lockTime is past the deadline and the host sent no time', async () => {
+    const { wallet, identity } = walletOf()
+    const issuer = (await identity).toLowerCase()
+    let desk = opened({ priceSats: 1_000, minSats: 20_000, maxSats: 40_000 }, issuer)
+    desk = withBacker(desk, SAMPLE_BACKER, 5_000, LATER, COMMIT_NONCE)
+    const claimed = closeRound(desk, PAST)
+    expect(claimed.close?.outcome).toBe('refund')
+    const signed = await signRecordedDesk(wallet, claimed)
+    const lock = escrowLockingKey(issuer, signed.terms!.roundId)
+    const txid = 'e1'.repeat(32)
+    const lateLock = Math.floor(Date.parse(PAST) / 1000)
+    expect(lateLock).toBeGreaterThanOrEqual(Math.floor(Date.parse(DEADLINE) / 1000))
+    const rows: ChainRecord[] = [
+      { txid, vout: 0, lockingPublicKey: lock, payload: signed.terms!, txAt: NOW },
+      { txid, vout: 1, lockingPublicKey: lock, payload: signed.eligibilities[0]!, txAt: LATER },
+      { txid, vout: 2, lockingPublicKey: lock, payload: signed.commits[0]!, txAt: LATER },
+      { txid, vout: 3, lockingPublicKey: lock, payload: signed.close!, lockTime: lateLock }
+    ]
+    expect(deskFromChain(rows)?.close).toBeNull()
+    expect(bookFromChain(rows)[0]?.outcome).toBe('pending')
+    const allocation = allocateRound(signed.terms!, signed.commits, signed.eligibilities, PAST, {
+      fromChain: true,
+      commitStamps: new Map([[signed.commits[0]!.commitId, { txAt: LATER }]]),
+      eligibilityStamps: new Map([[eligibilityStampKey(signed.eligibilities[0]!), { txAt: LATER }]]),
+      closeStamp: { lockTime: lateLock }
+    })
+    expect(allocation.outcome).toBe('pending')
+    expect(allocation.outcome).not.toBe('refund')
+    expect(allocation.outcome).not.toBe('settled')
   })
 })
 

@@ -104,6 +104,8 @@ describe('first-paint copy', () => {
     expect(DESK_NOTE).toMatch(/pending/)
     expect(DESK_NOTE).toMatch(/nLockTime/)
     expect(DESK_NOTE).toMatch(/issuer/)
+    expect(DESK_NOTE).toMatch(/proves nothing about when a transaction was published/)
+    expect(DESK_NOTE).not.toMatch(/only proves/)
     expect(readme).toMatch(/createAction/)
     expect(readme).toMatch(/does not treat any other script/)
     expect(DESK_NOTE).toMatch(/OP_PUSH_TX/)

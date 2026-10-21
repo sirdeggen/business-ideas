@@ -23,10 +23,10 @@
  *
  * A time written into a record does not order commits or decide the
  * deadline. On the public book the transaction does: overlay admission
- * time when the lookup has it, otherwise nLockTime only as a not-before.
- * A lock time at or after the deadline proves the tx was late. A lock
- * time before the deadline does not prove it was early. A commit stated
- * before the deadline does not count when its own tx is after.
+ * or header time when the lookup has it. nLockTime proves nothing about
+ * when a transaction was published. With no trusted time, a close stays
+ * pending. A commit stated before the deadline does not count when its
+ * own tx is after.
  *
  * Not a token listing. Not Keepsake (a numbered edition). Not Bounty
  * (a severity pool). Not Registry itself — close hands holdings to it.
@@ -203,8 +203,8 @@ export interface ChainRecord {
    */
   txAt?: string
   /**
-   * Transaction nLockTime. Unix values (at or above 500000000) are a not-before.
-   * A value at or after the deadline proves the tx was late. A lower value does not prove it was early.
+   * Transaction nLockTime. The issuer's wallet sets it.
+   * It proves nothing about when the transaction was published.
    */
   lockTime?: number
 }
@@ -223,8 +223,6 @@ export interface AllocateOptions {
   closeStamp?: TxStamp
 }
 
-const LOCKTIME_UNIX = 500_000_000
-
 export function eligibilityStampKey(row: Pick<EligibilityRecord, 'backerKey' | 'disclosedAt' | 'serialNumber'>): string {
   return `${row.backerKey.toLowerCase()}|${row.disclosedAt}|${row.serialNumber}`
 }
@@ -234,31 +232,11 @@ export function txEvidenceAt(stamp: TxStamp | undefined): string | null {
   return stamp.txAt
 }
 
-/** Unix nLockTime as an ISO not-before. Null when lockTime is unset or a block height. */
-export function lockTimeBound(lockTime: number | undefined): string | null {
-  if (lockTime == null || lockTime < LOCKTIME_UNIX) return null
-  const ms = lockTime * 1000
-  if (!Number.isSafeInteger(ms)) return null
-  const iso = new Date(ms).toISOString()
-  return isIsoDateTime(iso) ? iso : null
-}
-
-/**
- * Moment a chain record may use. Overlay time wins.
- * nLockTime is returned only as a lower bound, and only so a late bound can fail the deadline.
- * Null means the tx does not prove a moment — do not fall back to the stated time.
- */
-export function provenInstant(stamp: TxStamp | undefined): string | null {
-  return txEvidenceAt(stamp) ?? lockTimeBound(stamp?.lockTime)
-}
-
-/** Host context or a lock time at/after the deadline. No context is unproven, not a refund. */
+/** Host or header time only. No host time is unproven, not late and not a refund. */
 function chainTiming(deadline: string, stamp: TxStamp | undefined): 'early' | 'late' | 'unproven' {
   const txAt = txEvidenceAt(stamp)
-  if (txAt) return Date.parse(txAt) < Date.parse(deadline) ? 'early' : 'late'
-  const bound = lockTimeBound(stamp?.lockTime)
-  if (bound && Date.parse(bound) >= Date.parse(deadline)) return 'late'
-  return 'unproven'
+  if (!txAt) return 'unproven'
+  return Date.parse(txAt) < Date.parse(deadline) ? 'early' : 'late'
 }
 
 function onTime(stated: string, deadline: string, stamp: TxStamp | undefined, fromChain: boolean): boolean {
@@ -277,9 +255,14 @@ function orderAt(stated: string, stamp: TxStamp | undefined, fromChain: boolean,
 }
 
 function byHostTimeThenTxid(left: ChainRecord, right: ChainRecord): number {
-  const byTime = orderAt('', chainStamp(left), true, left.txid)
-    .localeCompare(orderAt('', chainStamp(right), true, right.txid))
-  return byTime !== 0 ? byTime : left.txid.localeCompare(right.txid)
+  const a = txEvidenceAt(chainStamp(left))
+  const b = txEvidenceAt(chainStamp(right))
+  if (a && b) {
+    const byTime = a.localeCompare(b)
+    return byTime !== 0 ? byTime : left.txid.localeCompare(right.txid)
+  }
+  if (a !== b) return a ? -1 : 1
+  return left.txid.localeCompare(right.txid)
 }
 
 export interface ReadOptions {
@@ -733,8 +716,9 @@ export function commitToRound(desk: DeskState, input: CommitInput, at: string, n
  * accepted backer pays the lowest accepted bid.
  *
  * The local walkthrough may pass a clock as `at`. A public-book read
- * (`fromChain`) ignores stated times: overlay time orders the fill and
- * decides the deadline, and nLockTime can only prove a tx was late.
+ * (`fromChain`) ignores stated times: host or header time orders the fill
+ * and decides the deadline. nLockTime proves nothing about publication.
+ * A close with no trusted time stays pending.
  */
 export function allocateRound(
   terms: RoundTerms,
@@ -799,9 +783,12 @@ export function allocateRound(
   if (eligibilityUnproven || commitUnproven) {
     return { outcome: 'pending', qualifiedSats: 0, acceptedSats: 0, clearingPriceSats: 0, lines }
   }
+  if (fromChain && options.closeStamp != null && txEvidenceAt(options.closeStamp) == null) {
+    return { outcome: 'pending', qualifiedSats: 0, acceptedSats: 0, clearingPriceSats: 0, lines }
+  }
   const deadlinePassed = fromChain
     ? (() => {
-      const instant = provenInstant(options.closeStamp)
+      const instant = txEvidenceAt(options.closeStamp)
       return instant != null && Date.parse(instant) >= Date.parse(terms.deadline)
     })()
     : Date.parse(at) >= Date.parse(terms.deadline)
@@ -1507,11 +1494,7 @@ export function deskFromChain(rows: ChainRecord[], options: ReadOptions = {}): D
   }
   const closeRows = signedRows
     .filter((row): row is ChainRecord & { payload: CloseRecord } => row.payload.kind === 'close')
-    .sort((left, right) => {
-      const a = provenInstant(chainStamp(left)) ?? left.txid
-      const b = provenInstant(chainStamp(right)) ?? right.txid
-      return a.localeCompare(b)
-    })
+    .sort(byHostTimeThenTxid)
   const close = closeRows
     .find((row) => settlementMatches(row.payload, allocateRound(terms, commits, eligibilities, row.payload.closedAt, {
       ...read,
@@ -1532,11 +1515,21 @@ export function bookFromChain(rows: ChainRecord[], pinIdentity?: string | null):
     if (!desk?.terms) continue
     const termsRow = rows.find((row) => row.payload.kind === 'terms' && row.payload.roundId === desk.terms?.roundId)
     const txid = termsRow?.txid ?? null
-    const closeRow = desk.close
+    const roundRows = rows.filter((row) => row.payload.roundId === desk.terms?.roundId)
+    const acceptedClose = desk.close
       ? rows.find((row) => row.payload.kind === 'close' && row.payload.signature === desk.close?.signature)
       : undefined
+    const untimedClose = acceptedClose
+      ? undefined
+      : roundRows.find((row) =>
+        row.payload.kind === 'close' &&
+        lockOk(row, desk.terms!.issuerKey, desk.terms!.roundId) &&
+        payloadSignedByIssuer(row.payload, desk.terms!.issuerKey) &&
+        txEvidenceAt(chainStamp(row)) == null
+      )
+    const closeRow = acceptedClose ?? untimedClose
     const allocation = allocateRound(desk.terms, desk.commits, desk.eligibilities, desk.terms.deadline, {
-      ...chainAllocateOptions(rows.filter((row) => row.payload.roundId === desk.terms?.roundId)),
+      ...chainAllocateOptions(roundRows),
       closeStamp: closeRow ? chainStamp(closeRow) : undefined
     })
     seenAt.set(desk.terms.roundId, txEvidenceAt(termsRow) ?? txid ?? '')
