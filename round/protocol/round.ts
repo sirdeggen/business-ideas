@@ -266,9 +266,20 @@ function onTime(stated: string, deadline: string, stamp: TxStamp | undefined, fr
   return chainTiming(deadline, stamp) === 'early'
 }
 
+/**
+ * Public-book order. Host time first.
+ * A missing host time breaks by `tie`. Chain reads pass the txid.
+ * nLockTime is not an order key.
+ */
 function orderAt(stated: string, stamp: TxStamp | undefined, fromChain: boolean, tie: string): string {
   if (!fromChain) return stated
-  return txEvidenceAt(stamp) ?? lockTimeBound(stamp?.lockTime) ?? tie
+  return txEvidenceAt(stamp) ?? tie
+}
+
+function byHostTimeThenTxid(left: ChainRecord, right: ChainRecord): number {
+  const byTime = orderAt('', chainStamp(left), true, left.txid)
+    .localeCompare(orderAt('', chainStamp(right), true, right.txid))
+  return byTime !== 0 ? byTime : left.txid.localeCompare(right.txid)
 }
 
 export interface ReadOptions {
@@ -779,7 +790,13 @@ export function allocateRound(
     }
   })
   const qualifiedSats = lines.reduce((sum, line) => sum + (line.qualified ? line.committedSats : 0), 0)
-  if (fromChain && unique.some((row) => chainTiming(terms.deadline, options.commitStamps?.get(row.commitId)) === 'unproven')) {
+  const eligibilityUnproven = fromChain && eligibilities.some((row) => {
+    if (!sameKey(row.roundId, terms.roundId)) return false
+    if (!disclosureMatches(terms.requiredFields, row.disclosed)) return false
+    return chainTiming(terms.deadline, options.eligibilityStamps?.get(eligibilityStampKey(row))) === 'unproven'
+  })
+  const commitUnproven = fromChain && unique.some((row) => chainTiming(terms.deadline, options.commitStamps?.get(row.commitId)) === 'unproven')
+  if (eligibilityUnproven || commitUnproven) {
     return { outcome: 'pending', qualifiedSats: 0, acceptedSats: 0, clearingPriceSats: 0, lines }
   }
   const deadlinePassed = fromChain
@@ -1439,11 +1456,7 @@ function pickTerms(rows: ChainRecord[], options: ReadOptions): { terms: RoundTer
     const hinted = candidates.find((row) => row.txid.toLowerCase() === options.hintTxid?.toLowerCase())
     if (hinted && hinted.payload.kind === 'terms') return { terms: hinted.payload, txid: hinted.txid }
   }
-  const sorted = [...candidates].sort((left, right) => {
-    const a = provenInstant(chainStamp(left)) ?? left.txid
-    const b = provenInstant(chainStamp(right)) ?? right.txid
-    return a.localeCompare(b)
-  })
+  const sorted = [...candidates].sort(byHostTimeThenTxid)
   const first = sorted[0]
   if (!first || first.payload.kind !== 'terms') return null
   return { terms: first.payload, txid: first.txid }
@@ -1473,17 +1486,20 @@ export function deskFromChain(rows: ChainRecord[], options: ReadOptions = {}): D
   const eligibilities: EligibilityRecord[] = []
   const eligibilityRows = signedRows
     .filter((row): row is ChainRecord & { payload: EligibilityRecord } => row.payload.kind === 'eligibility')
-    .sort((left, right) => orderAt(left.payload.disclosedAt, chainStamp(left), true, left.txid).localeCompare(orderAt(right.payload.disclosedAt, chainStamp(right), true, right.txid)))
+    .sort(byHostTimeThenTxid)
   for (const row of eligibilityRows) {
     const payload = row.payload
     if (!disclosureMatches(terms.requiredFields, payload.disclosed)) continue
-    if (!onTime(payload.disclosedAt, terms.deadline, chainStamp(row), true)) continue
-    if (!eligibilities.some((item) => sameKey(item.backerKey, payload.backerKey))) eligibilities.push(payload)
+    const timing = chainTiming(terms.deadline, chainStamp(row))
+    if (timing === 'late') continue
+    const already = eligibilities.some((item) => sameKey(item.backerKey, payload.backerKey))
+    if (timing === 'early' && already) continue
+    eligibilities.push(payload)
   }
   const commits: CommitRecord[] = []
   const commitRows = signedRows
     .filter((row): row is ChainRecord & { payload: CommitRecord } => row.payload.kind === 'commit')
-    .sort((left, right) => orderAt(left.payload.committedAt, chainStamp(left), true, left.txid).localeCompare(orderAt(right.payload.committedAt, chainStamp(right), true, right.txid)))
+    .sort(byHostTimeThenTxid)
   for (const row of commitRows) {
     const payload = row.payload
     if (!commitIdMatches(payload)) continue

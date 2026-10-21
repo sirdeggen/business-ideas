@@ -54,7 +54,7 @@ export const BUSINESS_CASE_PROOF_CHAIN =
   'Other-chain analog: Ethos\'s token sale on Sonar drew $8.4M in bids (Gate News, 7 Sep 2026).'
 
 export const BUSINESS_CASE_PROOF_FIAT =
-  'Regulated crowdfunding portals and co-op member-share offerings, where issuers already pay a percentage of the money raised.'
+  'Non-chain analog: Regulated crowdfunding portals and co-op member-share offerings, where issuers already pay a percentage of the money raised.'
 
 export const BUSINESS_CASE_CITATIONS = [
   {
