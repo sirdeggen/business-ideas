@@ -684,6 +684,15 @@ a.card .hit,
   --title-style: italic;
 }
 
+.demo-round {
+  --chip: #d946ef;
+  --title: #701a75;
+  --title-font: var(--serif);
+  --title-size: 22px;
+  --title-weight: 600;
+  --title-style: italic;
+}
+
 .demo-bounty {
   --chip: #FF7A3D;
   --title: #7c2d12;
@@ -750,6 +759,7 @@ a.card .hit,
 .demo-private-pay .scene { object-position: 50% 42%; }
 .demo-boost .scene { object-position: 32% 28%; }
 .demo-capture .scene { object-position: 50% 42%; }
+.demo-round .scene { object-position: 50% 42%; }
 .demo-bounty .scene { object-position: 50% 42%; }
 .demo-scrip .scene { object-position: 50% 42%; }
 .demo-check .scene { object-position: 50% 42%; }
